@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 from typing import IO
 
 import httpx
+from pydantic import JsonValue
 
 from agent_relay import doctor, paths
 from agent_relay.adapters.factory import build_adapters
@@ -34,7 +35,7 @@ from agent_relay.frontends.pwa.server import build_pwa
 from agent_relay.frontends.webex.bot import WebexFrontend, build_frontend
 from agent_relay.frontends.webex.ws_client import Connector, WebexWsClient, default_connector
 from agent_relay.ipc import IpcServer
-from agent_relay.log import configure, default_log_file, get_logger
+from agent_relay.log import configure, default_log_file, get_logger, set_debug_bodies
 from agent_relay.models.config import RelayConfig
 from agent_relay.models.sessions import SessionRecord
 from agent_relay.settings import MissingSecretError, Secret, load_config, require_secret
@@ -110,6 +111,7 @@ class Core:
             "hook": self._op_hook,
             "away": self._op_away,
             "status": self._op_status,
+            "sessions": self._op_sessions,
             "ping": self._op_ping,
             "notify": self._op_notify,
             "ask": self._op_ask,
@@ -141,9 +143,7 @@ class Core:
         enabled = message.get("enabled")
         workspace = message.get("workspace")
         if isinstance(enabled, bool):
-            await away.set_away(self.registry, enabled, workspace if isinstance(workspace, str) else None)
-            if enabled:
-                paths.pause_flag().unlink(missing_ok=True)
+            await self.service.set_away_for(enabled, workspace if isinstance(workspace, str) else None)
         current = await away.is_away(self.registry, workspace if isinstance(workspace, str) else None)
         return {"away": current}
 
@@ -157,6 +157,20 @@ class Core:
             "adapters": {h.value: self.router.adapter_failures.get(h, 0) for h in self.router.adapters()},
             "paused": paths.pause_flag().exists(),
         }
+
+    async def _op_sessions(self, _: JsonObj) -> JsonObj:
+        sessions: list[JsonValue] = [
+            {
+                "session_key": s.session_key,
+                "harness": s.harness.value,
+                "status": s.status.value,
+                "origin": s.origin.value,
+                "workspace": s.workspace,
+                "updated": s.updated.isoformat(),
+            }
+            for s in await self.registry.list_sessions()
+        ]
+        return {"sessions": sessions}
 
     async def _op_ping(self, _: JsonObj) -> JsonObj:
         return {"ok": True, "pid": os.getpid()}
@@ -242,6 +256,7 @@ async def serve(
     if pwa is not None:
         tasks.append(asyncio.create_task(pwa.server.run(), name="pwa"))
     log.info("relayd ready")
+    announce = asyncio.create_task(_announce(post_top, online_message(recovered)), name="online")
     waiter = asyncio.create_task(stop.wait())
     try:
         done, _ = await asyncio.wait([waiter, *tasks], return_when=asyncio.FIRST_COMPLETED)
@@ -250,6 +265,7 @@ async def serve(
                 log.error(f"{task.get_name()} stopped: {task.exception()}")
     finally:
         waiter.cancel()
+        announce.cancel()
         if pwa is not None:
             pwa.server.stop()
         for task in tasks:
@@ -261,6 +277,22 @@ async def serve(
         await core.router.stop()
         await registry.close()
         log.info("relayd stopped")
+
+
+def online_message(recovered: int) -> str:
+    lines = ["🖥️ **Mac online** — relayd started."]
+    if recovered:
+        lines.append(f"{recovered} session(s) were parked when it stopped; they are idle now.")
+    if paths.pause_flag().exists():
+        lines.append("Relaying is paused (/panic). `/away on` resumes.")
+    return "\n\n".join(lines)
+
+
+async def _announce(post_top: Callable[[str], Awaitable[None]], text: str) -> None:
+    try:
+        await post_top(text)
+    except Exception as exc:
+        log.warning(f"could not post 'Mac online': {exc.__class__.__name__}")
 
 
 async def _post(frontend: WebexFrontend, session: SessionRecord, text: str) -> None:
@@ -286,7 +318,8 @@ def main() -> int:
         sys.stderr.write(f"relayd: {exc}\n")
         return EXIT_CONFIG
     level = logging.getLevelNamesMapping().get(config.log_level.upper(), logging.INFO)
-    configure(level, default_log_file("relayd"), console=True)
+    configure(level, default_log_file("relayd"), console=sys.stderr.isatty())
+    set_debug_bodies(config.debug_bodies)
     try:
         lock = acquire_lock()
     except AlreadyRunningError as exc:

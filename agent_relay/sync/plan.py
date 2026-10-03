@@ -45,6 +45,10 @@ def _mode(file: Path, default: int = 0o600) -> int:
 
 
 def plan_import(python: str | None = None) -> Plan:
+    return _import(python)[0]
+
+
+def _import(python: str | None) -> tuple[Plan, Catalog]:
     plan = Plan()
     imported = catalog.import_all(plan.stash, python)
     file = paths.mcp_yaml()
@@ -68,7 +72,7 @@ def plan_import(python: str | None = None) -> Plan:
             f"{len(plan.stash.found)} literal secret(s) move to the Keychain (service agent-relay-mcp); "
             "mcp.yaml keeps references"
         )
-    return plan
+    return plan, imported
 
 
 def render_harness(source: Catalog, harness: HarnessFile, revealer: Revealer) -> bytes:
@@ -104,3 +108,26 @@ def plan_sync(
     plan.writes.extend(permissions)
     plan.notes.append(note)
     return plan
+
+
+def plan_mcp(python: str | None = None, cursor_db: Path | None = None) -> Plan:
+    """What `relay install` runs: sync from the catalog, importing it first when there is none.
+
+    On a first install the imported secrets are not in the Keychain yet, so the native files are
+    rendered from the pending stash; applying the plan stores them before anything is written.
+    """
+    if paths.mcp_yaml().is_file():
+        return plan_sync(python=python, cursor_db=cursor_db)
+    imported, source = _import(python)
+    stash = imported.stash
+
+    def pending_first(name: str) -> str | None:
+        return stash.found.get(name) or keychain_resolver(name)
+
+    synced = plan_sync(source, python, pending_first, cursor_db)
+    return Plan(
+        writes=imported.writes + synced.writes,
+        notes=imported.notes + synced.notes,
+        revealer=synced.revealer,
+        stash=stash,
+    )

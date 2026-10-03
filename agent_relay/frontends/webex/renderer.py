@@ -19,7 +19,7 @@ from pydantic import JsonValue
 from agent_relay.core.registry import Registry
 from agent_relay.frontends.webex import cards
 from agent_relay.frontends.webex.api import EditLimitError, Message, WebexApi, text_bytes
-from agent_relay.log import get_logger
+from agent_relay.log import get_logger, log_body
 from agent_relay.models.config import RendererConfig
 from agent_relay.models.events import (
     ApprovalRequested,
@@ -114,6 +114,7 @@ class Outbox:
         file: tuple[str, bytes, str] | None = None,
     ) -> Message:
         room = await self.room_id()
+        log_body(log, "webex out", markdown)
         message = await self.api.create_message(
             markdown,
             room_id=room,

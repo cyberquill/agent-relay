@@ -289,6 +289,10 @@ class RelayService:
         workspace = None
         if session_key is not None:
             workspace = (await self.session(session_key)).workspace
+        return await self.set_away_for(enabled, workspace)
+
+    async def set_away_for(self, enabled: bool, workspace: str | None) -> str:
+        """Away on/off for one workspace scope (or all); off releases the parked sessions it covers."""
         await away.set_away(self.registry, enabled, workspace)
         if enabled:
             paths.pause_flag().unlink(missing_ok=True)

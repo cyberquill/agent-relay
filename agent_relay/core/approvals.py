@@ -16,7 +16,7 @@ from datetime import UTC, datetime, timedelta
 from pydantic import JsonValue
 
 from agent_relay.adapters.base import Decision
-from agent_relay.core.registry import Registry
+from agent_relay.core.registry import ALLOW_SESSION_PREFIX, Registry
 from agent_relay.core.router import Router
 from agent_relay.core.service import RelayService, pending_key
 from agent_relay.core.signals import Signals
@@ -29,11 +29,11 @@ from agent_relay.models.events import (
     QuestionAnswered,
     QuestionAsked,
 )
-from agent_relay.models.sessions import PendingRequest, SessionRecord
+from agent_relay.models.sessions import PendingRequest, SessionRecord, SessionStatus
 
 log = get_logger(__name__)
 
-ALLOW_SESSION_KEY = "allow_session:{session_key}:{tool}"
+ALLOW_SESSION_KEY = f"{ALLOW_SESSION_PREFIX}{{session_key}}:{{tool}}"
 DEADLINE_REASON = "No answer from the phone before the relay's deadline; denied."
 
 
@@ -76,6 +76,9 @@ class ApprovalBroker:
 
     async def allowed_for_session(self, session_key: str, tool: str | None) -> bool:
         if not tool:
+            return False
+        session = await self._registry.get_session(session_key)
+        if session is None or session.status is SessionStatus.ENDED:
             return False
         return (
             await self._registry.kv_get(ALLOW_SESSION_KEY.format(session_key=session_key, tool=tool))

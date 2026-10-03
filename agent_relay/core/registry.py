@@ -75,6 +75,8 @@ CREATE TABLE IF NOT EXISTS kv (
 """
 
 GLOBAL_SCOPE = "*"
+# "Allow for session" grants live under this prefix; they are dropped when the session ends.
+ALLOW_SESSION_PREFIX = "allow_session:"
 
 
 def _ts(value: datetime) -> str:
@@ -248,6 +250,10 @@ class Registry:
         params = (*fields.values(), _ts(utcnow()), session_key)
         sql = f"UPDATE sessions SET {assignments}, updated=? WHERE session_key=?"
         await self._run(lambda: self._write(sql, params))
+        if fields.get("status") == "ended":
+            prefix = f"{ALLOW_SESSION_PREFIX}{session_key}:"
+            drop = "DELETE FROM kv WHERE substr(key, 1, ?) = ?"
+            await self._run(lambda: self._write(drop, (len(prefix), prefix)))
 
     async def set_session_extra(self, session_key: str, key: str, value: JsonValue) -> None:
         def _update() -> None:

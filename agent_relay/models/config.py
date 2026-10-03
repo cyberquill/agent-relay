@@ -43,6 +43,20 @@ class ApprovalConfig(_Section):
     hook_timeout_margin_s: int = Field(default=60, ge=5)
     auto_allow: list[str] = Field(default_factory=lambda: list(READ_ONLY_TOOLS))
 
+    @model_validator(mode="after")
+    def _no_global_auto_approve(self) -> ApprovalConfig:
+        for pattern in self.auto_allow:
+            literals = sum(1 for c in pattern if c not in "*?[]! ")
+            if literals < MIN_LITERAL_CHARS:
+                raise ValueError(
+                    f"approvals.auto_allow pattern {pattern!r} matches (nearly) every tool; "
+                    "a global auto-approve is not allowed"
+                )
+        return self
+
+
+MIN_LITERAL_CHARS = 2
+
 
 class ParkConfig(_Section):
     deadline_s: int = Field(default=14_400, ge=60)

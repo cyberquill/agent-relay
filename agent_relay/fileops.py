@@ -53,6 +53,28 @@ class PlannedMove(BaseModel):
     reason: str = ""
 
 
+class PlannedLink(BaseModel):
+    """A symlink the relay owns. An existing non-link at the path is never replaced."""
+
+    model_config = ConfigDict(frozen=True)
+
+    path: Path
+    target: Path
+    reason: str = ""
+
+    def changed(self) -> bool:
+        return not (self.path.is_symlink() and Path(os.readlink(self.path)) == self.target)
+
+    def blocked(self) -> bool:
+        return self.path.exists() and not self.path.is_symlink()
+
+
+class LinkBlockedError(RuntimeError):
+    def __init__(self, path: Path) -> None:
+        super().__init__(f"{path} exists and is not a symlink; move it aside and run the install again")
+        self.path = path
+
+
 class ManifestEntry(BaseModel):
     action: Action
     backup: str | None = None
@@ -141,6 +163,26 @@ def apply_moves(moves: list[PlannedMove], manifest: Manifest) -> list[Path]:
         shutil.move(str(move.source), str(move.destination))
         manifest.entries[str(move.source)] = ManifestEntry(action="moved", moved_to=str(move.destination))
         done.append(move.source)
+    manifest.save()
+    return done
+
+
+def apply_links(links: list[PlannedLink], manifest: Manifest) -> list[Path]:
+    blocked = [link.path for link in links if link.blocked()]
+    if blocked:
+        raise LinkBlockedError(blocked[0])
+    done: list[Path] = []
+    for link in links:
+        if not link.changed():
+            continue
+        key = str(link.path)
+        if key not in manifest.entries:
+            manifest.entries[key] = ManifestEntry(action="created", created_dirs=_missing_dirs(link.path))
+        link.path.parent.mkdir(parents=True, exist_ok=True)
+        if link.path.is_symlink():
+            link.path.unlink()
+        link.path.symlink_to(link.target)
+        done.append(link.path)
     manifest.save()
     return done
 

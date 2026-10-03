@@ -60,7 +60,7 @@ markers = ["live: needs RELAY_LIVE=1 and the real apps"]
 [tool.mypy]
 python_version = "3.13"
 cache_dir = ".cache/mypy"
-files = ["agent_relay", "tests"]
+files = ["agent_relay", "tests", "scripts/smoke_live.py"]
 strict = true
 warn_unreachable = true
 enable_error_code = ["ignore-without-code", "possibly-undefined", "redundant-expr"]

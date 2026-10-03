@@ -49,5 +49,20 @@ def configure(level: int = logging.INFO, log_file: Path | None = None, console: 
         root.addHandler(handler)
 
 
+BODY_LIMIT = 2_000
+_bodies = {"enabled": False}
+
+
+def set_debug_bodies(enabled: bool) -> None:
+    """Message bodies reach the logs only with `debug_bodies = true`, only at DEBUG, always scrubbed."""
+    _bodies["enabled"] = enabled
+
+
+def log_body(logger: logging.Logger, label: str, text: str) -> None:
+    if _bodies["enabled"] and logger.isEnabledFor(logging.DEBUG):
+        clipped = text if len(text) <= BODY_LIMIT else f"{text[:BODY_LIMIT]}… ({len(text)} chars)"
+        logger.debug(f"{label}: {clipped}")
+
+
 def default_log_file(name: str) -> Path:
     return paths.logs_dir() / f"{name}.log"

@@ -16,7 +16,7 @@ from agent_relay.frontends.webex.api import AttachmentAction, Message, WebexApi
 from agent_relay.frontends.webex.handlers import Context, Handlers
 from agent_relay.frontends.webex.renderer import Outbox, WebexRenderer
 from agent_relay.frontends.webex.ws_client import Activity, Connector, WebexWsClient, default_connector
-from agent_relay.log import get_logger
+from agent_relay.log import get_logger, log_body
 from agent_relay.models.config import RelayConfig
 
 log = get_logger(__name__)
@@ -80,6 +80,7 @@ class WebexFrontend:
         if not verdict.allowed:
             log.info(f"ignored message: {verdict.reason}")
             return
+        log_body(log, "webex in", message.text)
         await self._remember_last(message)
         await self.renderer.outbox.remember_room(message.room_id)
         session = await self._registry.session_by_thread(message.parent_id) if message.parent_id else None

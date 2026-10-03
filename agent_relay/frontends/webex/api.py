@@ -84,6 +84,15 @@ def text_bytes(text: str) -> int:
     return len(text.encode("utf-8"))
 
 
+def scrub_attachment(content: bytes) -> bytes:
+    """Attachments are text (diffs, long answers), scrubbed like messages. Binary is refused."""
+    try:
+        decoded = content.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise ValueError("only UTF-8 text attachments are sent, so they can be scrubbed") from exc
+    return scrub_text(decoded).encode("utf-8")
+
+
 class WebexApi:
     def __init__(
         self,
@@ -194,8 +203,9 @@ class WebexApi:
             target["parentId"] = parent_id
         if file is not None:
             name, content, mime = file
+            cleaned = scrub_attachment(content)
             response = await self._request(
-                "POST", "/messages", data={**target, "markdown": text}, files={"files": (name, content, mime)}
+                "POST", "/messages", data={**target, "markdown": text}, files={"files": (name, cleaned, mime)}
             )
             return Message.model_validate(response.json())
         body: dict[str, JsonValue] = {**target, "markdown": text}
