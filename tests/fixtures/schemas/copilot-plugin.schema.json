@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$comment": "Transcribed from https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-plugin-reference (legacy manifest fields). Closed so a typo fails.",
+  "type": "object",
+  "required": ["name"],
+  "additionalProperties": false,
+  "$defs": {
+    "paths": {"oneOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}]},
+    "relative": {"type": "string", "not": {"pattern": "^/|(^|/)\\.\\.(/|$)"}}
+  },
+  "properties": {
+    "name": {"type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$", "maxLength": 64},
+    "description": {"type": "string", "maxLength": 1024},
+    "version": {"type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+"},
+    "author": {
+      "type": "object",
+      "required": ["name"],
+      "additionalProperties": false,
+      "properties": {"name": {"type": "string"}, "email": {"type": "string"}, "url": {"type": "string"}}
+    },
+    "homepage": {"type": "string"},
+    "repository": {"type": "string"},
+    "license": {"type": "string"},
+    "keywords": {"type": "array", "items": {"type": "string"}},
+    "category": {"type": "string"},
+    "tags": {"type": "array", "items": {"type": "string"}},
+    "agents": {"$ref": "#/$defs/paths"},
+    "skills": {"$ref": "#/$defs/paths"},
+    "commands": {"$ref": "#/$defs/paths"},
+    "hooks": {"oneOf": [{"$ref": "#/$defs/relative"}, {"type": "object"}]},
+    "extensions": {"oneOf": [{"$ref": "#/$defs/paths"}, {"type": "object"}]},
+    "mcpServers": {"oneOf": [{"$ref": "#/$defs/relative"}, {"type": "object"}]},
+    "lspServers": {"oneOf": [{"$ref": "#/$defs/relative"}, {"type": "object"}]}
+  }
+}

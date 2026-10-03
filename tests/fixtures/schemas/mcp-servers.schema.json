@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$comment": "Local (stdio) MCP server entries as documented for Copilot CLI (https://docs.github.com/en/copilot/how-tos/copilot-cli/customize-copilot/add-mcp-servers) and Cursor (https://cursor.com/docs/context/mcp).",
+  "type": "object",
+  "required": ["mcpServers"],
+  "additionalProperties": false,
+  "properties": {
+    "mcpServers": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "object",
+        "required": ["command"],
+        "additionalProperties": false,
+        "properties": {
+          "type": {"enum": ["local", "stdio"]},
+          "command": {"type": "string", "minLength": 1},
+          "args": {"type": "array", "items": {"type": "string"}},
+          "env": {"type": "object", "additionalProperties": {"type": "string"}},
+          "cwd": {"type": "string"},
+          "tools": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    }
+  }
+}

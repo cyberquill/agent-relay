@@ -54,3 +54,48 @@ self-test. The debug port listens only on loopback and only while Cursor runs wi
 
 The DOM fixture tests need a Chromium binary: the newest Playwright Chromium in
 `~/Library/Caches/ms-playwright`, Google Chrome, or the path in `RELAY_TEST_CHROMIUM`.
+
+## relay-mcp: `notify_phone` and `ask_phone`
+
+`relay-mcp` is a stdio MCP server that agents call to reach the phone through `relayd`. It finds the
+session from `RELAY_WORKSPACE` (or its working directory) and picks the deepest live session that
+contains it, busy sessions first.
+
+- `notify_phone(text)` posts one line and returns `{delivered, reason}`.
+- `ask_phone(question, options, timeout_s)` blocks for up to 900 s and returns `{outcome, answer, reason}`.
+  `outcome` is `answered`, `timeout` or `denied`. It sends a progress notification every 20 s while
+  waiting.
+
+Both refuse (`delivered: false` or `denied`) when the relay is paused, when no session is live for the
+workspace, or when a desk session is not in away mode. If `relayd` is down, the tools tell the agent to
+run `relay start`. `relay-mcp` logs only to `~/Library/Logs/agent-relay/`; stdout belongs to MCP.
+
+## `/away`, `/back` and the plugin bundles
+
+`skills/agent-relay-away/SKILL.md` holds the away-mode contract. Its `commands/away.md` and `back.md`
+run `relay away on|off --workspace "$PWD"`.
+
+`relay install` writes hooks, skills and MCP config into each harness directly. To use a harness's plugin
+manager instead, build the bundles. They are written to `dist/plugins/<harness>/agent-relay` and point at
+this checkout's Python.
+
+```bash
+uv run python -c "from pathlib import Path; from agent_relay.ops.bundles import build_all; \
+from agent_relay.models.config import RelayConfig; print(build_all(Path('dist/plugins'), RelayConfig()))"
+```
+
+| Harness | Install the bundle |
+|---|---|
+| Copilot CLI | `copilot plugin install dist/plugins/copilot/agent-relay` |
+| Cursor | copy `dist/plugins/cursor/agent-relay` to `~/.cursor/plugins/local/agent-relay`, then restart Cursor |
+| OpenCode | copy the contents of `dist/plugins/opencode/agent-relay` into `~/.config/opencode/` |
+
+Use one route per harness, never both: hooks would fire twice.
+
+## The `stepping-away` skill patch
+
+`relay install` replaces `~/.agents/skills/stepping-away/SKILL.md` with `patches/stepping-away/SKILL.md`.
+That version has no Webex posting, keeps the decision rules and points to `agent-relay-away`. It does
+this only when the installed file's sha256 matches `patches/stepping-away/base.sha256`. The original is
+backed up, and `relay uninstall` restores it byte for byte. If you edited the skill since, install
+leaves it alone and says so. In that case, merge the patch by hand.

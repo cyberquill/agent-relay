@@ -32,6 +32,8 @@ dev = [
     "tox~=4.27",
     "types-PyYAML~=6.0",
     "playwright~=1.52",
+    "jsonschema~=4.26",
+    "types-jsonschema~=4.26",
 ]
 
 [project.scripts]

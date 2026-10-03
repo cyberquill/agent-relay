@@ -128,6 +128,18 @@ class ApprovalBroker:
         self, session: SessionRecord, question: str, options: tuple[str, ...], deadline_s: float | None = None
     ) -> str | None:
         """Post a question and wait for the answer (None when skipped or expired)."""
+        answer, _ = await self.ask_outcome(session, question, options, deadline_s)
+        return answer
+
+    async def ask_outcome(
+        self,
+        session: SessionRecord,
+        question: str,
+        options: tuple[str, ...],
+        deadline_s: float | None = None,
+        source: str = "hook",
+    ) -> tuple[str | None, str]:
+        """Like `ask`, plus who settled it: `phone`, `deadline`, `panic` or `desk`."""
         request_id = f"ask-{uuid.uuid4().hex[:12]}"
         timeout = float(deadline_s if deadline_s is not None else self._config.deadline_s)
         deadline = datetime.now(UTC) + timedelta(seconds=timeout)
@@ -136,7 +148,7 @@ class ApprovalBroker:
                 request_id=request_id,
                 kind="question",
                 session_key=session.session_key,
-                payload={"source": "hook", "question": question},
+                payload={"source": source, "question": question},
                 deadline=deadline,
             )
         )
@@ -152,10 +164,12 @@ class ApprovalBroker:
         )
         resolved = await self._wait(request_id, deadline)
         if resolved is None:
-            await self._service.answer_question(request_id, None, by="deadline")
-            return None
+            if await self._service.answer_question(request_id, None, by="deadline"):
+                return None, "deadline"
+            request = await self._registry.get_pending(request_id)
+            resolved = request.answer if request and request.answer else {}
         answer = resolved.get("answer")
-        return answer if isinstance(answer, str) else None
+        return (answer if isinstance(answer, str) else None), str(resolved.get("by", "phone"))
 
     async def _wait(self, request_id: str, deadline: datetime) -> dict[str, JsonValue] | None:
         while True:

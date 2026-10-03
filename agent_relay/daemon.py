@@ -18,7 +18,7 @@ import httpx
 from agent_relay import paths
 from agent_relay.adapters.factory import build_adapters
 from agent_relay.adapters.vscode_local.hub import BridgeHub
-from agent_relay.core import away
+from agent_relay.core import away, phone
 from agent_relay.core.approvals import ApprovalBroker
 from agent_relay.core.hooks import HookService
 from agent_relay.core.parking import ParkManager
@@ -41,6 +41,7 @@ type OpHandler = Callable[[JsonObj], Awaitable[JsonObj]]
 
 EXIT_CONFIG = 2
 EXIT_RUNNING = 3
+ASK_MAX_S = 900
 
 
 class AlreadyRunningError(RuntimeError):
@@ -104,6 +105,8 @@ class Core:
             "away": self._op_away,
             "status": self._op_status,
             "ping": self._op_ping,
+            "notify": self._op_notify,
+            "ask": self._op_ask,
         }
 
     async def handle_ipc(self, message: JsonObj) -> JsonObj:
@@ -143,6 +146,37 @@ class Core:
 
     async def _op_ping(self, _: JsonObj) -> JsonObj:
         return {"ok": True, "pid": os.getpid()}
+
+    # relay-mcp
+
+    async def _op_notify(self, message: JsonObj) -> JsonObj:
+        text, workspace = message.get("text"), message.get("workspace")
+        if not isinstance(text, str) or not text.strip() or not isinstance(workspace, str):
+            return {"error": "notify needs text and workspace"}
+        session, reason = await phone.reachable(self.registry, workspace)
+        if session is None:
+            return {"delivered": False, "reason": reason}
+        await self.notify(session, text)
+        return {"delivered": True, "session": session.session_key}
+
+    async def _op_ask(self, message: JsonObj) -> JsonObj:
+        question, workspace = message.get("question"), message.get("workspace")
+        if not isinstance(question, str) or not question.strip() or not isinstance(workspace, str):
+            return {"error": "ask needs question and workspace"}
+        raw_options = message.get("options")
+        options = tuple(str(o) for o in raw_options) if isinstance(raw_options, list) else ()
+        raw_timeout = message.get("timeout_s")
+        timeout = float(raw_timeout) if isinstance(raw_timeout, int | float) else float(ASK_MAX_S)
+        timeout = min(max(timeout, 1.0), float(ASK_MAX_S))
+        session, reason = await phone.reachable(self.registry, workspace)
+        if session is None:
+            return {"outcome": "denied", "reason": reason}
+        answer, by = await self.broker.ask_outcome(session, question, options, timeout, source="mcp")
+        if by == "deadline":
+            return {"outcome": "timeout"}
+        if answer is None:
+            return {"outcome": "denied", "reason": f"skipped ({by})"}
+        return {"outcome": "answered", "answer": answer}
 
 
 async def serve(
