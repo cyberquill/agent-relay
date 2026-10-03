@@ -416,3 +416,19 @@ class Registry:
 
     async def kv_delete(self, key: str) -> None:
         await self._run(lambda: self._write("DELETE FROM kv WHERE key=?", (key,)))
+
+    async def kv_pop(self, key: str) -> str | None:
+        """Delete a key and return its value in one transaction, so only one caller gets it."""
+
+        def _pop() -> str | None:
+            db = self._db()
+            db.execute("BEGIN IMMEDIATE")
+            try:
+                row = db.execute("DELETE FROM kv WHERE key=? RETURNING value", (key,)).fetchone()
+                db.execute("COMMIT")
+            except BaseException:
+                db.execute("ROLLBACK")
+                raise
+            return str(row["value"]) if row else None
+
+        return await self._run(_pop)

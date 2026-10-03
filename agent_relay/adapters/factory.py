@@ -5,6 +5,8 @@ from __future__ import annotations
 from agent_relay.adapters.ahp.adapter import AhpAdapter
 from agent_relay.adapters.base import Adapter
 from agent_relay.adapters.opencode.adapter import OpenCodeAdapter
+from agent_relay.adapters.vscode_local.adapter import VsCodeLocalAdapter
+from agent_relay.adapters.vscode_local.hub import BridgeHub
 from agent_relay.core.registry import Registry
 from agent_relay.log import get_logger
 from agent_relay.models.config import RelayConfig
@@ -13,10 +15,12 @@ from agent_relay.settings import Secret, get_secret
 log = get_logger(__name__)
 
 
-def build_adapters(config: RelayConfig, registry: Registry) -> list[Adapter]:
+def build_adapters(config: RelayConfig, registry: Registry, hub: BridgeHub | None = None) -> list[Adapter]:
     adapters: list[Adapter] = []
     if config.adapters.ahp:
         adapters.append(AhpAdapter(registry))
+    if config.adapters.vscode_local and hub is not None:
+        adapters.append(VsCodeLocalAdapter(registry, hub))
     if config.adapters.opencode:
         password = get_secret(Secret.OPENCODE_PASSWORD)
         if password is None:

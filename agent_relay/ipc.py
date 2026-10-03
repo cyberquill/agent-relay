@@ -19,6 +19,7 @@ _HEADER = struct.Struct(">I")
 
 type JsonObj = dict[str, object]
 type Handler = Callable[[JsonObj], Awaitable[JsonObj | None]]
+type StreamHandler = Callable[[JsonObj, asyncio.StreamReader, asyncio.StreamWriter], Awaitable[None]]
 
 
 class FrameError(ValueError):
@@ -110,11 +111,22 @@ def peer_uid(sock: socket.socket) -> int:
 
 
 class IpcServer:
-    """Serves one request per frame; a connection may carry several. Refuses other uids."""
+    """Serves one request per frame; a connection may carry several. Refuses other uids.
 
-    def __init__(self, sock_path: Path, handler: Handler, expected_uid: int | None = None) -> None:
+    A frame whose `op` names a stream handler hands the whole connection to that handler, which
+    owns it until it returns (used by long-lived peers such as the relay-bridge extension).
+    """
+
+    def __init__(
+        self,
+        sock_path: Path,
+        handler: Handler,
+        expected_uid: int | None = None,
+        streams: dict[str, StreamHandler] | None = None,
+    ) -> None:
         self.sock_path = sock_path
         self.handler = handler
+        self.streams: dict[str, StreamHandler] = dict(streams or {})
         self.expected_uid = os.getuid() if expected_uid is None else expected_uid
         self.refused = 0
         self._server: asyncio.AbstractServer | None = None
@@ -134,6 +146,7 @@ class IpcServer:
     async def stop(self) -> None:
         if self._server is not None:
             self._server.close()
+            self._server.close_clients()
             await self._server.wait_closed()
             self._server = None
         if self.sock_path.exists():
@@ -148,6 +161,10 @@ class IpcServer:
             while True:
                 frame = await read_frame(reader)
                 if frame is None:
+                    return
+                stream = self.streams.get(str(frame.get("op")))
+                if stream is not None:
+                    await stream(frame, reader, writer)
                     return
                 reply = await self.handler(frame)
                 if reply is not None:

@@ -17,6 +17,7 @@ import httpx
 
 from agent_relay import paths
 from agent_relay.adapters.factory import build_adapters
+from agent_relay.adapters.vscode_local.hub import BridgeHub
 from agent_relay.core import away
 from agent_relay.core.approvals import ApprovalBroker
 from agent_relay.core.hooks import HookService
@@ -166,9 +167,10 @@ async def serve(
     frontend, ws = await build_frontend(token, config, registry, core.service, http, connector)
     core.router.subscribe(frontend.renderer)
     core.notify_targets.append(lambda s, text: _post(frontend, s, text))
-    for adapter in build_adapters(config, registry):
+    hub = BridgeHub()
+    for adapter in build_adapters(config, registry, hub):
         core.router.add_adapter(adapter)
-    ipc = IpcServer(paths.socket_path(), core.handle_ipc, expected_uid=os.getuid())
+    ipc = IpcServer(paths.socket_path(), core.handle_ipc, expected_uid=os.getuid(), streams=hub.streams())
     await ipc.start()
     tasks = [
         asyncio.create_task(ws.run(), name="webex-ws"),

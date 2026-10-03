@@ -1,0 +1,43 @@
+{
+  "name": "relay-bridge",
+  "displayName": "Agent Relay Bridge",
+  "description": "Lets agent-relay start and steer VS Code Local agent chats from your phone",
+  "publisher": "agent-relay",
+  "version": "0.1.0",
+  "private": true,
+  "license": "UNLICENSED",
+  "engines": {
+    "vscode": "^1.110.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "extensionKind": [
+    "ui"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/src/extension.js",
+  "contributes": {
+    "configuration": {
+      "title": "Agent Relay Bridge",
+      "properties": {
+        "relayBridge.socketPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to relayd's relay.sock. Empty means the default under Application Support."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "node --test --test-reporter=spec \"test/*.test.ts\""
+  },
+  "devDependencies": {
+    "@types/node": "26.6.4",
+    "@types/vscode": "1.110.0",
+    "typescript": "7.0.2"
+  }
+}

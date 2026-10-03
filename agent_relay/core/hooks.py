@@ -13,6 +13,7 @@ from pydantic import JsonValue
 
 from agent_relay.core import away
 from agent_relay.core.approvals import DEADLINE_REASON, ApprovalBroker
+from agent_relay.core.claims import UNCLAIMED_PREFIX, take_claim
 from agent_relay.core.parking import ParkManager, phone_text
 from agent_relay.core.registry import Registry
 from agent_relay.core.router import Router
@@ -120,7 +121,22 @@ class HookService:
             found = await self._registry.find_session(harness, hook.session_id)
             if found is not None:
                 return found
-        return None
+        return await self._claimed(hook)
+
+    async def _claimed(self, hook: HookInput) -> SessionRecord | None:
+        """Bind the first unmatched Local hook in a workspace to the chat the phone just opened there."""
+        local = hook.family is HookFamily.COPILOT and hook.event[:1].isupper()
+        if not local or hook.kind is HookKind.SESSION_END or hook.session_id == "unknown":
+            return None
+        claim = await take_claim(self._registry, hook.workspace)
+        if claim is None:
+            return None
+        session = await self._registry.get_session(claim.session_key)
+        if session is None or not session.harness_id.startswith(UNCLAIMED_PREFIX):
+            return None
+        await self._registry.set_session_fields(session.session_key, harness_id=hook.session_id)
+        log.info(f"linked {session.session_key} to Local chat {hook.session_id}")
+        return await self._registry.get_session(session.session_key)
 
     async def _register(self, hook: HookInput) -> SessionRecord:
         record = await self._registry.upsert_session(
