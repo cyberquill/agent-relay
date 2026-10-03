@@ -1,0 +1,72 @@
+[
+  {
+    "event": "PreToolUse",
+    "payload": {"hook_event_name": "PreToolUse", "session_id": "loc-1", "timestamp": "2026-10-03T10:00:00.000Z", "cwd": "/Users/dev/proj", "transcript_path": "/tmp/t.json", "tool_name": "run_in_terminal", "tool_input": {"command": "rm -rf build"}, "tool_use_id": "tu-1"},
+    "expect": {"kind": "pre_tool", "harness": "vscode_local", "format": "snake", "session_id": "loc-1", "tool_name": "run_in_terminal", "workspace": "/Users/dev/proj", "tool_use_id": "tu-1"}
+  },
+  {
+    "event": "PostToolUse",
+    "payload": {"hook_event_name": "PostToolUse", "session_id": "loc-1", "timestamp": "2026-10-03T10:00:01.000Z", "cwd": "/Users/dev/proj", "tool_name": "run_in_terminal", "tool_input": {"command": "ls"}, "tool_use_id": "tu-2", "tool_response": "a\nb"},
+    "expect": {"kind": "post_tool", "harness": "vscode_local", "format": "snake", "tool_output": "a\nb"}
+  },
+  {
+    "event": "Stop",
+    "payload": {"hook_event_name": "Stop", "session_id": "loc-1", "timestamp": "2026-10-03T10:00:02.000Z", "cwd": "/Users/dev/proj", "transcript_path": "/tmp/t.json", "stop_hook_active": false},
+    "expect": {"kind": "stop", "harness": "vscode_local", "format": "snake", "stop_hook_active": false}
+  },
+  {
+    "event": "Stop",
+    "payload": {"hook_event_name": "Stop", "session_id": "cli-1", "timestamp": "2026-10-03T10:00:02.000Z", "cwd": "/Users/dev/proj", "transcript_path": "/tmp/t.jsonl", "stop_reason": "end_turn", "stop_hook_active": true},
+    "expect": {"kind": "stop", "harness": "copilot_cli", "format": "snake", "stop_hook_active": true, "status": "end_turn"}
+  },
+  {
+    "event": "PreToolUse",
+    "payload": {"hook_event_name": "PreToolUse", "session_id": "cli-1", "timestamp": "2026-10-03T10:00:00.000Z", "cwd": "/Users/dev/proj", "tool_name": "bash", "tool_input": {"command": "git push"}},
+    "expect": {"kind": "pre_tool", "harness": "copilot_cli", "format": "snake", "tool_name": "bash"}
+  },
+  {
+    "event": "PostToolUse",
+    "payload": {"hook_event_name": "PostToolUse", "session_id": "cli-1", "cwd": "/Users/dev/proj", "tool_name": "bash", "tool_input": {"command": "ls"}, "tool_result": {"result_type": "success", "text_result_for_llm": "README.md"}},
+    "expect": {"kind": "post_tool", "harness": "copilot_cli", "tool_output": "README.md"}
+  },
+  {
+    "event": "SessionStart",
+    "payload": {"hook_event_name": "SessionStart", "session_id": "cli-1", "timestamp": "2026-10-03T10:00:00.000Z", "cwd": "/Users/dev/proj", "source": "new", "initial_prompt": "fix the tests"},
+    "expect": {"kind": "session_start", "harness": "copilot_cli", "text": "fix the tests"}
+  },
+  {
+    "event": "SubagentStop",
+    "payload": {"hook_event_name": "SubagentStop", "session_id": "cli-1", "cwd": "/Users/dev/proj", "stop_hook_active": false},
+    "expect": {"kind": "subagent_stop", "harness": "copilot_cli"}
+  },
+  {
+    "event": "permissionRequest",
+    "payload": {"sessionId": "cli-2", "timestamp": 1764000000000, "cwd": "/Users/dev/proj", "toolName": "bash", "toolArgs": "{\"command\": \"npm publish\"}"},
+    "expect": {"kind": "permission", "harness": "copilot_cli", "format": "camel", "session_id": "cli-2", "tool_name": "bash", "tool_input": {"command": "npm publish"}}
+  },
+  {
+    "event": "preToolUse",
+    "payload": {"sessionId": "cli-2", "timestamp": 1764000000000, "cwd": "/Users/dev/proj", "toolName": "edit", "toolArgs": "{\"path\": \"a.py\"}"},
+    "expect": {"kind": "pre_tool", "harness": "copilot_cli", "format": "camel", "tool_input": {"path": "a.py"}}
+  },
+  {
+    "event": "agentStop",
+    "payload": {"sessionId": "cli-2", "timestamp": 1764000000000, "cwd": "/Users/dev/proj", "stopReason": "end_turn"},
+    "expect": {"kind": "stop", "harness": "copilot_cli", "format": "camel", "status": "end_turn"}
+  },
+  {
+    "event": "notification",
+    "payload": {"session_id": "cli-2", "cwd": "/Users/dev/proj", "hook_event_name": "Notification", "message": "Waiting for input", "notification_type": "permission_prompt"},
+    "expect": {"kind": "notification", "harness": "copilot_cli", "notification_type": "permission_prompt", "text": "Waiting for input"}
+  },
+  {
+    "event": "sessionEnd",
+    "payload": {"sessionId": "cli-2", "timestamp": 1764000000000, "cwd": "/Users/dev/proj", "reason": "complete"},
+    "expect": {"kind": "session_end", "harness": "copilot_cli", "status": "complete"}
+  },
+  {
+    "event": "errorOccurred",
+    "payload": {"sessionId": "cli-2", "timestamp": 1764000000000, "cwd": "/Users/dev/proj", "error": {"message": "model unavailable", "name": "Error"}},
+    "expect": {"kind": "error", "harness": "copilot_cli", "error": "model unavailable"}
+  }
+]

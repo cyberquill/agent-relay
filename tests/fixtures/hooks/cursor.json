@@ -1,0 +1,62 @@
+[
+  {
+    "event": "preToolUse",
+    "payload": {"conversation_id": "cur-1", "generation_id": "g1", "model": "gpt-5", "hook_event_name": "preToolUse", "workspace_roots": ["/Users/dev/proj"], "transcript_path": "/tmp/c.jsonl", "tool_name": "Write", "tool_input": {"file_path": "a.py"}, "tool_use_id": "tu-9", "cwd": "/Users/dev/proj"},
+    "expect": {"kind": "pre_tool", "harness": "cursor", "format": "cursor", "session_id": "cur-1", "tool_name": "Write", "workspace": "/Users/dev/proj"}
+  },
+  {
+    "event": "postToolUse",
+    "payload": {"conversation_id": "cur-1", "hook_event_name": "postToolUse", "workspace_roots": ["/Users/dev/proj"], "tool_name": "Read", "tool_input": {"file_path": "a.py"}, "tool_output": "print(1)"},
+    "expect": {"kind": "post_tool", "harness": "cursor", "tool_output": "print(1)"}
+  },
+  {
+    "event": "beforeShellExecution",
+    "payload": {"conversation_id": "cur-1", "hook_event_name": "beforeShellExecution", "workspace_roots": ["/Users/dev/proj"], "command": "git push --force", "cwd": "/Users/dev/proj"},
+    "expect": {"kind": "shell_before", "harness": "cursor", "tool_name": "Shell", "tool_input": {"command": "git push --force", "cwd": "/Users/dev/proj"}}
+  },
+  {
+    "event": "beforeMCPExecution",
+    "payload": {"conversation_id": "cur-1", "hook_event_name": "beforeMCPExecution", "workspace_roots": ["/Users/dev/proj"], "tool_name": "create_issue", "tool_input": "{\"title\": \"x\"}", "mcp_server_name": "github"},
+    "expect": {"kind": "mcp_before", "harness": "cursor", "mcp_server": "github", "tool_input": {"title": "x"}}
+  },
+  {
+    "event": "afterShellExecution",
+    "payload": {"conversation_id": "cur-1", "hook_event_name": "afterShellExecution", "workspace_roots": ["/Users/dev/proj"], "command": "ls", "output": "a.py"},
+    "expect": {"kind": "shell_after", "harness": "cursor", "tool_output": "a.py"}
+  },
+  {
+    "event": "afterMCPExecution",
+    "payload": {"conversation_id": "cur-1", "hook_event_name": "afterMCPExecution", "workspace_roots": ["/Users/dev/proj"], "tool_name": "create_issue", "tool_input": "{}", "result_json": "{\"ok\": true}"},
+    "expect": {"kind": "mcp_after", "harness": "cursor", "tool_output": "{\"ok\": true}"}
+  },
+  {
+    "event": "afterFileEdit",
+    "payload": {"conversation_id": "cur-1", "hook_event_name": "afterFileEdit", "workspace_roots": ["/Users/dev/proj"], "file_path": "/Users/dev/proj/a.py", "edits": [{"old_string": "a", "new_string": "b"}]},
+    "expect": {"kind": "file_edit", "harness": "cursor"}
+  },
+  {
+    "event": "afterAgentResponse",
+    "payload": {"conversation_id": "cur-1", "hook_event_name": "afterAgentResponse", "workspace_roots": ["/Users/dev/proj"], "text": "Done."},
+    "expect": {"kind": "agent_response", "harness": "cursor", "text": "Done."}
+  },
+  {
+    "event": "afterAgentThought",
+    "payload": {"conversation_id": "cur-1", "hook_event_name": "afterAgentThought", "workspace_roots": ["/Users/dev/proj"], "text": "thinking", "duration_ms": 120},
+    "expect": {"kind": "agent_thought", "harness": "cursor", "text": "thinking"}
+  },
+  {
+    "event": "stop",
+    "payload": {"conversation_id": "cur-1", "hook_event_name": "stop", "workspace_roots": ["/Users/dev/proj"], "status": "completed", "loop_count": 2},
+    "expect": {"kind": "stop", "harness": "cursor", "status": "completed", "loop_count": 2}
+  },
+  {
+    "event": "sessionStart",
+    "payload": {"session_id": "cur-2", "conversation_id": "cur-2", "hook_event_name": "sessionStart", "workspace_roots": ["/Users/dev/proj"], "is_background_agent": false, "composer_mode": "agent"},
+    "expect": {"kind": "session_start", "harness": "cursor", "session_id": "cur-2"}
+  },
+  {
+    "event": "sessionEnd",
+    "payload": {"session_id": "cur-2", "conversation_id": "cur-2", "hook_event_name": "sessionEnd", "workspace_roots": ["/Users/dev/proj"], "reason": "completed", "duration_ms": 5000},
+    "expect": {"kind": "session_end", "harness": "cursor", "status": "completed"}
+  }
+]

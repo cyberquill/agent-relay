@@ -1,0 +1,17 @@
+[
+  {
+    "event": "plugin.register",
+    "payload": {"directory": "/Users/dev/proj", "serverUrl": "http://127.0.0.1:4096/", "pid": 4242},
+    "expect": {"kind": "plugin_register", "harness": "opencode", "format": "opencode", "workspace": "/Users/dev/proj", "server_url": "http://127.0.0.1:4096/"}
+  },
+  {
+    "event": "tool.execute.before",
+    "payload": {"sessionID": "ses_1", "callID": "call_1", "tool": "bash", "args": {"command": "rm -rf dist"}, "directory": "/Users/dev/proj"},
+    "expect": {"kind": "pre_tool", "harness": "opencode", "session_id": "ses_1", "tool_name": "bash", "tool_use_id": "call_1", "tool_input": {"command": "rm -rf dist"}}
+  },
+  {
+    "event": "tool.execute.after",
+    "payload": {"sessionID": "ses_1", "callID": "call_1", "tool": "bash", "output": "removed", "directory": "/Users/dev/proj"},
+    "expect": {"kind": "post_tool", "harness": "opencode", "tool_output": "removed"}
+  }
+]
