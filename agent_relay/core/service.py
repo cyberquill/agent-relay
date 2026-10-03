@@ -160,7 +160,12 @@ class RelayService:
     # starting and talking
 
     async def sticky_model(self, harness: Harness) -> str | None:
-        return await self.registry.kv_get(STICKY_MODEL_KEY.format(harness=harness.value))
+        sticky = await self.registry.kv_get(STICKY_MODEL_KEY.format(harness=harness.value))
+        adapter = self.router.adapter(harness)
+        if sticky is None or adapter is None or not adapter.capabilities.has(Capability.MODEL_SELECT):
+            return sticky
+        listed = {m.id for m in await self.models(harness.value)}
+        return sticky if not listed or sticky in listed else None
 
     async def start(self, app: str, workspace: str, prompt: str, model: str | None = None) -> SessionRecord:
         harness = resolve_app(app)

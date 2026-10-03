@@ -107,6 +107,8 @@ class Handlers:
                 prompt = cmd.prompt
                 if app and model and not await self._is_model(app, model):
                     prompt, model = " ".join(p for p in (model, prompt) if p), DEFAULT_MODEL
+                elif prompt and not model:
+                    model = DEFAULT_MODEL
                 await self.wizard(ctx, {"app": app, "ws": ws, "model": model, "prompt": prompt})
             case CommandName.SESSIONS:
                 sessions = await svc.sessions()
@@ -216,7 +218,7 @@ class Handlers:
             sticky = await svc.sticky_model(harness)
             models = await svc.models(harness.value)
             choices = [(DEFAULT_MODEL, f"Default{f' ({sticky})' if sticky else ''}")]
-            choices += [(m.id, m.label) for m in models]
+            choices += list({m.id: (m.id, m.label) for m in models}.values())
             await self.card(
                 top, "Pick a model", cards.choose("model", "Which model?", choices, _strip(carry))
             )

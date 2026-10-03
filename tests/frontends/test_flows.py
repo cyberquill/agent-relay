@@ -7,6 +7,7 @@ from pathlib import Path
 
 from agent_relay import paths
 from agent_relay.core import away
+from agent_relay.core.service import STICKY_MODEL_KEY
 from agent_relay.frontends.webex import cards
 from agent_relay.models.events import Harness
 from agent_relay.models.sessions import SessionRecord, SessionStatus
@@ -60,6 +61,15 @@ async def test_new_takes_the_third_word_as_a_model_only_if_the_app_lists_it(rela
         ("m2", "fix it"),
         ("m2", "hello"),  # no model given: the sticky one from the last /new
     ]
+
+
+async def test_one_line_new_starts_without_asking_and_ignores_an_unlisted_sticky_model(relay: Relay) -> None:
+    """A sticky `Run` from a mis-parsed /new must not stick (seen live)."""
+    await relay.registry.kv_set(STICKY_MODEL_KEY.format(harness=Harness.OPENCODE.value), "Run")
+    await relay.say('/new opencode proj "run the tests"')
+    assert relay.adapter.started, relay.bot_texts()
+    assert relay.adapter.started[-1].model is None
+    assert relay.adapter.started[-1].prompt == "run the tests"
 
 
 async def test_new_with_unknown_app_or_workspace(relay: Relay) -> None:
