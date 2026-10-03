@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "selectors": {
+    "composer": {
+      "css": "div.aislash-editor-input[contenteditable='true']",
+      "required": true,
+      "purpose": "The chat composer input"
+    },
+    "send": {
+      "css": "[data-testid='composer-send-button'], .composer-send-button",
+      "required": true,
+      "purpose": "Sends the composer text"
+    },
+    "stop": {
+      "css": "[data-testid='composer-stop-button'], .composer-stop-button",
+      "required": false,
+      "purpose": "Stops the running turn; present only while a turn runs"
+    },
+    "new_chat": {
+      "css": "[aria-label='New Chat'], [aria-label^='New Chat ']",
+      "required": true,
+      "purpose": "Opens a new chat in the composer"
+    },
+    "model_picker": {
+      "css": "[data-testid='composer-model-picker'], .composer-unified-dropdown-model",
+      "required": true,
+      "purpose": "Opens the model menu"
+    },
+    "model_option": {
+      "css": "[data-testid='model-picker-item'], .composer-model-picker-item",
+      "required": false,
+      "purpose": "One model in the open model menu"
+    },
+    "messages": {
+      "css": ".conversations, [data-testid='composer-messages']",
+      "required": true,
+      "purpose": "The scrolling list of chat messages"
+    },
+    "assistant_message": {
+      "css": "[data-message-role='ai'], .composer-ai-message",
+      "required": false,
+      "purpose": "One assistant reply inside the messages list"
+    }
+  }
+}

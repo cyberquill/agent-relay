@@ -24,6 +24,10 @@ def build_adapters(config: RelayConfig, registry: Registry, hub: BridgeHub | Non
         adapters.append(VsCodeLocalAdapter(registry, hub))
     if config.adapters.cursor_cli:
         adapters.append(CursorCliAdapter(registry))
+    if config.cdp.enabled:
+        from agent_relay.adapters.cursor_cdp.adapter import CursorCdpAdapter  # Playwright is the `cdp` extra
+
+        adapters.append(CursorCdpAdapter(registry, config.cdp))
     if config.adapters.opencode:
         password = get_secret(Secret.OPENCODE_PASSWORD)
         if password is None:

@@ -1,0 +1,86 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>fixture-ws — Cursor</title>
+</head>
+<body>
+<div class="composer-pane">
+  <button aria-label="New Chat" id="new-chat">+</button>
+  <div class="conversations"></div>
+  <div class="composer-bar">
+    <div class="aislash-editor-input" contenteditable="true"></div>
+    <button class="composer-unified-dropdown-model" id="picker">Auto</button>
+    <div id="menu" hidden></div>
+    <span id="actions"><button data-testid="composer-send-button" id="send">Send</button></span>
+  </div>
+</div>
+<script>
+const MODELS = ["Auto", "GPT-5", "Sonnet 4.5"];
+const conversations = document.querySelector(".conversations");
+const composer = document.querySelector(".aislash-editor-input");
+const picker = document.getElementById("picker");
+const menu = document.getElementById("menu");
+const actions = document.getElementById("actions");
+window.__prompts = [];
+let timers = [];
+
+function stopButton() { return document.querySelector("[data-testid='composer-stop-button']"); }
+
+function finish() {
+  timers.forEach(clearTimeout);
+  timers = [];
+  const stop = stopButton();
+  if (stop) { stop.remove(); }
+}
+
+function reply(prompt) {
+  if (prompt.includes("Reply with exactly: OK")) { return {tokens: ["O", "K"], pace: 30}; }
+  if (prompt.includes("slow")) { return {tokens: Array.from({length: 50}, (_, i) => `t${i} `), pace: 200}; }
+  if (prompt.includes("silent")) { return {tokens: [], pace: 30}; }
+  return {tokens: ["Echo: ", prompt], pace: 30};
+}
+
+document.getElementById("new-chat").addEventListener("click", () => {
+  finish();
+  conversations.replaceChildren();
+});
+
+picker.addEventListener("click", () => {
+  menu.replaceChildren(...MODELS.map((label) => {
+    const item = document.createElement("div");
+    item.setAttribute("data-testid", "model-picker-item");
+    item.textContent = label;
+    item.addEventListener("click", () => { picker.textContent = label; menu.hidden = true; });
+    return item;
+  }));
+  menu.hidden = false;
+});
+
+document.addEventListener("keydown", (event) => { if (event.key === "Escape") { menu.hidden = true; } });
+
+document.getElementById("send").addEventListener("click", () => {
+  const prompt = composer.innerText.trim();
+  composer.replaceChildren();
+  window.__prompts.push({prompt, model: picker.textContent});
+  const user = document.createElement("div");
+  user.setAttribute("data-message-role", "human");
+  user.textContent = prompt;
+  conversations.append(user);
+  const ai = document.createElement("div");
+  ai.setAttribute("data-message-role", "ai");
+  conversations.append(ai);
+  const stop = document.createElement("button");
+  stop.setAttribute("data-testid", "composer-stop-button");
+  stop.textContent = "Stop";
+  stop.addEventListener("click", finish);
+  actions.append(stop);
+  const {tokens, pace} = reply(prompt);
+  tokens.forEach((token, i) => {
+    timers.push(setTimeout(() => { ai.textContent += token; }, pace * (i + 1)));
+  });
+  timers.push(setTimeout(finish, pace * (tokens.length + 2)));
+});
+</script>
+</body>
+</html>
