@@ -7,7 +7,6 @@ from dataclasses import dataclass
 
 from pydantic import JsonValue
 
-from agent_relay.core import away
 from agent_relay.core.service import APP_LABELS, RelayError, RelayService, resolve_app
 from agent_relay.frontends import commands
 from agent_relay.frontends.commands import Command, CommandName, HelpHint, Invalid, Prompt, Unknown
@@ -157,12 +156,7 @@ class Handlers:
                     await self.reply(ctx, "📎 changes.diff", file=("changes.diff", diff, "text/x-diff"))
             case CommandName.AWAY:
                 key = ctx.session.session_key if ctx.session else None
-                if not cmd.args:
-                    workspace = ctx.session.workspace if ctx.session else None
-                    state = await away.is_away(svc.registry, workspace)
-                    await self.reply(ctx, f"Away mode is {'on' if state else 'off'}.")
-                else:
-                    await self.reply(ctx, await svc.set_away(cmd.args[0] == "on", key))
+                await self.reply(ctx, await svc.set_away(not cmd.args or cmd.args[0] == "on", key))
             case CommandName.BACK:
                 key = None
                 if ctx.session is not None:

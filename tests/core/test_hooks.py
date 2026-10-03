@@ -448,6 +448,25 @@ async def test_restart_recovers_parked_and_expires_pending(core: tuple[Core, Rec
     assert (await _session(built, "cursor:Z")).status is SessionStatus.IDLE
 
 
+async def test_a_phone_session_with_away_off_ends_its_turn_idle_without_parking(
+    core: tuple[Core, Recorder, list[str]],
+) -> None:
+    built, rec, _ = core
+    await built.registry.upsert_session(
+        SessionRecord(
+            session_key="cursor:K1",
+            harness=Harness.CURSOR,
+            harness_id="K1",
+            workspace="/w/proj",
+            origin=Origin.PHONE,
+            status=SessionStatus.RUNNING,
+        )
+    )
+    assert await asyncio.wait_for(hook(built, "cursor", "stop", STOP_CURSOR), 2) == {}
+    assert rec.of(TurnCompleted) and not rec.of(SessionParked)
+    assert (await _session(built, "cursor:K1")).status is SessionStatus.IDLE
+
+
 async def test_phone_sessions_are_gated_even_with_away_off(core: tuple[Core, Recorder, list[str]]) -> None:
     built, rec, _ = core
     await built.registry.upsert_session(

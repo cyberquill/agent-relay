@@ -31,8 +31,8 @@ HELP_TEXT = """**agent-relay commands**
 - `/new [app] [ws] [model] ["prompt"]` start a session (missing pieces are asked for)
 - `/sessions` list sessions · `/apps` list apps · `/ws` list workspaces · `/models <app>` list models
 - In a session thread: `/model [m]` · `/stop` · `/status` · `/diff` · `/back` · plain text is a prompt
-- `/away [on|off]` in a thread or globally · `/doctor` health · `/panic` cancel everything and pause
-- `/help` this list"""
+- `/away [on|off]` in a thread or globally (bare `/away` is on)
+- `/doctor` health · `/panic` cancel everything and pause · `/help` this list"""
 
 HELP_HINT = (
     "Reply inside a session thread to talk to it, or send `/new` to start one. `/help` lists commands."

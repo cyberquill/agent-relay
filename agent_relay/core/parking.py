@@ -90,6 +90,9 @@ class ParkManager:
         if stop_hook_active and blocks == 0:
             log.info(f"{session.session_key}: another stop hook is already continuing; not parking")
             return ParkResult("skipped")
+        if not await away.is_away(self._registry, session.workspace):
+            await self._set(session, SessionStatus.IDLE, 0, None)
+            return ParkResult("skipped")
         limit = self.block_limit(session.harness)
         if limit is not None and blocks + 1 >= limit:
             await self._set(session, SessionStatus.IDLE, 0, None)

@@ -151,8 +151,11 @@ async def test_away_global_and_per_thread(relay: Relay) -> None:
     await relay.say("/away off", parent_id=session.webex_thread_id)
     assert not await away.is_away(relay.registry, session.workspace)
     assert await away.is_away(relay.registry, "/elsewhere")
+    await relay.say("/away", parent_id=session.webex_thread_id)
+    assert await away.is_away(relay.registry, session.workspace)
+    await relay.say("/away off")
     await relay.say("/away")
-    assert relay.bot_texts()[-1] == "Away mode is on."
+    assert await away.is_away(relay.registry, "/elsewhere")
 
 
 async def test_panic_pauses_and_cancels(relay: Relay) -> None:
