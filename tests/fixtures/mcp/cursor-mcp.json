@@ -1,0 +1,21 @@
+{
+  "mcpServers": {
+    "GitHub": {
+      "url": "https://api.githubcopilot.com/mcp/",
+      "headers": {"Authorization": "Bearer fake-github-value-0000"}
+    },
+    "atlassian": {"url": "https://mcp.atlassian.com/v1/sse"},
+    "webex-messaging": {
+      "url": "https://mcp.webex.example.com/v1/mcp",
+      "auth": {"CLIENT_ID": "fake-client-id", "CLIENT_SECRET": "fake-client-value-0000", "scopes": ["spark:all"]}
+    },
+    "example-local": {
+      "type": "stdio",
+      "command": "uv",
+      "args": ["run", "--directory", "/fake/example_mcp_server", "server.py"],
+      "env": {"EXAMPLE_MODE": "local", "MCP_SERVER_TRANSPORT": "stdio"},
+      "envFile": "/fake/example_mcp_server/.env"
+    },
+    "chrome-devtools": {"command": "npx", "args": ["-y", "chrome-devtools-mcp@latest"]}
+  }
+}

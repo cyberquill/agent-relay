@@ -11,7 +11,7 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field
 
 from agent_relay.adapters.base import AdapterUnavailableError
-from agent_relay.adapters.cursor_cdp.connect import Connector, Launcher, connect
+from agent_relay.adapters.cursor_cdp.connect import Connector, Launcher, connect, fetch_version
 from agent_relay.adapters.cursor_cdp.driver import Composer
 from agent_relay.adapters.cursor_cdp.selectors import SelectorSet
 from agent_relay.core.registry import Registry
@@ -76,6 +76,22 @@ async def run_live(
 ) -> SelftestReport:
     """Starts Cursor if needed, checks the window showing the composer, and records the result."""
     version = await (launcher or Launcher()).ensure(port)
+    return await _check(registry, port, version, selectors, connector)
+
+
+async def check_attached(
+    registry: Registry, port: int, selectors: SelectorSet, connector: Connector = connect
+) -> SelftestReport | None:
+    """Like `run_live`, but never starts Cursor: None when no debuggable Cursor is running."""
+    version = await fetch_version(port)
+    if version is None:
+        return None
+    return await _check(registry, port, version, selectors, connector)
+
+
+async def _check(
+    registry: Registry, port: int, version: str, selectors: SelectorSet, connector: Connector
+) -> SelftestReport:
     conn = await connector(port)
     try:
         page = await conn.workbench(selectors, None)

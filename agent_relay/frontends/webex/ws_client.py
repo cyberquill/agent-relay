@@ -118,6 +118,8 @@ class WebexWsClient:
         self._device: dict[str, JsonValue] | None = None
         self._share_id: str | None = None
         self.connections = 0
+        self.connected = False
+        self.last_error: str | None = None
 
     async def device_url(self) -> str:
         if self._device_url is None:
@@ -234,11 +236,15 @@ class WebexWsClient:
                 )
             )
             self.connections += 1
+            self.connected, self.last_error = True, None
             log.info("Webex websocket connected")
-            if self._on_connected is not None:
-                await self._on_connected()
-            while True:
-                await self.handle_frame(ws, await ws.recv())
+            try:
+                if self._on_connected is not None:
+                    await self._on_connected()
+                while True:
+                    await self.handle_frame(ws, await ws.recv())
+            finally:
+                self.connected = False
 
     async def run(self) -> None:
         """Connect and listen forever, reconnecting with exponential backoff."""
@@ -255,14 +261,16 @@ class WebexWsClient:
                 raise
             except InvalidStatus as exc:
                 status = exc.response.status_code
-                log.warning(f"websocket handshake failed: HTTP {status}")
+                self.last_error = f"websocket handshake failed: HTTP {status}"
+                log.warning(self.last_error)
                 if status == 404:
                     not_found += 1
                     if not_found > MAX_404_RETRIES:
                         raise DeviceError("device registration keeps returning 404") from exc
                     device = await self.register_device()
             except (ConnectionClosed, OSError, socket.gaierror) as exc:
-                log.warning(f"websocket dropped ({type(exc).__name__}); reconnecting in {delay:.0f}s")
+                self.last_error = f"websocket dropped ({type(exc).__name__})"
+                log.warning(f"{self.last_error}; reconnecting in {delay:.0f}s")
             if self.connections > before:
                 delay = self._backoff_min
                 not_found = 0

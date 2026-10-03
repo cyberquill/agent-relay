@@ -26,6 +26,10 @@ class AhpUnavailableError(AdapterUnavailableError):
     """VS Code is closed, has no Agent Host, or speaks a protocol version the relay does not."""
 
 
+class ProtocolMismatchError(AhpUnavailableError):
+    """VS Code runs an Agent Host, but only with protocol versions the relay does not speak."""
+
+
 @dataclass(frozen=True)
 class Endpoint:
     socket_path: str
@@ -66,7 +70,7 @@ def parse_endpoints(raw: str) -> Endpoint:
         pid = entry.get("pid")
         return Endpoint(socket_path, version, token, pid if isinstance(pid, int) else None)
     if seen:
-        raise AhpUnavailableError(
+        raise ProtocolMismatchError(
             f"VS Code speaks AHP {', '.join(seen)}; the relay supports {', '.join(SUPPORTED_VERSIONS)}"
         )
     raise AhpUnavailableError("VS Code is not running an Agent Host (open VS Code)")

@@ -1,0 +1,24 @@
+// VS Code user MCP servers (shape of today's file; values are fake)
+{
+  "servers": {
+    "webex-messaging": {
+      "type": "stdio",
+      "command": "/usr/local/bin/webex-mcp",
+      "args": ["--stdio"], // trailing comment
+    },
+    "com.atlassian/atlassian-mcp-server": {
+      "type": "http",
+      "url": "https://mcp.atlassian.com/v1/sse",
+      "gallery": "https://api.mcp.github.com/2025-09-15/v0/servers/example",
+      "version": "1.0.0"
+    },
+    /* a server that needs a VS Code input */
+    "needs-input": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "example-mcp"],
+      "env": {"EXAMPLE_KEY": "${input:example-key}", "HOME_DIR": "${env:HOME}"}
+    }
+  },
+  "inputs": [{"id": "example-key", "type": "promptString", "password": true}]
+}

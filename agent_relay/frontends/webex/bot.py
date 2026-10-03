@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+from collections.abc import Awaitable, Callable
 
 import httpx
 
@@ -182,13 +183,14 @@ async def build_frontend(
     service: RelayService,
     http: httpx.AsyncClient | None = None,
     connector: Connector = default_connector,
+    doctor: Callable[[], Awaitable[str]] | None = None,
 ) -> tuple[WebexFrontend, WebexWsClient]:
     client = http or httpx.AsyncClient(headers={"Authorization": f"Bearer {token}"}, timeout=30)
     api = WebexApi(client, config.webex.api_base)
     me = await api.me()
     outbox = Outbox(api, registry, config.webex.allowed_email)
     renderer = WebexRenderer(outbox, registry, config.renderer, config.approvals.deadline_s)
-    handlers = Handlers(service, renderer)
+    handlers = Handlers(service, renderer, doctor=doctor)
     access = AccessControl(registry, config.webex.allowed_email, me.id)
     frontend = WebexFrontend(api, registry, service, renderer, handlers, access, me.id)
     ws = WebexWsClient(

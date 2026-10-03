@@ -1,0 +1,4 @@
+{
+  // OpenCode config (today it has no MCP servers)
+  "$schema": "https://opencode.ai/config.json",
+}

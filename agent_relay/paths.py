@@ -79,6 +79,18 @@ def cursor_dir() -> Path:
     return home() / ".cursor"
 
 
+def cursor_cli_config() -> Path:
+    return cursor_dir() / "cli-config.json"
+
+
+def cursor_state_db() -> Path:
+    return home() / "Library" / "Application Support" / "Cursor" / "User" / "globalStorage" / "state.vscdb"
+
+
+def cursor_permissions_state() -> Path:
+    return app_support() / "cursor-cli-permissions.json"
+
+
 def claude_dir() -> Path:
     return home() / ".claude"
 

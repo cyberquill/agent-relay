@@ -99,3 +99,82 @@ That version has no Webex posting, keeps the decision rules and points to `agent
 this only when the installed file's sha256 matches `patches/stepping-away/base.sha256`. The original is
 backed up, and `relay uninstall` restores it byte for byte. If you edited the skill since, install
 leaves it alone and says so. In that case, merge the patch by hand.
+
+## One MCP server list: `relay config import` and `relay config sync`
+
+`~/.agents/mcp.yaml` is the single list of MCP servers. Edit it, then render it everywhere.
+
+```sh
+relay config import            # dry run: what would go into ~/.agents/mcp.yaml
+relay config import --apply    # write it (once, or after adding a server in an app)
+relay config sync              # diff of every harness file against mcp.yaml
+relay config sync --apply      # write them; the first write of each file keeps a backup
+```
+
+- **Sources:** VS Code `mcp.json`, `~/.copilot/mcp-config.json`, `~/.cursor/mcp.json` and
+  `opencode.jsonc`. Import takes the union. The `agent-relay` server (relay-mcp) is always added.
+- **Secrets:** a literal secret found in a harness file (a token in `env`, an `Authorization`
+  header, an OAuth client secret) moves to the Keychain under service `agent-relay-mcp`.
+  `mcp.yaml` keeps a `${keychain:server.location}` reference. `sync` writes the literal back into
+  each harness file, because the apps cannot read the Keychain. Diffs show `<redacted>` in its place.
+  `${env:NAME}` references stay references.
+- **Conflicts:** when a server's command or URL differs between apps, each app keeps its own
+  definition (`variants` in `mcp.yaml`). Import lists every conflict.
+- **App-only references:** a server that uses `${input:…}` (VS Code) or `{file:…}` (OpenCode) is
+  rendered only into that app.
+- **Comments:** VS Code's `mcp.json` and `opencode.jsonc` are rewritten as plain JSON. Comments are
+  dropped; the backup keeps the original, and `relay uninstall` restores it.
+- **Cursor CLI permissions:** `sync` also copies Cursor desktop's allowlist (shell commands, web
+  domains, MCP tools) into `~/.cursor/cli-config.json`. Rules you added to the CLI by hand stay. A rule
+  removed in the desktop is removed from the CLI on the next sync.
+
+`sync` refuses to run before the first `import`: an empty list would remove every server.
+
+## One copy of each skill: `relay skills dedupe`
+
+```sh
+relay skills dedupe            # what would move
+relay skills dedupe --apply    # move the duplicates
+```
+
+A skill folder under `~/.copilot/skills`, `~/.cursor/skills`, `~/.claude/skills` or
+`~/.config/opencode/skills` moves to `~/.agents/.skill-dup-backup/<timestamp>/<harness>/<name>` only
+when it is byte-identical to `~/.agents/skills/<name>`. Symbolic links are compared by target and never
+followed. A different copy is listed and kept.
+
+## `relay doctor` and `/doctor`
+
+```sh
+relay doctor          # grouped, one line per check with the fix
+relay doctor --json   # {"ok", "counts", "checks": [{area, name, status, detail, fix}]}
+```
+
+Each check is `ok`, `info`, `warn` or `fail`. The command exits with 1 when any check fails.
+
+| Area | What it checks |
+|---|---|
+| relayd | the daemon answers on its socket |
+| Adapters | each adapter's health; a degraded adapter shows the update that broke it; the Cursor CDP gate (why it is closed, or which self-test opened it) |
+| Webex | the websocket is connected, or the last error |
+| Away mode | global and per-workspace state, `/panic` pause, waiting requests |
+| Versions | VS Code, Cursor, the Cursor CLI, OpenCode and the Copilot CLI; Cursor CLI more than 14 days older than the desktop app |
+| Hooks | Copilot hooks, Cursor hooks and the OpenCode plugin are installed and match what `relay install` would write now |
+| Config | `~/.agents/mcp.yaml` exists, and every harness file matches it |
+| Skills | duplicate skill folders, the `agent-relay-away` link, the `stepping-away` patch |
+| Keychain | the Webex bot token; the OpenCode password when that adapter is on; the PWA token when the PWA is on |
+| launchd | each relay launch agent is loaded |
+
+Without relayd, `relay doctor` reports the daemon as failing and still runs the local checks.
+`/doctor` in Webex runs everything inside relayd.
+
+## App updates
+
+relayd checks VS Code's and Cursor's `Info.plist` every 10 minutes. When a version changes, it re-runs
+that adapter's self-test (AHP protocol discovery for VS Code; selector checks for Cursor CDP, only if
+Cursor is already running with its debug port) and posts the result.
+
+- **Fail:** VS Code's agent host adapter is *paused* and Cursor CDP is *disabled*. New sessions, model
+  lists and model changes are refused with the reason. `/stop` still works, and a prompt to a running
+  session is queued as steering. The self-test is retried every check, and a pass is posted.
+- **Inconclusive** (the app is not running): nothing is posted, and the next check retries.
+- **First sighting** of an app only records its version.

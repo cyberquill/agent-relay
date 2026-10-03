@@ -11,7 +11,7 @@ from pydantic import JsonValue
 
 from agent_relay import paths
 from agent_relay.adapters.base import Adapter, Decision, ModelInfo, StartRequest, UnsupportedError
-from agent_relay.core import away
+from agent_relay.core import away, updates
 from agent_relay.core.registry import GLOBAL_SCOPE, Registry
 from agent_relay.core.router import Router
 from agent_relay.core.signals import Signals
@@ -108,13 +108,25 @@ class RelayService:
             raise RelayError(f"{APP_LABELS.get(harness, harness.value)} is not enabled.")
         return adapter
 
+    async def _usable(self, harness: Harness) -> Adapter:
+        """The adapter, unless an update made its self-test fail (then the reason is shown)."""
+        adapter = self._adapter(harness)
+        reason = await updates.degraded_reason(self.registry, harness)
+        if reason is not None:
+            verb = updates.DEGRADED_VERB.get(harness, "disabled")
+            raise RelayError(f"{APP_LABELS.get(harness, harness.value)} is {verb}: {reason}.")
+        return adapter
+
     async def apps(self) -> list[AppInfo]:
         found: list[AppInfo] = []
         for harness, adapter in sorted(self.router.adapters().items(), key=lambda kv: kv[0].value):
+            reason = await updates.degraded_reason(self.registry, harness)
             try:
                 healthy, detail = await asyncio.wait_for(adapter.health(), 5)
             except Exception as exc:
                 healthy, detail = False, f"health check failed: {type(exc).__name__}"
+            if reason is not None:
+                healthy, detail = False, f"{updates.DEGRADED_VERB.get(harness, 'disabled')}: {reason}"
             found.append(
                 AppInfo(
                     harness,
@@ -131,7 +143,7 @@ class RelayService:
 
     async def models(self, app: str) -> list[ModelInfo]:
         harness = resolve_app(app)
-        adapter = self._adapter(harness)
+        adapter = await self._usable(harness)
         if not adapter.capabilities.has(Capability.MODEL_SELECT):
             raise RelayError(f"{APP_LABELS[harness]} does not offer model selection.")
         return await adapter.list_models()
@@ -152,7 +164,7 @@ class RelayService:
 
     async def start(self, app: str, workspace: str, prompt: str, model: str | None = None) -> SessionRecord:
         harness = resolve_app(app)
-        adapter = self._adapter(harness)
+        adapter = await self._usable(harness)
         if not adapter.capabilities.has(Capability.COLD_START):
             raise RelayError(f"{APP_LABELS[harness]} cannot start sessions from the phone.")
         target = resolve_workspace(workspace, load_workspaces())
@@ -190,7 +202,8 @@ class RelayService:
             await self.registry.enqueue(session_key, "prompt", text)
             self.signals.notify(session_signal(session_key))
             return "delivered to the parked session"
-        adapter = self.router.adapter(session.harness)
+        degraded = await updates.degraded_reason(self.registry, session.harness)
+        adapter = None if degraded is not None else self.router.adapter(session.harness)
         if session.status is SessionStatus.RUNNING:
             if adapter is not None:
                 try:
@@ -218,7 +231,7 @@ class RelayService:
 
     async def set_model(self, session_key: str, model: str) -> None:
         session = await self.session(session_key)
-        adapter = self._adapter(session.harness)
+        adapter = await self._usable(session.harness)
         if not adapter.capabilities.has(Capability.MODEL_SELECT):
             raise RelayError(f"{APP_LABELS[session.harness]} does not offer model selection.")
         await adapter.set_model(session, model)

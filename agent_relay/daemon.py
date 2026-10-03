@@ -15,8 +15,9 @@ from typing import IO
 
 import httpx
 
-from agent_relay import paths
+from agent_relay import doctor, paths
 from agent_relay.adapters.factory import build_adapters
+from agent_relay.adapters.selftests import build_selftests
 from agent_relay.adapters.vscode_local.hub import BridgeHub
 from agent_relay.core import away, phone
 from agent_relay.core.approvals import ApprovalBroker
@@ -26,6 +27,9 @@ from agent_relay.core.registry import Registry
 from agent_relay.core.router import Router
 from agent_relay.core.service import RelayError, RelayService
 from agent_relay.core.signals import Signals
+from agent_relay.core.updates import UpdateWatcher
+from agent_relay.doctor.daemon import DaemonView, WebexLink, daemon_checks
+from agent_relay.doctor.model import Check
 from agent_relay.frontends.webex.bot import WebexFrontend, build_frontend
 from agent_relay.frontends.webex.ws_client import Connector, WebexWsClient, default_connector
 from agent_relay.ipc import IpcServer
@@ -82,6 +86,7 @@ class Core:
     parking: ParkManager | None = None
     hooks: HookService | None = None
     notify_targets: list[Callable[[SessionRecord, str], Awaitable[None]]] = field(default_factory=list)
+    webex: WebexLink | None = None
 
     def __post_init__(self) -> None:
         self.service = RelayService(self.registry, self.router, self.signals, self.config)
@@ -107,7 +112,15 @@ class Core:
             "ping": self._op_ping,
             "notify": self._op_notify,
             "ask": self._op_ask,
+            "doctor": self._op_doctor,
         }
+
+    async def daemon_checks(self) -> list[Check]:
+        return await daemon_checks(DaemonView(self.service, self.registry, self.config, self.webex))
+
+    async def doctor_text(self) -> str:
+        report = await doctor.run(self.config, sys.executable, self.daemon_checks)
+        return report.render()
 
     async def handle_ipc(self, message: JsonObj) -> JsonObj:
         op = message.get("op")
@@ -146,6 +159,9 @@ class Core:
 
     async def _op_ping(self, _: JsonObj) -> JsonObj:
         return {"ok": True, "pid": os.getpid()}
+
+    async def _op_doctor(self, _: JsonObj) -> JsonObj:
+        return {"checks": [check.model_dump() for check in await self.daemon_checks()]}
 
     # relay-mcp
 
@@ -198,7 +214,10 @@ async def serve(
         log.info(f"expired {expired} pending request(s) left from the last run")
     frontend: WebexFrontend
     ws: WebexWsClient
-    frontend, ws = await build_frontend(token, config, registry, core.service, http, connector)
+    frontend, ws = await build_frontend(
+        token, config, registry, core.service, http, connector, doctor=core.doctor_text
+    )
+    core.webex = ws
     core.router.subscribe(frontend.renderer)
     core.notify_targets.append(lambda s, text: _post(frontend, s, text))
     hub = BridgeHub()
@@ -206,10 +225,16 @@ async def serve(
         core.router.add_adapter(adapter)
     ipc = IpcServer(paths.socket_path(), core.handle_ipc, expected_uid=os.getuid(), streams=hub.streams())
     await ipc.start()
+
+    async def post_top(text: str) -> None:
+        await frontend.renderer.post_top(text)
+
+    watcher = UpdateWatcher(registry, build_selftests(config, registry), post_top)
     tasks = [
         asyncio.create_task(ws.run(), name="webex-ws"),
         asyncio.create_task(frontend.ticker(), name="renderer-tick"),
         asyncio.create_task(core.broker.sweeper(), name="pending-sweeper"),
+        asyncio.create_task(watcher.run(), name="update-watcher"),
     ]
     log.info("relayd ready")
     waiter = asyncio.create_task(stop.wait())

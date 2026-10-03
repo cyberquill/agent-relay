@@ -1,0 +1,25 @@
+{
+  "mcpServers": {
+    "GitHub": {
+      "tools": ["*"],
+      "type": "http",
+      "url": "https://api.githubcopilot.com/mcp/",
+      "source": "user",
+      "sourcePath": "/fake/home/.copilot/mcp-config.json"
+    },
+    "sonarqube": {
+      "tools": ["*"],
+      "command": "docker",
+      "args": ["run", "-i", "--rm", "-e", "SONARQUBE_TOKEN", "mcp/sonarqube"],
+      "env": {
+        "SONARQUBE_URL": "https://sonar.example.com",
+        "SONARQUBE_TOKEN": "fake-sonar-value-0000",
+        "SONARQUBE_IDE_PORT": "64120",
+        "WORKDIR": "${PWD}"
+      },
+      "source": "user",
+      "sourcePath": "/fake/home/.copilot/mcp-config.json"
+    }
+  },
+  "inputs": []
+}
