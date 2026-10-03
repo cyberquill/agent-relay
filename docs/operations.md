@@ -1,5 +1,55 @@
 # Operations
 
+## Install and uninstall
+
+```bash
+relay install            # dry run: every file, link, move and command it would run
+relay install --diff     # the same, with a diff per file (secrets hidden)
+relay install --apply    # do it
+relay uninstall          # dry run
+relay uninstall --apply  # undo it
+```
+
+Install writes the hooks for Copilot, Cursor and OpenCode, imports and syncs MCP config through
+`~/.agents/mcp.yaml`, links `~/.agents/skills/agent-relay-away`, patches `stepping-away`, moves duplicate
+skill folders, writes the launch agents and installs relay-bridge. Every touched file is backed up first
+and listed in the manifest (`$RELAY_HOME/Library/Application Support/agent-relay/install-manifest.json`).
+Running it again changes nothing. If a path it would link is a real folder, it stops before writing
+anything.
+
+Uninstall restores every file byte for byte, moves skill folders back, boots out the launch agents and
+uninstalls relay-bridge. It keeps `relay.toml`, `workspaces.toml`, the session history, the logs and the
+Keychain items (remove those with Keychain Access, service names `agent-relay*`).
+
+Launch agents: `relayd` always; the OpenCode server while `adapters.opencode` is on; a weekly
+`cursor-agent update` when `cursor-agent` is installed. Logs are in `~/Library/Logs/agent-relay/`.
+
+## Running relayd
+
+```bash
+relay start                # load the launch agent and (re)start relayd
+relay stop                 # unload it; it starts again at the next login
+relay status [--json]      # sessions, parked turns, pending requests, adapter health
+relay away on|off [--workspace <dir>]
+```
+
+Without `relay install`, run `uv run python -m agent_relay.daemon` in a terminal. After a start, relayd
+posts "Mac online" in the bot room with any sessions it recovered.
+
+## Workspaces and settings
+
+```bash
+relay ws add scratch ~/Desktop/Repository/Personal/agent-relay/.scratch
+relay ws list
+relay ws rm scratch
+relay config show
+relay config set cdp.enabled true          # values are JSON, else a string
+relay config set approvals.deadline_s 300
+```
+
+A setting the config model rejects (an unknown key, a global auto-approve pattern such as `*`) leaves
+`relay.toml` unchanged. Restart relayd after changing a setting.
+
 ## relay-bridge (VS Code Local chats)
 
 The `relay-bridge` extension runs in every VS Code window (`onStartupFinished`, `extensionKind: ui`)
@@ -195,3 +245,38 @@ Cursor is already running with its debug port) and posts the result.
   session is queued as steering. The self-test is retried every check, and a pass is posted.
 - **Inconclusive** (the app is not running): nothing is posted, and the next check retries.
 - **First sighting** of an app only records its version.
+
+## The Cursor CDP self-test
+
+```bash
+relay config set cdp.enabled true
+relay selftest cursor-cdp
+```
+
+It attaches to Cursor on the debug port (launching Cursor with it only if Cursor is closed), checks every
+selector in `selectors.json` and records a pass for this Cursor version. The CDP adapter refuses to run
+until it passes. With `cdp.enabled` off the command refuses and nothing is opened.
+
+## The live smoke test
+
+With relayd running, the `scratch` workspace registered and the phone to hand:
+
+```bash
+(export RELAY_LIVE=1; uv run python scripts/smoke_live.py)               # every app
+(export RELAY_LIVE=1; uv run python scripts/smoke_live.py --only opencode)
+(export RELAY_LIVE=1; uv run python scripts/smoke_live.py --record)      # append results below
+```
+
+For each app the script asks you to start a session from the phone (or the desk, for desk-started
+Cursor chats) with "Run the shell command `echo relay-smoke`, then reply with exactly: OK", then checks:
+
+| Step | Checked by |
+|---|---|
+| register | relayd: a new session appears |
+| stream | you: text streams into the Webex thread |
+| approve | you: the approval card arrives and Allow runs the command |
+| park | relayd: with `/away` on, the session parks after the turn |
+| reply | you: a phone reply reaches the parked session |
+| back | relayd: `/back` releases it |
+
+A step that times out (`--timeout`, 300 s by default) fails and the script moves to the next app.
