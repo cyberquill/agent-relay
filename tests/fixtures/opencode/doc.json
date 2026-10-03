@@ -1,0 +1,3222 @@
+{
+ "openapi": "3.1.0",
+ "info": {
+  "title": "opencode",
+  "version": "1.0.0",
+  "description": "opencode api"
+ },
+ "paths": {
+  "/global/event": {
+   "get": {
+    "tags": [
+     "global"
+    ],
+    "operationId": "global.event",
+    "parameters": [],
+    "responses": {
+     "200": {
+      "description": "Event stream",
+      "content": {
+       "text/event-stream": {
+        "schema": {
+         "$ref": "#/components/schemas/GlobalEvent"
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "Bad request",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/BadRequestError"
+        }
+       }
+      }
+     }
+    },
+    "description": "Subscribe to global events from the OpenCode system using server-sent events.",
+    "summary": "Get global events"
+   }
+  },
+  "/config/providers": {
+   "get": {
+    "tags": [
+     "config"
+    ],
+    "operationId": "config.providers",
+    "parameters": [
+     {
+      "name": "directory",
+      "in": "query",
+      "schema": {
+       "type": "string"
+      },
+      "required": false
+     },
+     {
+      "name": "workspace",
+      "in": "query",
+      "schema": {
+       "type": "string"
+      },
+      "required": false
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "List of providers",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "providers": {
+           "type": "array",
+           "items": {
+            "$ref": "#/components/schemas/Provider"
+           }
+          },
+          "default": {
+           "type": "object",
+           "additionalProperties": {
+            "type": "string"
+           }
+          }
+         },
+         "required": [
+          "providers",
+          "default"
+         ],
+         "additionalProperties": false,
+         "description": "List of providers"
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "Bad request",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/BadRequestError"
+        }
+       }
+      }
+     }
+    },
+    "description": "Get a list of all configured AI providers and their default models.",
+    "summary": "List config providers"
+   }
+  },
+  "/question": {
+   "get": {
+    "tags": [
+     "question"
+    ],
+    "operationId": "question.list",
+    "parameters": [
+     {
+      "name": "directory",
+      "in": "query",
+      "schema": {
+       "type": "string"
+      },
+      "required": false
+     },
+     {
+      "name": "workspace",
+      "in": "query",
+      "schema": {
+       "type": "string"
+      },
+      "required": false
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "List of pending questions",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "$ref": "#/components/schemas/QuestionRequest"
+         },
+         "description": "List of pending questions"
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "Bad request",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/BadRequestError"
+        }
+       }
+      }
+     }
+    },
+    "description": "Get all pending question requests across all sessions.",
+    "summary": "List pending questions"
+   }
+  },
+  "/question/{requestID}/reply": {
+   "post": {
+    "tags": [
+     "question"
+    ],
+    "operationId": "question.reply",
+    "parameters": [
+     {
+      "name": "requestID",
+      "in": "path",
+      "schema": {
+       "type": "string",
+       "pattern": "^que"
+      },
+      "required": true
+     },
+     {
+      "name": "directory",
+      "in": "query",
+      "schema": {
+       "type": "string"
+      },
+      "required": false
+     },
+     {
+      "name": "workspace",
+      "in": "query",
+      "schema": {
+       "type": "string"
+      },
+      "required": false
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Question answered successfully",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "boolean",
+         "description": "Question answered successfully"
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "BadRequest | InvalidRequestError",
+      "content": {
+       "application/json": {
+        "schema": {
+         "anyOf": [
+          {
+           "$ref": "#/components/schemas/effect_HttpApiError_BadRequest"
+          },
+          {
+           "$ref": "#/components/schemas/InvalidRequestError"
+          }
+         ]
+        }
+       }
+      }
+     },
+     "404": {
+      "description": "QuestionNotFoundError",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/QuestionNotFoundError"
+        }
+       }
+      }
+     }
+    },
+    "description": "Provide answers to a question request from the AI assistant.",
+    "summary": "Reply to question request",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "answers": {
+          "type": "array",
+          "items": {
+           "$ref": "#/components/schemas/QuestionAnswer"
+          },
+          "description": "User answers in order of questions (each answer is an array of selected labels)"
+         }
+        },
+        "required": [
+         "answers"
+        ],
+        "additionalProperties": false
+       }
+      }
+     }
+    }
+   }
+  },
+  "/question/{requestID}/reject": {
+   "post": {
+    "tags": [
+     "question"
+    ],
+    "operationId": "question.reject",
+    "parameters": [
+     {
+      "name": "requestID",
+      "in": "path",
+      "schema": {
+       "type": "string",
+       "pattern": "^que"
+      },
+      "required": true
+     },
+     {
+      "name": "directory",
+      "in": "query",
+      "schema": {
+       "type": "string"
+      },
+      "required": false
+     },
+     {
+      "name": "workspace",
+      "in": "query",
+      "schema": {
+       "type": "string"
+      },
+      "required": false
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Question rejected successfully",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "boolean",
+         "description": "Question rejected successfully"
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "BadRequest | InvalidRequestError",
+      "content": {
+       "application/json": {
+        "schema": {
+         "anyOf": [
+          {
+           "$ref": "#/components/schemas/effect_HttpApiError_BadRequest"
+          },
+          {
+           "$ref": "#/components/schemas/InvalidRequestError"
+          }
+         ]
+        }
+       }
+      }
+     },
+     "404": {
+      "description": "QuestionNotFoundError",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/QuestionNotFoundError"
+        }
+       }
+      }
+     }
+    },
+    "description": "Reject a question request from the AI assistant.",
+    "summary": "Reject question request"
+   }
+  },
+  "/permission": {
+   "get": {
+    "tags": [
+     "permission"
+    ],
+    "operationId": "permission.list",
+    "parameters": [
+     {
+      "name": "directory",
+      "in": "query",
+      "schema": {
+       "type": "string"
+      },
+      "required": false
+     },
+     {
+      "name": "workspace",
+      "in": "query",
+      "schema": {
+       "type": "string"
+      },
+      "required": false
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "List of pending permissions",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "$ref": "#/components/schemas/PermissionRequest"
+         },
+         "description": "List of pending permissions"
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "Bad request",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/BadRequestError"
+        }
+       }
+      }
+     }
+    },
+    "description": "Get all pending permission requests across all sessions.",
+    "summary": "List pending permissions"
+   }
+  },
+  "/permission/{requestID}/reply": {
+   "post": {
+    "tags": [
+     "permission"
+    ],
+    "operationId": "permission.reply",
+    "parameters": [
+     {
+      "name": "requestID",
+      "in": "path",
+      "schema": {
+       "type": "string",
+       "pattern": "^per"
+      },
+      "required": true
+     },
+     {
+      "name": "directory",
+      "in": "query",
+      "schema": {
+       "type": "string"
+      },
+      "required": false
+     },
+     {
+      "name": "workspace",
+      "in": "query",
+      "schema": {
+       "type": "string"
+      },
+      "required": false
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Permission processed successfully",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "boolean",
+         "description": "Permission processed successfully"
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "BadRequest | InvalidRequestError",
+      "content": {
+       "application/json": {
+        "schema": {
+         "anyOf": [
+          {
+           "$ref": "#/components/schemas/effect_HttpApiError_BadRequest"
+          },
+          {
+           "$ref": "#/components/schemas/InvalidRequestError"
+          }
+         ]
+        }
+       }
+      }
+     },
+     "404": {
+      "description": "PermissionNotFoundError",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/PermissionNotFoundError"
+        }
+       }
+      }
+     }
+    },
+    "description": "Approve or deny a permission request from the AI assistant.",
+    "summary": "Respond to permission request",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "reply": {
+          "type": "string",
+          "enum": [
+           "once",
+           "always",
+           "reject"
+          ]
+         },
+         "message": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "reply"
+        ],
+        "additionalProperties": false
+       }
+      }
+     }
+    }
+   }
+  },
+  "/session": {
+   "get": {
+    "tags": [
+     "session"
+    ],
+    "operationId": "session.list",
+    "parameters": [
+     {
+      "name": "directory",
+      "in": "query",
+      "schema": {
+       "type": "string"
+      },
+      "required": false
+     },
+     {
+      "name": "workspace",
+      "in": "query",
+      "schema": {
+       "type": "string"
+      },
+      "required": false
+     },
+     {
+      "name": "scope",
+      "in": "query",
+      "schema": {
+       "type": "string",
+       "enum": [
+        "project"
+       ]
+      },
+      "required": false
+     },
+     {
+      "name": "path",
+      "in": "query",
+      "schema": {
+       "type": "string"
+      },
+      "required": false
+     },
+     {
+      "name": "roots",
+      "in": "query",
+      "schema": {
+       "anyOf": [
+        {
+         "type": "boolean"
+        },
+        {
+         "type": "string",
+         "enum": [
+          "true",
+          "false"
+         ]
+        }
+       ]
+      },
+      "required": false
+     },
+     {
+      "name": "start",
+      "in": "query",
+      "schema": {
+       "type": "number"
+      },
+      "required": false
+     },
+     {
+      "name": "search",
+      "in": "query",
+      "schema": {
+       "type": "string"
+      },
+      "required": false
+     },
+     {
+      "name": "limit",
+      "in": "query",
+      "schema": {
+       "type": "number"
+      },
+      "required": false
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "List of sessions",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "$ref": "#/components/schemas/Session"
+         },
+         "description": "List of sessions"
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "Bad request",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/BadRequestError"
+        }
+       }
+      }
+     }
+    },
+    "description": "Get a list of all OpenCode sessions, sorted by most recently updated.",
+    "summary": "List sessions"
+   },
+   "post": {
+    "tags": [
+     "session"
+    ],
+    "operationId": "session.create",
+    "parameters": [
+     {
+      "name": "directory",
+      "in": "query",
+      "schema": {
+       "type": "string"
+      },
+      "required": false
+     },
+     {
+      "name": "workspace",
+      "in": "query",
+      "schema": {
+       "type": "string"
+      },
+      "required": false
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successfully created session",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Session"
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "BadRequest | InvalidRequestError",
+      "content": {
+       "application/json": {
+        "schema": {
+         "anyOf": [
+          {
+           "$ref": "#/components/schemas/effect_HttpApiError_BadRequest"
+          },
+          {
+           "$ref": "#/components/schemas/InvalidRequestError"
+          }
+         ]
+        }
+       }
+      }
+     }
+    },
+    "description": "Create a new OpenCode session for interacting with AI assistants and managing conversations.",
+    "summary": "Create session",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "parentID": {
+          "type": "string",
+          "pattern": "^ses"
+         },
+         "title": {
+          "type": "string"
+         },
+         "agent": {
+          "type": "string"
+         },
+         "model": {
+          "type": "object",
+          "properties": {
+           "id": {
+            "type": "string"
+           },
+           "providerID": {
+            "type": "string"
+           },
+           "variant": {
+            "type": "string"
+           }
+          },
+          "required": [
+           "id",
+           "providerID"
+          ],
+          "additionalProperties": false
+         },
+         "metadata": {
+          "type": "object"
+         },
+         "permission": {
+          "$ref": "#/components/schemas/PermissionRuleset"
+         },
+         "workspaceID": {
+          "type": "string",
+          "pattern": "^wrk"
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+     }
+    }
+   }
+  },
+  "/session/status": {
+   "get": {
+    "tags": [
+     "session"
+    ],
+    "operationId": "session.status",
+    "parameters": [
+     {
+      "name": "directory",
+      "in": "query",
+      "schema": {
+       "type": "string"
+      },
+      "required": false
+     },
+     {
+      "name": "workspace",
+      "in": "query",
+      "schema": {
+       "type": "string"
+      },
+      "required": false
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Get session status",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": {
+          "$ref": "#/components/schemas/SessionStatus"
+         },
+         "description": "Get session status"
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "BadRequest | InvalidRequestError",
+      "content": {
+       "application/json": {
+        "schema": {
+         "anyOf": [
+          {
+           "$ref": "#/components/schemas/effect_HttpApiError_BadRequest"
+          },
+          {
+           "$ref": "#/components/schemas/InvalidRequestError"
+          }
+         ]
+        }
+       }
+      }
+     }
+    },
+    "description": "Retrieve the current status of all sessions, including active, idle, and completed states.",
+    "summary": "Get session status"
+   }
+  },
+  "/session/{sessionID}": {
+   "get": {
+    "tags": [
+     "session"
+    ],
+    "operationId": "session.get",
+    "parameters": [
+     {
+      "name": "sessionID",
+      "in": "path",
+      "schema": {
+       "type": "string",
+       "pattern": "^ses"
+      },
+      "required": true
+     },
+     {
+      "name": "directory",
+      "in": "query",
+      "schema": {
+       "type": "string"
+      },
+      "required": false
+     },
+     {
+      "name": "workspace",
+      "in": "query",
+      "schema": {
+       "type": "string"
+      },
+      "required": false
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Get session",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Session"
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "BadRequest | InvalidRequestError",
+      "content": {
+       "application/json": {
+        "schema": {
+         "anyOf": [
+          {
+           "$ref": "#/components/schemas/effect_HttpApiError_BadRequest"
+          },
+          {
+           "$ref": "#/components/schemas/InvalidRequestError"
+          }
+         ]
+        }
+       }
+      }
+     },
+     "404": {
+      "description": "NotFoundError",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/NotFoundError"
+        }
+       }
+      }
+     }
+    },
+    "description": "Retrieve detailed information about a specific OpenCode session.",
+    "summary": "Get session"
+   },
+   "delete": {
+    "tags": [
+     "session"
+    ],
+    "operationId": "session.delete",
+    "parameters": [
+     {
+      "name": "sessionID",
+      "in": "path",
+      "schema": {
+       "type": "string",
+       "pattern": "^ses"
+      },
+      "required": true
+     },
+     {
+      "name": "directory",
+      "in": "query",
+      "schema": {
+       "type": "string"
+      },
+      "required": false
+     },
+     {
+      "name": "workspace",
+      "in": "query",
+      "schema": {
+       "type": "string"
+      },
+      "required": false
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successfully deleted session",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "boolean",
+         "description": "Successfully deleted session"
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "BadRequest | InvalidRequestError",
+      "content": {
+       "application/json": {
+        "schema": {
+         "anyOf": [
+          {
+           "$ref": "#/components/schemas/effect_HttpApiError_BadRequest"
+          },
+          {
+           "$ref": "#/components/schemas/InvalidRequestError"
+          }
+         ]
+        }
+       }
+      }
+     },
+     "404": {
+      "description": "NotFoundError",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/NotFoundError"
+        }
+       }
+      }
+     }
+    },
+    "description": "Delete a session and permanently remove all associated data, including messages and history.",
+    "summary": "Delete session"
+   },
+   "patch": {
+    "tags": [
+     "session"
+    ],
+    "operationId": "session.update",
+    "parameters": [
+     {
+      "name": "sessionID",
+      "in": "path",
+      "schema": {
+       "type": "string",
+       "pattern": "^ses"
+      },
+      "required": true
+     },
+     {
+      "name": "directory",
+      "in": "query",
+      "schema": {
+       "type": "string"
+      },
+      "required": false
+     },
+     {
+      "name": "workspace",
+      "in": "query",
+      "schema": {
+       "type": "string"
+      },
+      "required": false
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successfully updated session",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Session"
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "BadRequest | InvalidRequestError",
+      "content": {
+       "application/json": {
+        "schema": {
+         "anyOf": [
+          {
+           "$ref": "#/components/schemas/effect_HttpApiError_BadRequest"
+          },
+          {
+           "$ref": "#/components/schemas/InvalidRequestError"
+          }
+         ]
+        }
+       }
+      }
+     },
+     "404": {
+      "description": "NotFoundError",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/NotFoundError"
+        }
+       }
+      }
+     }
+    },
+    "description": "Update properties of an existing session, such as title or other metadata.",
+    "summary": "Update session",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "title": {
+          "type": "string"
+         },
+         "metadata": {
+          "type": "object"
+         },
+         "permission": {
+          "$ref": "#/components/schemas/PermissionRuleset"
+         },
+         "time": {
+          "type": "object",
+          "properties": {
+           "archived": {
+            "type": "number"
+           }
+          },
+          "additionalProperties": false
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+     }
+    }
+   }
+  },
+  "/session/{sessionID}/children": {
+   "get": {
+    "tags": [
+     "session"
+    ],
+    "operationId": "session.children",
+    "parameters": [
+     {
+      "name": "sessionID",
+      "in": "path",
+      "schema": {
+       "type": "string",
+       "pattern": "^ses"
+      },
+      "required": true
+     },
+     {
+      "name": "directory",
+      "in": "query",
+      "schema": {
+       "type": "string"
+      },
+      "required": false
+     },
+     {
+      "name": "workspace",
+      "in": "query",
+      "schema": {
+       "type": "string"
+      },
+      "required": false
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "List of children",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "$ref": "#/components/schemas/Session"
+         },
+         "description": "List of children"
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "BadRequest | InvalidRequestError",
+      "content": {
+       "application/json": {
+        "schema": {
+         "anyOf": [
+          {
+           "$ref": "#/components/schemas/effect_HttpApiError_BadRequest"
+          },
+          {
+           "$ref": "#/components/schemas/InvalidRequestError"
+          }
+         ]
+        }
+       }
+      }
+     },
+     "404": {
+      "description": "NotFoundError",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/NotFoundError"
+        }
+       }
+      }
+     }
+    },
+    "description": "Retrieve all child sessions that were forked from the specified parent session.",
+    "summary": "Get session children"
+   }
+  },
+  "/session/{sessionID}/todo": {
+   "get": {
+    "tags": [
+     "session"
+    ],
+    "operationId": "session.todo",
+    "parameters": [
+     {
+      "name": "sessionID",
+      "in": "path",
+      "schema": {
+       "type": "string",
+       "pattern": "^ses"
+      },
+      "required": true
+     },
+     {
+      "name": "directory",
+      "in": "query",
+      "schema": {
+       "type": "string"
+      },
+      "required": false
+     },
+     {
+      "name": "workspace",
+      "in": "query",
+      "schema": {
+       "type": "string"
+      },
+      "required": false
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Todo list",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "$ref": "#/components/schemas/Todo"
+         },
+         "description": "Todo list"
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "BadRequest | InvalidRequestError",
+      "content": {
+       "application/json": {
+        "schema": {
+         "anyOf": [
+          {
+           "$ref": "#/components/schemas/effect_HttpApiError_BadRequest"
+          },
+          {
+           "$ref": "#/components/schemas/InvalidRequestError"
+          }
+         ]
+        }
+       }
+      }
+     },
+     "404": {
+      "description": "NotFoundError",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/NotFoundError"
+        }
+       }
+      }
+     }
+    },
+    "description": "Retrieve the todo list associated with a specific session, showing tasks and action items.",
+    "summary": "Get session todos"
+   }
+  },
+  "/session/{sessionID}/diff": {
+   "get": {
+    "tags": [
+     "session"
+    ],
+    "operationId": "session.diff",
+    "parameters": [
+     {
+      "name": "sessionID",
+      "in": "path",
+      "schema": {
+       "type": "string",
+       "pattern": "^ses"
+      },
+      "required": true
+     },
+     {
+      "name": "directory",
+      "in": "query",
+      "schema": {
+       "type": "string"
+      },
+      "required": false
+     },
+     {
+      "name": "workspace",
+      "in": "query",
+      "schema": {
+       "type": "string"
+      },
+      "required": false
+     },
+     {
+      "name": "messageID",
+      "in": "query",
+      "schema": {
+       "type": "string",
+       "pattern": "^msg"
+      },
+      "required": false
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successfully retrieved diff",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "$ref": "#/components/schemas/SnapshotFileDiff"
+         },
+         "description": "Successfully retrieved diff"
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "Bad request",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/BadRequestError"
+        }
+       }
+      }
+     }
+    },
+    "description": "Get the file changes (diff) that resulted from a specific user message in the session.",
+    "summary": "Get message diff"
+   }
+  },
+  "/session/{sessionID}/message": {
+   "get": {
+    "tags": [
+     "session"
+    ],
+    "operationId": "session.messages",
+    "parameters": [
+     {
+      "name": "sessionID",
+      "in": "path",
+      "schema": {
+       "type": "string",
+       "pattern": "^ses"
+      },
+      "required": true
+     },
+     {
+      "name": "directory",
+      "in": "query",
+      "schema": {
+       "type": "string"
+      },
+      "required": false
+     },
+     {
+      "name": "workspace",
+      "in": "query",
+      "schema": {
+       "type": "string"
+      },
+      "required": false
+     },
+     {
+      "name": "limit",
+      "in": "query",
+      "schema": {
+       "type": "integer",
+       "minimum": 0,
+       "maximum": 9007199254740991
+      },
+      "required": false
+     },
+     {
+      "name": "before",
+      "in": "query",
+      "schema": {
+       "type": "string"
+      },
+      "required": false
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "List of messages",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "type": "object",
+          "properties": {
+           "info": {
+            "$ref": "#/components/schemas/Message"
+           },
+           "parts": {
+            "type": "array",
+            "items": {
+             "$ref": "#/components/schemas/Part"
+            }
+           }
+          },
+          "required": [
+           "info",
+           "parts"
+          ],
+          "additionalProperties": false
+         },
+         "description": "List of messages"
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "BadRequest | InvalidRequestError",
+      "content": {
+       "application/json": {
+        "schema": {
+         "anyOf": [
+          {
+           "$ref": "#/components/schemas/effect_HttpApiError_BadRequest"
+          },
+          {
+           "$ref": "#/components/schemas/InvalidRequestError"
+          }
+         ]
+        }
+       }
+      }
+     },
+     "404": {
+      "description": "NotFoundError",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/NotFoundError"
+        }
+       }
+      }
+     }
+    },
+    "description": "Retrieve all messages in a session, including user prompts and AI responses.",
+    "summary": "Get session messages"
+   },
+   "post": {
+    "tags": [
+     "session"
+    ],
+    "operationId": "session.prompt",
+    "parameters": [
+     {
+      "name": "sessionID",
+      "in": "path",
+      "schema": {
+       "type": "string",
+       "pattern": "^ses"
+      },
+      "required": true
+     },
+     {
+      "name": "directory",
+      "in": "query",
+      "schema": {
+       "type": "string"
+      },
+      "required": false
+     },
+     {
+      "name": "workspace",
+      "in": "query",
+      "schema": {
+       "type": "string"
+      },
+      "required": false
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Created message",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "required": [
+          "info",
+          "parts"
+         ],
+         "properties": {
+          "info": {
+           "$ref": "#/components/schemas/AssistantMessage"
+          },
+          "parts": {
+           "type": "array",
+           "items": {
+            "$ref": "#/components/schemas/Part"
+           }
+          }
+         }
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "BadRequest | InvalidRequestError",
+      "content": {
+       "application/json": {
+        "schema": {
+         "anyOf": [
+          {
+           "$ref": "#/components/schemas/effect_HttpApiError_BadRequest"
+          },
+          {
+           "$ref": "#/components/schemas/InvalidRequestError"
+          }
+         ]
+        }
+       }
+      }
+     },
+     "404": {
+      "description": "NotFoundError",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/NotFoundError"
+        }
+       }
+      }
+     }
+    },
+    "description": "Create and send a new message to a session, streaming the AI response.",
+    "summary": "Send message",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "messageID": {
+          "type": "string",
+          "pattern": "^msg"
+         },
+         "model": {
+          "type": "object",
+          "properties": {
+           "providerID": {
+            "type": "string"
+           },
+           "modelID": {
+            "type": "string"
+           }
+          },
+          "required": [
+           "providerID",
+           "modelID"
+          ],
+          "additionalProperties": false
+         },
+         "agent": {
+          "type": "string"
+         },
+         "noReply": {
+          "type": "boolean"
+         },
+         "tools": {
+          "type": "object",
+          "additionalProperties": {
+           "type": "boolean"
+          }
+         },
+         "format": {
+          "$ref": "#/components/schemas/OutputFormat"
+         },
+         "system": {
+          "type": "string"
+         },
+         "variant": {
+          "type": "string"
+         },
+         "parts": {
+          "type": "array",
+          "items": {
+           "anyOf": [
+            {
+             "$ref": "#/components/schemas/TextPartInput"
+            },
+            {
+             "$ref": "#/components/schemas/FilePartInput"
+            },
+            {
+             "$ref": "#/components/schemas/AgentPartInput"
+            },
+            {
+             "$ref": "#/components/schemas/SubtaskPartInput"
+            }
+           ]
+          }
+         }
+        },
+        "required": [
+         "parts"
+        ],
+        "additionalProperties": false
+       }
+      }
+     }
+    }
+   }
+  },
+  "/session/{sessionID}/message/{messageID}": {
+   "get": {
+    "tags": [
+     "session"
+    ],
+    "operationId": "session.message",
+    "parameters": [
+     {
+      "name": "sessionID",
+      "in": "path",
+      "schema": {
+       "type": "string",
+       "pattern": "^ses"
+      },
+      "required": true
+     },
+     {
+      "name": "messageID",
+      "in": "path",
+      "schema": {
+       "type": "string",
+       "pattern": "^msg"
+      },
+      "required": true
+     },
+     {
+      "name": "directory",
+      "in": "query",
+      "schema": {
+       "type": "string"
+      },
+      "required": false
+     },
+     {
+      "name": "workspace",
+      "in": "query",
+      "schema": {
+       "type": "string"
+      },
+      "required": false
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Message",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "info": {
+           "$ref": "#/components/schemas/Message"
+          },
+          "parts": {
+           "type": "array",
+           "items": {
+            "$ref": "#/components/schemas/Part"
+           }
+          }
+         },
+         "required": [
+          "info",
+          "parts"
+         ],
+         "additionalProperties": false,
+         "description": "Message"
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "BadRequest | InvalidRequestError",
+      "content": {
+       "application/json": {
+        "schema": {
+         "anyOf": [
+          {
+           "$ref": "#/components/schemas/effect_HttpApiError_BadRequest"
+          },
+          {
+           "$ref": "#/components/schemas/InvalidRequestError"
+          }
+         ]
+        }
+       }
+      }
+     },
+     "404": {
+      "description": "NotFoundError",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/NotFoundError"
+        }
+       }
+      }
+     }
+    },
+    "description": "Retrieve a specific message from a session by its message ID.",
+    "summary": "Get message"
+   },
+   "delete": {
+    "tags": [
+     "session"
+    ],
+    "operationId": "session.deleteMessage",
+    "parameters": [
+     {
+      "name": "sessionID",
+      "in": "path",
+      "schema": {
+       "type": "string",
+       "pattern": "^ses"
+      },
+      "required": true
+     },
+     {
+      "name": "messageID",
+      "in": "path",
+      "schema": {
+       "type": "string",
+       "pattern": "^msg"
+      },
+      "required": true
+     },
+     {
+      "name": "directory",
+      "in": "query",
+      "schema": {
+       "type": "string"
+      },
+      "required": false
+     },
+     {
+      "name": "workspace",
+      "in": "query",
+      "schema": {
+       "type": "string"
+      },
+      "required": false
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successfully deleted message",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "boolean",
+         "description": "Successfully deleted message"
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "BadRequest | InvalidRequestError",
+      "content": {
+       "application/json": {
+        "schema": {
+         "anyOf": [
+          {
+           "$ref": "#/components/schemas/effect_HttpApiError_BadRequest"
+          },
+          {
+           "$ref": "#/components/schemas/InvalidRequestError"
+          }
+         ]
+        }
+       }
+      }
+     },
+     "404": {
+      "description": "NotFoundError",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/NotFoundError"
+        }
+       }
+      }
+     },
+     "409": {
+      "description": "SessionBusyError",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/SessionBusyError"
+        }
+       }
+      }
+     }
+    },
+    "description": "Permanently delete a specific message and all of its parts from a session without reverting file changes.",
+    "summary": "Delete message"
+   }
+  },
+  "/session/{sessionID}/fork": {
+   "post": {
+    "tags": [
+     "session"
+    ],
+    "operationId": "session.fork",
+    "parameters": [
+     {
+      "name": "sessionID",
+      "in": "path",
+      "schema": {
+       "type": "string",
+       "pattern": "^ses"
+      },
+      "required": true
+     },
+     {
+      "name": "directory",
+      "in": "query",
+      "schema": {
+       "type": "string"
+      },
+      "required": false
+     },
+     {
+      "name": "workspace",
+      "in": "query",
+      "schema": {
+       "type": "string"
+      },
+      "required": false
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "200",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Session"
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "BadRequest | InvalidRequestError",
+      "content": {
+       "application/json": {
+        "schema": {
+         "anyOf": [
+          {
+           "$ref": "#/components/schemas/effect_HttpApiError_BadRequest"
+          },
+          {
+           "$ref": "#/components/schemas/InvalidRequestError"
+          }
+         ]
+        }
+       }
+      }
+     },
+     "404": {
+      "description": "NotFoundError",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/NotFoundError"
+        }
+       }
+      }
+     }
+    },
+    "description": "Create a new session by forking an existing session at a specific message point.",
+    "summary": "Fork session",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "messageID": {
+          "type": "string",
+          "pattern": "^msg"
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+     }
+    }
+   }
+  },
+  "/session/{sessionID}/abort": {
+   "post": {
+    "tags": [
+     "session"
+    ],
+    "operationId": "session.abort",
+    "parameters": [
+     {
+      "name": "sessionID",
+      "in": "path",
+      "schema": {
+       "type": "string",
+       "pattern": "^ses"
+      },
+      "required": true
+     },
+     {
+      "name": "directory",
+      "in": "query",
+      "schema": {
+       "type": "string"
+      },
+      "required": false
+     },
+     {
+      "name": "workspace",
+      "in": "query",
+      "schema": {
+       "type": "string"
+      },
+      "required": false
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Aborted session",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "boolean",
+         "description": "Aborted session"
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "BadRequest | InvalidRequestError",
+      "content": {
+       "application/json": {
+        "schema": {
+         "anyOf": [
+          {
+           "$ref": "#/components/schemas/effect_HttpApiError_BadRequest"
+          },
+          {
+           "$ref": "#/components/schemas/InvalidRequestError"
+          }
+         ]
+        }
+       }
+      }
+     }
+    },
+    "description": "Abort an active session and stop any ongoing AI processing or command execution.",
+    "summary": "Abort session"
+   }
+  },
+  "/session/{sessionID}/init": {
+   "post": {
+    "tags": [
+     "session"
+    ],
+    "operationId": "session.init",
+    "parameters": [
+     {
+      "name": "sessionID",
+      "in": "path",
+      "schema": {
+       "type": "string",
+       "pattern": "^ses"
+      },
+      "required": true
+     },
+     {
+      "name": "directory",
+      "in": "query",
+      "schema": {
+       "type": "string"
+      },
+      "required": false
+     },
+     {
+      "name": "workspace",
+      "in": "query",
+      "schema": {
+       "type": "string"
+      },
+      "required": false
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "200",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "boolean",
+         "description": "200"
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "BadRequest | InvalidRequestError",
+      "content": {
+       "application/json": {
+        "schema": {
+         "anyOf": [
+          {
+           "$ref": "#/components/schemas/effect_HttpApiError_BadRequest"
+          },
+          {
+           "$ref": "#/components/schemas/InvalidRequestError"
+          }
+         ]
+        }
+       }
+      }
+     },
+     "404": {
+      "description": "NotFoundError",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/NotFoundError"
+        }
+       }
+      }
+     }
+    },
+    "description": "Analyze the current application and create an AGENTS.md file with project-specific agent configurations.",
+    "summary": "Initialize session",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "modelID": {
+          "type": "string"
+         },
+         "providerID": {
+          "type": "string"
+         },
+         "messageID": {
+          "type": "string",
+          "pattern": "^msg"
+         }
+        },
+        "required": [
+         "modelID",
+         "providerID",
+         "messageID"
+        ],
+        "additionalProperties": false
+       }
+      }
+     }
+    }
+   }
+  },
+  "/session/{sessionID}/share": {
+   "post": {
+    "tags": [
+     "session"
+    ],
+    "operationId": "session.share",
+    "parameters": [
+     {
+      "name": "sessionID",
+      "in": "path",
+      "schema": {
+       "type": "string",
+       "pattern": "^ses"
+      },
+      "required": true
+     },
+     {
+      "name": "directory",
+      "in": "query",
+      "schema": {
+       "type": "string"
+      },
+      "required": false
+     },
+     {
+      "name": "workspace",
+      "in": "query",
+      "schema": {
+       "type": "string"
+      },
+      "required": false
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successfully shared session",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Session"
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "Bad request",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/BadRequestError"
+        }
+       }
+      }
+     },
+     "404": {
+      "description": "NotFoundError",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/NotFoundError"
+        }
+       }
+      }
+     },
+     "500": {
+      "description": "InternalServerError",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/effect_HttpApiError_InternalServerError"
+        }
+       }
+      }
+     }
+    },
+    "description": "Create a shareable link for a session, allowing others to view the conversation.",
+    "summary": "Share session"
+   },
+   "delete": {
+    "tags": [
+     "session"
+    ],
+    "operationId": "session.unshare",
+    "parameters": [
+     {
+      "name": "sessionID",
+      "in": "path",
+      "schema": {
+       "type": "string",
+       "pattern": "^ses"
+      },
+      "required": true
+     },
+     {
+      "name": "directory",
+      "in": "query",
+      "schema": {
+       "type": "string"
+      },
+      "required": false
+     },
+     {
+      "name": "workspace",
+      "in": "query",
+      "schema": {
+       "type": "string"
+      },
+      "required": false
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successfully unshared session",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Session"
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "Bad request",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/BadRequestError"
+        }
+       }
+      }
+     },
+     "404": {
+      "description": "NotFoundError",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/NotFoundError"
+        }
+       }
+      }
+     },
+     "500": {
+      "description": "InternalServerError",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/effect_HttpApiError_InternalServerError"
+        }
+       }
+      }
+     }
+    },
+    "description": "Remove the shareable link for a session, making it private again.",
+    "summary": "Unshare session"
+   }
+  },
+  "/session/{sessionID}/summarize": {
+   "post": {
+    "tags": [
+     "session"
+    ],
+    "operationId": "session.summarize",
+    "parameters": [
+     {
+      "name": "sessionID",
+      "in": "path",
+      "schema": {
+       "type": "string",
+       "pattern": "^ses"
+      },
+      "required": true
+     },
+     {
+      "name": "directory",
+      "in": "query",
+      "schema": {
+       "type": "string"
+      },
+      "required": false
+     },
+     {
+      "name": "workspace",
+      "in": "query",
+      "schema": {
+       "type": "string"
+      },
+      "required": false
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Summarized session",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "boolean",
+         "description": "Summarized session"
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "BadRequest | InvalidRequestError",
+      "content": {
+       "application/json": {
+        "schema": {
+         "anyOf": [
+          {
+           "$ref": "#/components/schemas/effect_HttpApiError_BadRequest"
+          },
+          {
+           "$ref": "#/components/schemas/InvalidRequestError"
+          }
+         ]
+        }
+       }
+      }
+     },
+     "404": {
+      "description": "NotFoundError",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/NotFoundError"
+        }
+       }
+      }
+     }
+    },
+    "description": "Generate a concise summary of the session using AI compaction to preserve key information.",
+    "summary": "Summarize session",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "providerID": {
+          "type": "string"
+         },
+         "modelID": {
+          "type": "string"
+         },
+         "auto": {
+          "type": "boolean"
+         }
+        },
+        "required": [
+         "providerID",
+         "modelID"
+        ],
+        "additionalProperties": false
+       }
+      }
+     }
+    }
+   }
+  },
+  "/session/{sessionID}/prompt_async": {
+   "post": {
+    "tags": [
+     "session"
+    ],
+    "operationId": "session.prompt_async",
+    "parameters": [
+     {
+      "name": "sessionID",
+      "in": "path",
+      "schema": {
+       "type": "string",
+       "pattern": "^ses"
+      },
+      "required": true
+     },
+     {
+      "name": "directory",
+      "in": "query",
+      "schema": {
+       "type": "string"
+      },
+      "required": false
+     },
+     {
+      "name": "workspace",
+      "in": "query",
+      "schema": {
+       "type": "string"
+      },
+      "required": false
+     }
+    ],
+    "responses": {
+     "204": {
+      "description": "Prompt accepted"
+     },
+     "400": {
+      "description": "BadRequest | InvalidRequestError",
+      "content": {
+       "application/json": {
+        "schema": {
+         "anyOf": [
+          {
+           "$ref": "#/components/schemas/effect_HttpApiError_BadRequest"
+          },
+          {
+           "$ref": "#/components/schemas/InvalidRequestError"
+          }
+         ]
+        }
+       }
+      }
+     },
+     "404": {
+      "description": "NotFoundError",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/NotFoundError"
+        }
+       }
+      }
+     }
+    },
+    "description": "Create and send a new message to a session asynchronously, starting the session if needed and returning immediately.",
+    "summary": "Send async message",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "messageID": {
+          "type": "string",
+          "pattern": "^msg"
+         },
+         "model": {
+          "type": "object",
+          "properties": {
+           "providerID": {
+            "type": "string"
+           },
+           "modelID": {
+            "type": "string"
+           }
+          },
+          "required": [
+           "providerID",
+           "modelID"
+          ],
+          "additionalProperties": false
+         },
+         "agent": {
+          "type": "string"
+         },
+         "noReply": {
+          "type": "boolean"
+         },
+         "tools": {
+          "type": "object",
+          "additionalProperties": {
+           "type": "boolean"
+          }
+         },
+         "format": {
+          "$ref": "#/components/schemas/OutputFormat"
+         },
+         "system": {
+          "type": "string"
+         },
+         "variant": {
+          "type": "string"
+         },
+         "parts": {
+          "type": "array",
+          "items": {
+           "anyOf": [
+            {
+             "$ref": "#/components/schemas/TextPartInput"
+            },
+            {
+             "$ref": "#/components/schemas/FilePartInput"
+            },
+            {
+             "$ref": "#/components/schemas/AgentPartInput"
+            },
+            {
+             "$ref": "#/components/schemas/SubtaskPartInput"
+            }
+           ]
+          }
+         }
+        },
+        "required": [
+         "parts"
+        ],
+        "additionalProperties": false
+       }
+      }
+     }
+    }
+   }
+  },
+  "/session/{sessionID}/command": {
+   "post": {
+    "tags": [
+     "session"
+    ],
+    "operationId": "session.command",
+    "parameters": [
+     {
+      "name": "sessionID",
+      "in": "path",
+      "schema": {
+       "type": "string",
+       "pattern": "^ses"
+      },
+      "required": true
+     },
+     {
+      "name": "directory",
+      "in": "query",
+      "schema": {
+       "type": "string"
+      },
+      "required": false
+     },
+     {
+      "name": "workspace",
+      "in": "query",
+      "schema": {
+       "type": "string"
+      },
+      "required": false
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Created message",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "required": [
+          "info",
+          "parts"
+         ],
+         "properties": {
+          "info": {
+           "$ref": "#/components/schemas/AssistantMessage"
+          },
+          "parts": {
+           "type": "array",
+           "items": {
+            "$ref": "#/components/schemas/Part"
+           }
+          }
+         }
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "BadRequest | InvalidRequestError",
+      "content": {
+       "application/json": {
+        "schema": {
+         "anyOf": [
+          {
+           "$ref": "#/components/schemas/effect_HttpApiError_BadRequest"
+          },
+          {
+           "$ref": "#/components/schemas/InvalidRequestError"
+          }
+         ]
+        }
+       }
+      }
+     },
+     "404": {
+      "description": "NotFoundError",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/NotFoundError"
+        }
+       }
+      }
+     }
+    },
+    "description": "Send a new command to a session for execution by the AI assistant.",
+    "summary": "Send command",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "messageID": {
+          "type": "string",
+          "pattern": "^msg"
+         },
+         "agent": {
+          "type": "string"
+         },
+         "model": {
+          "type": "string"
+         },
+         "arguments": {
+          "type": "string"
+         },
+         "command": {
+          "type": "string"
+         },
+         "variant": {
+          "type": "string"
+         },
+         "parts": {
+          "type": "array",
+          "items": {
+           "type": "object",
+           "properties": {
+            "id": {
+             "type": "string",
+             "pattern": "^prt"
+            },
+            "type": {
+             "type": "string",
+             "enum": [
+              "file"
+             ]
+            },
+            "mime": {
+             "type": "string"
+            },
+            "filename": {
+             "type": "string"
+            },
+            "url": {
+             "type": "string"
+            },
+            "source": {
+             "$ref": "#/components/schemas/FilePartSource"
+            }
+           },
+           "required": [
+            "type",
+            "mime",
+            "url"
+           ],
+           "additionalProperties": false
+          }
+         }
+        },
+        "required": [
+         "arguments",
+         "command"
+        ],
+        "additionalProperties": false
+       }
+      }
+     }
+    }
+   }
+  },
+  "/session/{sessionID}/shell": {
+   "post": {
+    "tags": [
+     "session"
+    ],
+    "operationId": "session.shell",
+    "parameters": [
+     {
+      "name": "sessionID",
+      "in": "path",
+      "schema": {
+       "type": "string",
+       "pattern": "^ses"
+      },
+      "required": true
+     },
+     {
+      "name": "directory",
+      "in": "query",
+      "schema": {
+       "type": "string"
+      },
+      "required": false
+     },
+     {
+      "name": "workspace",
+      "in": "query",
+      "schema": {
+       "type": "string"
+      },
+      "required": false
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Created message",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "info": {
+           "$ref": "#/components/schemas/Message"
+          },
+          "parts": {
+           "type": "array",
+           "items": {
+            "$ref": "#/components/schemas/Part"
+           }
+          }
+         },
+         "required": [
+          "info",
+          "parts"
+         ],
+         "additionalProperties": false,
+         "description": "Created message"
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "BadRequest | InvalidRequestError",
+      "content": {
+       "application/json": {
+        "schema": {
+         "anyOf": [
+          {
+           "$ref": "#/components/schemas/effect_HttpApiError_BadRequest"
+          },
+          {
+           "$ref": "#/components/schemas/InvalidRequestError"
+          }
+         ]
+        }
+       }
+      }
+     },
+     "404": {
+      "description": "NotFoundError",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/NotFoundError"
+        }
+       }
+      }
+     },
+     "409": {
+      "description": "SessionBusyError",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/SessionBusyError"
+        }
+       }
+      }
+     }
+    },
+    "description": "Execute a shell command within the session context and return the AI's response.",
+    "summary": "Run shell command",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "messageID": {
+          "type": "string",
+          "pattern": "^msg"
+         },
+         "agent": {
+          "type": "string"
+         },
+         "model": {
+          "type": "object",
+          "properties": {
+           "providerID": {
+            "type": "string"
+           },
+           "modelID": {
+            "type": "string"
+           }
+          },
+          "required": [
+           "providerID",
+           "modelID"
+          ],
+          "additionalProperties": false
+         },
+         "command": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "agent",
+         "command"
+        ],
+        "additionalProperties": false
+       }
+      }
+     }
+    }
+   }
+  },
+  "/session/{sessionID}/revert": {
+   "post": {
+    "tags": [
+     "session"
+    ],
+    "operationId": "session.revert",
+    "parameters": [
+     {
+      "name": "sessionID",
+      "in": "path",
+      "schema": {
+       "type": "string",
+       "pattern": "^ses"
+      },
+      "required": true
+     },
+     {
+      "name": "directory",
+      "in": "query",
+      "schema": {
+       "type": "string"
+      },
+      "required": false
+     },
+     {
+      "name": "workspace",
+      "in": "query",
+      "schema": {
+       "type": "string"
+      },
+      "required": false
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Updated session",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Session"
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "BadRequest | InvalidRequestError",
+      "content": {
+       "application/json": {
+        "schema": {
+         "anyOf": [
+          {
+           "$ref": "#/components/schemas/effect_HttpApiError_BadRequest"
+          },
+          {
+           "$ref": "#/components/schemas/InvalidRequestError"
+          }
+         ]
+        }
+       }
+      }
+     },
+     "404": {
+      "description": "NotFoundError",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/NotFoundError"
+        }
+       }
+      }
+     },
+     "409": {
+      "description": "SessionBusyError",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/SessionBusyError"
+        }
+       }
+      }
+     }
+    },
+    "description": "Revert a specific message in a session, undoing its effects and restoring the previous state.",
+    "summary": "Revert message",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "messageID": {
+          "type": "string",
+          "pattern": "^msg"
+         },
+         "partID": {
+          "type": "string",
+          "pattern": "^prt"
+         }
+        },
+        "required": [
+         "messageID"
+        ],
+        "additionalProperties": false
+       }
+      }
+     }
+    }
+   }
+  },
+  "/session/{sessionID}/unrevert": {
+   "post": {
+    "tags": [
+     "session"
+    ],
+    "operationId": "session.unrevert",
+    "parameters": [
+     {
+      "name": "sessionID",
+      "in": "path",
+      "schema": {
+       "type": "string",
+       "pattern": "^ses"
+      },
+      "required": true
+     },
+     {
+      "name": "directory",
+      "in": "query",
+      "schema": {
+       "type": "string"
+      },
+      "required": false
+     },
+     {
+      "name": "workspace",
+      "in": "query",
+      "schema": {
+       "type": "string"
+      },
+      "required": false
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Updated session",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Session"
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "BadRequest | InvalidRequestError",
+      "content": {
+       "application/json": {
+        "schema": {
+         "anyOf": [
+          {
+           "$ref": "#/components/schemas/effect_HttpApiError_BadRequest"
+          },
+          {
+           "$ref": "#/components/schemas/InvalidRequestError"
+          }
+         ]
+        }
+       }
+      }
+     },
+     "404": {
+      "description": "NotFoundError",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/NotFoundError"
+        }
+       }
+      }
+     },
+     "409": {
+      "description": "SessionBusyError",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/SessionBusyError"
+        }
+       }
+      }
+     }
+    },
+    "description": "Restore all previously reverted messages in a session.",
+    "summary": "Restore reverted messages"
+   }
+  },
+  "/session/{sessionID}/permissions/{permissionID}": {
+   "post": {
+    "tags": [
+     "session"
+    ],
+    "operationId": "permission.respond",
+    "parameters": [
+     {
+      "name": "sessionID",
+      "in": "path",
+      "schema": {
+       "type": "string",
+       "pattern": "^ses"
+      },
+      "required": true
+     },
+     {
+      "name": "permissionID",
+      "in": "path",
+      "schema": {
+       "type": "string",
+       "pattern": "^per"
+      },
+      "required": true
+     },
+     {
+      "name": "directory",
+      "in": "query",
+      "schema": {
+       "type": "string"
+      },
+      "required": false
+     },
+     {
+      "name": "workspace",
+      "in": "query",
+      "schema": {
+       "type": "string"
+      },
+      "required": false
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Permission processed successfully",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "boolean",
+         "description": "Permission processed successfully"
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "BadRequest | InvalidRequestError",
+      "content": {
+       "application/json": {
+        "schema": {
+         "anyOf": [
+          {
+           "$ref": "#/components/schemas/effect_HttpApiError_BadRequest"
+          },
+          {
+           "$ref": "#/components/schemas/InvalidRequestError"
+          }
+         ]
+        }
+       }
+      }
+     },
+     "404": {
+      "description": "NotFoundError | PermissionNotFoundError",
+      "content": {
+       "application/json": {
+        "schema": {
+         "anyOf": [
+          {
+           "$ref": "#/components/schemas/NotFoundError"
+          },
+          {
+           "$ref": "#/components/schemas/PermissionNotFoundError"
+          }
+         ]
+        }
+       }
+      }
+     }
+    },
+    "description": "Approve or deny a permission request from the AI assistant.",
+    "summary": "Respond to permission",
+    "deprecated": true,
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "response": {
+          "type": "string",
+          "enum": [
+           "once",
+           "always",
+           "reject"
+          ]
+         }
+        },
+        "required": [
+         "response"
+        ],
+        "additionalProperties": false
+       }
+      }
+     }
+    }
+   }
+  },
+  "/session/{sessionID}/message/{messageID}/part/{partID}": {
+   "delete": {
+    "tags": [
+     "session"
+    ],
+    "operationId": "part.delete",
+    "parameters": [
+     {
+      "name": "sessionID",
+      "in": "path",
+      "schema": {
+       "type": "string",
+       "pattern": "^ses"
+      },
+      "required": true
+     },
+     {
+      "name": "messageID",
+      "in": "path",
+      "schema": {
+       "type": "string",
+       "pattern": "^msg"
+      },
+      "required": true
+     },
+     {
+      "name": "partID",
+      "in": "path",
+      "schema": {
+       "type": "string",
+       "pattern": "^prt"
+      },
+      "required": true
+     },
+     {
+      "name": "directory",
+      "in": "query",
+      "schema": {
+       "type": "string"
+      },
+      "required": false
+     },
+     {
+      "name": "workspace",
+      "in": "query",
+      "schema": {
+       "type": "string"
+      },
+      "required": false
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successfully deleted part",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "boolean",
+         "description": "Successfully deleted part"
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "BadRequest | InvalidRequestError",
+      "content": {
+       "application/json": {
+        "schema": {
+         "anyOf": [
+          {
+           "$ref": "#/components/schemas/effect_HttpApiError_BadRequest"
+          },
+          {
+           "$ref": "#/components/schemas/InvalidRequestError"
+          }
+         ]
+        }
+       }
+      }
+     },
+     "404": {
+      "description": "NotFoundError",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/NotFoundError"
+        }
+       }
+      }
+     }
+    },
+    "description": "Delete a part from a message."
+   },
+   "patch": {
+    "tags": [
+     "session"
+    ],
+    "operationId": "part.update",
+    "parameters": [
+     {
+      "name": "sessionID",
+      "in": "path",
+      "schema": {
+       "type": "string",
+       "pattern": "^ses"
+      },
+      "required": true
+     },
+     {
+      "name": "messageID",
+      "in": "path",
+      "schema": {
+       "type": "string",
+       "pattern": "^msg"
+      },
+      "required": true
+     },
+     {
+      "name": "partID",
+      "in": "path",
+      "schema": {
+       "type": "string",
+       "pattern": "^prt"
+      },
+      "required": true
+     },
+     {
+      "name": "directory",
+      "in": "query",
+      "schema": {
+       "type": "string"
+      },
+      "required": false
+     },
+     {
+      "name": "workspace",
+      "in": "query",
+      "schema": {
+       "type": "string"
+      },
+      "required": false
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successfully updated part",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Part"
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "BadRequest | InvalidRequestError",
+      "content": {
+       "application/json": {
+        "schema": {
+         "anyOf": [
+          {
+           "$ref": "#/components/schemas/effect_HttpApiError_BadRequest"
+          },
+          {
+           "$ref": "#/components/schemas/InvalidRequestError"
+          }
+         ]
+        }
+       }
+      }
+     },
+     "404": {
+      "description": "NotFoundError",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/NotFoundError"
+        }
+       }
+      }
+     }
+    },
+    "description": "Update a part in a message.",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/Part"
+       }
+      }
+     }
+    }
+   }
+  }
+ }
+}
