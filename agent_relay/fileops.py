@@ -148,6 +148,7 @@ def apply_moves(moves: list[PlannedMove], manifest: Manifest) -> list[Path]:
 def restore(manifest: Manifest, only: set[str] | None = None) -> list[Path]:
     """Undo recorded changes. Restores backups byte for byte; removes files the relay created."""
     restored: list[Path] = []
+    created_dirs: set[Path] = set()
     for key, entry in list(manifest.entries.items()):
         if only is not None and key not in only:
             continue
@@ -155,9 +156,7 @@ def restore(manifest: Manifest, only: set[str] | None = None) -> list[Path]:
         if entry.action == "created":
             if target.is_file() or target.is_symlink():
                 target.unlink()
-            for directory in entry.created_dirs:
-                if Path(directory).is_dir() and not any(Path(directory).iterdir()):
-                    Path(directory).rmdir()
+            created_dirs.update(Path(d) for d in entry.created_dirs)
         elif entry.action == "modified" and entry.backup:
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(entry.backup, target)
@@ -169,6 +168,9 @@ def restore(manifest: Manifest, only: set[str] | None = None) -> list[Path]:
                 shutil.move(entry.moved_to, str(target))
         del manifest.entries[key]
         restored.append(target)
+    for directory in sorted(created_dirs, key=lambda d: len(d.parts), reverse=True):
+        if directory.is_dir() and not any(directory.iterdir()):
+            directory.rmdir()
     manifest.save()
     return restored
 

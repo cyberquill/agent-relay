@@ -16,7 +16,7 @@ import pytest
 
 from agent_relay import daemon, ipc, paths
 from agent_relay.frontends.webex.ws_client import WebSocketLike
-from agent_relay.models.config import RelayConfig, WebexConfig
+from agent_relay.models.config import AdaptersConfig, RelayConfig, WebexConfig
 from agent_relay.settings import SECRET_SETUP_COMMAND, Secret, save_config, set_secret
 from tests.fakes.webex import U2C, FakeWebex
 
@@ -112,7 +112,10 @@ async def test_serve_boots_answers_ipc_and_webex_then_stops() -> None:
     webex = FakeWebex()
     hello = webex.user_says("/help")
     mercury = IdleSocket([json.dumps(webex.activity_for(hello))])
-    config = RelayConfig(webex=WebexConfig(allowed_email=webex.user_email, u2c_url=U2C))
+    config = RelayConfig(
+        webex=WebexConfig(allowed_email=webex.user_email, u2c_url=U2C),
+        adapters=AdaptersConfig(opencode=False),
+    )
     stop = asyncio.Event()
     async with webex.client() as http:
         server = asyncio.create_task(daemon.serve(config, "test-token", stop, http, mercury.connect))

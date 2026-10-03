@@ -124,6 +124,9 @@ Evidence (`tests/fixtures/opencode/doc.json`):
 Path: the adapter reads `/doc` at connect time and uses the current endpoints when present, the legacy
 ones otherwise.
 
+Live attempt 2 of 3 (C6, AC-20, `tests/live/test_opencode_live.py`): the adapter started a session in
+`.scratch/` on a throwaway `opencode serve`, streamed `OK` and aborted. One attempt remains for C15.
+
 ## S10 — Cursor CLI auth
 
 Command: `cursor-agent status` → `Not logged in`.

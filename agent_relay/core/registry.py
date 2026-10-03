@@ -396,6 +396,20 @@ class Registry:
 
         return await self._run(_get)
 
+    async def kv_prefix(self, prefix: str) -> dict[str, str]:
+        def _get() -> dict[str, str]:
+            rows = (
+                self._db()
+                .execute(
+                    "SELECT key, value FROM kv WHERE substr(key, 1, ?) = ? ORDER BY key",
+                    (len(prefix), prefix),
+                )
+                .fetchall()
+            )
+            return {str(r["key"]): str(r["value"]) for r in rows}
+
+        return await self._run(_get)
+
     async def kv_set(self, key: str, value: str) -> None:
         sql = "INSERT INTO kv (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value"
         await self._run(lambda: self._write(sql, (key, value)))

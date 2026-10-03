@@ -20,6 +20,7 @@ from agent_relay.models.events import (
     ApprovalRequested,
     Event,
     Harness,
+    Origin,
     SessionParked,
     SessionStarted,
     TurnCompleted,
@@ -416,7 +417,14 @@ async def test_opencode_register_records_server(core: tuple[Core, Recorder, list
     await hook(
         built, "opencode", "plugin.register", {"directory": "/w", "serverUrl": "http://127.0.0.1:4096/"}
     )
-    assert await built.registry.kv_get("opencode.server") == "http://127.0.0.1:4096/"
+    await hook(
+        built, "opencode", "plugin.register", {"directory": "/v", "serverUrl": "http://127.0.0.1:5000/"}
+    )
+    assert await built.registry.kv_prefix("opencode.server:") == {
+        "opencode.server:http://127.0.0.1:4096/": "/w",
+        "opencode.server:http://127.0.0.1:5000/": "/v",
+    }
+    assert await built.registry.kv_prefix("opencode.server_") == {}
 
 
 async def test_bad_messages_fail_open(core: tuple[Core, Recorder, list[str]]) -> None:
@@ -437,3 +445,24 @@ async def test_restart_recovers_parked_and_expires_pending(core: tuple[Core, Rec
     assert built.parking is not None
     assert await built.parking.recover() == 1
     assert (await _session(built, "cursor:Z")).status is SessionStatus.IDLE
+
+
+async def test_phone_sessions_are_gated_even_with_away_off(core: tuple[Core, Recorder, list[str]]) -> None:
+    built, rec, _ = core
+    await built.registry.upsert_session(
+        SessionRecord(
+            session_key="opencode:ses_p",
+            harness=Harness.OPENCODE,
+            harness_id="ses_p",
+            workspace="/w/proj",
+            origin=Origin.PHONE,
+            status=SessionStatus.RUNNING,
+        )
+    )
+    payload: dict[str, JsonValue] = {**OC_PRE, "sessionID": "ses_p"}
+    answering = asyncio.create_task(_answer_when_asked(built, rec, "deny"))
+    reply = await hook(built, "opencode", "tool.execute.before", payload)
+    await answering
+    stdout = reply["stdout"]
+    assert isinstance(stdout, dict) and stdout["decision"] == "deny"
+    assert await built.registry.kv_get("approved_call:call_1") == "deny"

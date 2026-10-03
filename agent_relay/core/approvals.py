@@ -22,7 +22,13 @@ from agent_relay.core.service import RelayService, pending_key
 from agent_relay.core.signals import Signals
 from agent_relay.log import get_logger
 from agent_relay.models.config import ApprovalConfig
-from agent_relay.models.events import ApprovalRequested, Event, QuestionAsked
+from agent_relay.models.events import (
+    ApprovalRequested,
+    ApprovalResolved,
+    Event,
+    QuestionAnswered,
+    QuestionAsked,
+)
 from agent_relay.models.sessions import PendingRequest, SessionRecord
 
 log = get_logger(__name__)
@@ -173,6 +179,9 @@ class ApprovalBroker:
     # adapter-held requests arrive as events
 
     async def handle(self, event: Event) -> None:
+        if isinstance(event, ApprovalResolved | QuestionAnswered):
+            await self._settled_elsewhere(event)
+            return
         if not isinstance(event, ApprovalRequested | QuestionAsked):
             return
         if await self._registry.get_pending(event.request_id) is not None:
@@ -191,6 +200,18 @@ class ApprovalBroker:
                 deadline=datetime.now(UTC) + timedelta(seconds=self._config.deadline_s),
             )
         )
+
+    async def _settled_elsewhere(self, event: ApprovalResolved | QuestionAnswered) -> None:
+        """An adapter saw the request answered at the desk: close it without answering natively again.
+        Events from our own answers find the request already resolved, so this is idempotent."""
+        answer: dict[str, JsonValue]
+        if isinstance(event, ApprovalResolved):
+            answer = {"decision": event.decision, "by": event.by}
+        else:
+            answer = {"answer": event.answer, "by": "desk"}
+        if await self._registry.resolve_pending(event.request_id, answer):
+            self._signals.notify(pending_key(event.request_id))
+            log.info(f"{event.request_id} was answered at the desk")
 
     async def sweep(self) -> int:
         """Deny or skip every open request past its deadline. Returns how many expired."""

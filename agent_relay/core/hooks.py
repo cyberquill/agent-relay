@@ -50,7 +50,7 @@ COPILOT_FAMILY = (Harness.VSCODE_COPILOT, Harness.VSCODE_LOCAL, Harness.COPILOT_
 CURSOR_GATED = ("shell", "terminal", "mcp")
 RECENT_APPROVAL_KEY = "approved_recent:{digest}"
 APPROVED_CALL_KEY = "approved_call:{call_id}"
-OPENCODE_SERVER_KEY = "opencode.server"
+OPENCODE_SERVER_PREFIX = "opencode.server:"
 LAST_TEXT = "last_text"
 RENEWING = "renewing"
 
@@ -84,10 +84,14 @@ class HookService:
             return {}
         if hook.kind is HookKind.PLUGIN_REGISTER:
             if hook.server_url:
-                await self._registry.kv_set(OPENCODE_SERVER_KEY, hook.server_url)
+                await self._registry.kv_set(
+                    f"{OPENCODE_SERVER_PREFIX}{hook.server_url}", hook.workspace or ""
+                )
             return {}
         session = await self._existing(hook)
-        if not await away.is_away(self._registry, hook.workspace or (session.workspace if session else None)):
+        phone_session = session is not None and session.origin is Origin.PHONE
+        workspace = hook.workspace or (session.workspace if session else None)
+        if not phone_session and not await away.is_away(self._registry, workspace):
             if session is not None and hook.kind is HookKind.PROMPT_SUBMIT:
                 await self._parking.reset_blocks(session.session_key)
             return {}
