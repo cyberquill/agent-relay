@@ -7,6 +7,7 @@ name = "agent-relay"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "certifi" },
     { name = "fastapi" },
     { name = "httpx" },
     { name = "keyring" },
@@ -39,6 +40,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "certifi", specifier = ">=2026.7.22" },
     { name = "fastapi", specifier = "~=0.115" },
     { name = "httpx", specifier = "~=0.28" },
     { name = "keyring", specifier = "~=25.6" },
