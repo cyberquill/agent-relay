@@ -16,9 +16,32 @@ class WebexConfig(_Section):
     u2c_url: str = "https://u2c.wbx2.com/u2c/api/v1/catalog"
 
 
+READ_ONLY_TOOLS: tuple[str, ...] = (
+    "read",
+    "read_file",
+    "view",
+    "glob",
+    "grep",
+    "ls",
+    "list",
+    "list_dir",
+    "search",
+    "*_search",
+    "search_*",
+    "find_*",
+    "get_*",
+    "fetch",
+    "webfetch",
+    "think",
+    "todo*",
+    "read_*",
+)
+
+
 class ApprovalConfig(_Section):
     deadline_s: int = Field(default=600, ge=10)
     hook_timeout_margin_s: int = Field(default=60, ge=5)
+    auto_allow: list[str] = Field(default_factory=lambda: list(READ_ONLY_TOOLS))
 
 
 class ParkConfig(_Section):
