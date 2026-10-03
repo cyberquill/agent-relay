@@ -258,6 +258,8 @@ class HookService:
         if hook.kind is HookKind.PERMISSION and await self._registry.kv_get(recent) == "allow":
             return _reply(outputs.permission(hook, True, "approved from the phone"))
         outcome = await self._broker.request(session, tool, describe_tool(hook))
+        if outcome.deferred:
+            return {}
         await self._registry.kv_set(recent, "allow" if outcome.allowed else "deny")
         if hook.tool_use_id:
             await self._registry.kv_set(

@@ -280,3 +280,9 @@ Cursor chats) with "Run the shell command `echo relay-smoke`, then reply with ex
 | back | relayd: `/back` releases it |
 
 A step that times out (`--timeout`, 300 s by default) fails and the script moves to the next app.
+
+Send `/away` as a reply in the session's thread, not at the top level. A top-level `/away` turns
+away mode on for every workspace, and every desk session with relay hooks then asks the phone before
+each tool call. That includes the Cursor or VS Code chat you may be running the test from: its tools
+wait for the phone until away mode goes off again (`relay away off`, or `/away off` in Webex), which
+hands the waiting approvals back to the desk.

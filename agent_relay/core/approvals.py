@@ -18,7 +18,7 @@ from pydantic import JsonValue
 from agent_relay.adapters.base import Decision
 from agent_relay.core.registry import ALLOW_SESSION_PREFIX, Registry
 from agent_relay.core.router import Router
-from agent_relay.core.service import RelayService, pending_key
+from agent_relay.core.service import DESK_DECISION, RelayService, pending_key
 from agent_relay.core.signals import Signals
 from agent_relay.log import get_logger
 from agent_relay.models.config import ApprovalConfig
@@ -41,6 +41,7 @@ DEADLINE_REASON = "No answer from the phone before the relay's deadline; denied.
 class Outcome:
     decision: Decision
     by: str
+    deferred: bool = False
 
     @property
     def allowed(self) -> bool:
@@ -120,6 +121,8 @@ class ApprovalBroker:
             return await self._expire_approval(request_id)
         decision = resolved.get("decision")
         by = str(resolved.get("by", "phone"))
+        if decision == DESK_DECISION:
+            return Outcome("deny", by, deferred=True)
         if decision == "allow_session":
             await self._registry.kv_set(
                 ALLOW_SESSION_KEY.format(session_key=session.session_key, tool=tool), "1"
@@ -190,6 +193,8 @@ class ApprovalBroker:
             return Outcome("deny", "deadline")
         request = await self._registry.get_pending(request_id)
         answer = request.answer if request and request.answer else {}
+        if answer.get("decision") == DESK_DECISION:
+            return Outcome("deny", "desk", deferred=True)
         decisions: dict[str, Decision] = {"allow": "allow", "allow_session": "allow_session"}
         return Outcome(decisions.get(str(answer.get("decision")), "deny"), str(answer.get("by", "phone")))
 

@@ -45,6 +45,7 @@ APPROVAL_OUTCOME = {
     "allow": "✅ Allowed",
     "allow_session": "✅ Allowed for this session",
     "deny": "❌ Denied",
+    "desk": "🖥️ Away mode off; answer it at the desk",
 }
 
 

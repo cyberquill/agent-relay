@@ -58,6 +58,7 @@ APP_LABELS: dict[Harness, str] = {
 STICKY_MODEL_KEY = "model:{harness}"
 RELEASE_KEY = "release:{session_key}"
 DIFF_LIMIT_BYTES = 5_000_000
+DESK_DECISION = "desk"
 
 type ResolvedBy = Literal["phone", "deadline", "panic", "desk"]
 
@@ -303,8 +304,41 @@ class RelayService:
             paths.pause_flag().unlink(missing_ok=True)
         else:
             await self._release_matching(workspace, "away mode off")
+            await self._return_to_desk()
         scope = f"`{workspace}`" if workspace else "all workspaces"
         return f"Away mode {'on' if enabled else 'off'} for {scope}."
+
+    async def _return_to_desk(self) -> int:
+        """Hand hook-held approvals of desk sessions that are no longer away back to the desk.
+
+        Phone sessions keep theirs: nobody is at the desk for them. Adapter-held requests already
+        show their own prompt at the desk and are left to it or to the sweeper.
+        """
+        count = 0
+        for request in await self.registry.open_pending():
+            if request.kind != "approval" or request.payload.get("source") == "adapter":
+                continue
+            session = await self.registry.get_session(request.session_key)
+            if session is None or session.origin is Origin.PHONE:
+                continue
+            if await away.is_away(self.registry, session.workspace):
+                continue
+            answer: dict[str, JsonValue] = {"decision": DESK_DECISION, "by": "desk"}
+            if not await self.registry.resolve_pending(request.request_id, answer):
+                continue
+            self.signals.notify(pending_key(request.request_id))
+            await self.router.publish(
+                ApprovalResolved(
+                    harness=session.harness,
+                    session_key=session.session_key,
+                    workspace=session.workspace,
+                    request_id=request.request_id,
+                    decision="desk",
+                    by="desk",
+                )
+            )
+            count += 1
+        return count
 
     async def _release_matching(self, workspace: str | None, reason: str) -> int:
         count = 0

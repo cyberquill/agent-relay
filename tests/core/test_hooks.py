@@ -19,6 +19,7 @@ from agent_relay.daemon import Core
 from agent_relay.models.config import RelayConfig
 from agent_relay.models.events import (
     ApprovalRequested,
+    ApprovalResolved,
     Event,
     Harness,
     Origin,
@@ -178,6 +179,55 @@ async def test_approval_round_trip_and_deadline_deny(
     )
     assert isinstance(reason, str) and "deadline" in reason
     assert built.config.approvals.deadline_s < built.config.approval_hook_timeout_s()
+
+
+async def _when_asked(rec: Recorder) -> str:
+    for _ in range(200):
+        if rec.of(ApprovalRequested):
+            return rec.of(ApprovalRequested)[-1].request_id
+        await asyncio.sleep(0.005)
+    raise AssertionError("no approval requested")
+
+
+async def test_away_off_hands_a_desk_approval_back_to_the_desk(
+    core: tuple[Core, Recorder, list[str]],
+) -> None:
+    built, rec, _ = core
+    await away.set_away(built.registry, True)
+    task = asyncio.create_task(hook(built, "cursor", "beforeShellExecution", CURSOR_SHELL))
+    request_id = await _when_asked(rec)
+    await built.service.set_away(False)
+    assert await asyncio.wait_for(task, 1) == {}
+    resolved = rec.of(ApprovalResolved)
+    assert [(r.request_id, r.decision, r.by) for r in resolved] == [(request_id, "desk", "desk")]
+    assert await built.registry.open_pending() == []
+
+
+async def test_away_off_keeps_a_phone_session_approval_on_the_phone(
+    core: tuple[Core, Recorder, list[str]],
+) -> None:
+    built, rec, _ = core
+    await built.registry.upsert_session(
+        SessionRecord(
+            session_key="opencode:ses_p",
+            harness=Harness.OPENCODE,
+            harness_id="ses_p",
+            workspace="/w/proj",
+            origin=Origin.PHONE,
+            status=SessionStatus.RUNNING,
+        )
+    )
+    await away.set_away(built.registry, True)
+    task = asyncio.create_task(
+        hook(built, "opencode", "tool.execute.before", {**OC_PRE, "sessionID": "ses_p"})
+    )
+    await _when_asked(rec)
+    await built.service.set_away(False)
+    assert not rec.of(ApprovalResolved)
+    reply = await asyncio.wait_for(task, 2)
+    stdout = reply["stdout"]
+    assert isinstance(stdout, dict) and stdout["decision"] == "deny"
+    assert rec.of(ApprovalResolved)[-1].by == "deadline"
 
 
 async def test_allow_for_session_skips_later_prompts(core: tuple[Core, Recorder, list[str]]) -> None:

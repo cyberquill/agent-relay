@@ -74,7 +74,7 @@ class ApprovalRequested(_Base):
 class ApprovalResolved(_Base):
     type: Literal["approval.resolved"] = "approval.resolved"
     request_id: str
-    decision: Literal["allow", "allow_session", "deny"]
+    decision: Literal["allow", "allow_session", "deny", "desk"]
     by: Literal["phone", "deadline", "panic", "desk"] = "phone"
 
 
