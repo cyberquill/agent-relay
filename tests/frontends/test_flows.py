@@ -48,6 +48,20 @@ async def test_new_in_one_line_and_default_model(relay: Relay) -> None:
     assert relay.adapter.started[-1].prompt == "run the tests"
 
 
+async def test_new_takes_the_third_word_as_a_model_only_if_the_app_lists_it(relay: Relay) -> None:
+    """`/new local scratch Run the shell …` once started a chat with model `Run` (seen live)."""
+    started = []
+    for line in ("Run the tests now", "m2 fix it", "hello"):
+        await relay.say(f"/new opencode proj {line}")
+        assert relay.adapter.started, relay.bot_texts()
+        started.append((relay.adapter.started[-1].model, relay.adapter.started[-1].prompt))
+    assert started == [
+        (None, "Run the tests now"),
+        ("m2", "fix it"),
+        ("m2", "hello"),  # no model given: the sticky one from the last /new
+    ]
+
+
 async def test_new_with_unknown_app_or_workspace(relay: Relay) -> None:
     await relay.say('/new nope proj "x"')
     assert "Unknown app `nope`" in relay.bot_texts()[-1]

@@ -3,6 +3,7 @@ and 429 responses are honoured. Plus buffering, batching, pacing and attachments
 
 from __future__ import annotations
 
+import asyncio
 from datetime import UTC, datetime
 
 from agent_relay.frontends.webex.api import MAX_EDITS, MAX_TEXT_BYTES
@@ -156,3 +157,12 @@ async def test_parked_and_errors_render(relay: Relay) -> None:
 async def test_unknown_session_is_not_rendered(relay: Relay) -> None:
     await relay.frontend.renderer.handle(TextDelta(harness=H, session_key="nope", text="x"))
     assert relay.webex.bot_messages() == []
+
+
+async def test_concurrent_first_use_opens_one_thread(relay: Relay) -> None:
+    """The /new wizard and the session's first event both ask for the thread at once (seen live)."""
+    session = await _session(relay)
+    renderer = relay.frontend.renderer
+    first, second = await asyncio.gather(renderer.thread_for(session), renderer.thread_for(session))
+    assert first == second
+    assert len(relay.webex.bot_messages()) == 1

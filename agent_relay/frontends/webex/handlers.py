@@ -104,7 +104,10 @@ class Handlers:
                 await self.reply(ctx, commands.HELP_TEXT)
             case CommandName.NEW:
                 app, ws, model = (list(cmd.args) + [None, None, None])[:3]
-                await self.wizard(ctx, {"app": app, "ws": ws, "model": model, "prompt": cmd.prompt})
+                prompt = cmd.prompt
+                if app and model and not await self._is_model(app, model):
+                    prompt, model = " ".join(p for p in (model, prompt) if p), DEFAULT_MODEL
+                await self.wizard(ctx, {"app": app, "ws": ws, "model": model, "prompt": prompt})
             case CommandName.SESSIONS:
                 sessions = await svc.sessions()
                 lines = [f"- {cards.root_markdown(s)}" for s in sessions] or ["No active sessions."]
@@ -167,6 +170,15 @@ class Handlers:
                 await self.reply(ctx, await self._doctor())
             case CommandName.PANIC:
                 await self.reply(ctx, await svc.panic())
+
+    async def _is_model(self, app: str, word: str) -> bool:
+        """`/new local scratch Run tests` has no model: the third word is one only if the app lists it."""
+        if word in (DEFAULT_MODEL, "default", "-"):
+            return True
+        adapter = self._service.router.adapter(resolve_app(app))
+        if adapter is None or not adapter.capabilities.has(Capability.MODEL_SELECT):
+            return False
+        return any(word in (m.id, m.label) for m in await self._service.models(resolve_app(app).value))
 
     # /new wizard: app → workspace → model → prompt
 

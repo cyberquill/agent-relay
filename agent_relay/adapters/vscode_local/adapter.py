@@ -95,6 +95,8 @@ class VsCodeLocalAdapter(Adapter):
                 message=f"VS Code could not run the chat: {event.data.get('message') or 'unknown error'}",
             )
         )
+        if session.status is SessionStatus.RUNNING:
+            await self._registry.set_session_fields(session.session_key, status=SessionStatus.IDLE.value)
 
     async def _session_in(self, window_id: str) -> SessionRecord | None:
         sessions = [

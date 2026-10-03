@@ -412,6 +412,8 @@ async def test_a_failed_chat_turn_reaches_the_phone(rig: Rig) -> None:
     (error,) = rig.rec.of(ErrorEvent)
     assert error.session_key == record.session_key
     assert "model not available" in error.message
+    session = await rig.registry.get_session(record.session_key)
+    assert session is not None and session.status is SessionStatus.IDLE, "a running status queues every reply"
 
 
 async def test_errors_outside_a_phone_chat_are_only_logged(rig: Rig) -> None:

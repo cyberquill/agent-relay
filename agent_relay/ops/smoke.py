@@ -31,15 +31,17 @@ class SmokeApp:
 
 
 APPS: tuple[SmokeApp, ...] = (
-    SmokeApp(Harness.VSCODE_LOCAL, "VS Code Local", f"Phone: /new local {WORKSPACE} {PROMPT}"),
-    SmokeApp(Harness.VSCODE_COPILOT, "VS Code Copilot harness", f"Phone: /new copilot {WORKSPACE} {PROMPT}"),
-    SmokeApp(Harness.OPENCODE, "OpenCode", f"Phone: /new opencode {WORKSPACE} {PROMPT}"),
+    SmokeApp(Harness.VSCODE_LOCAL, "VS Code Local", f'Phone: /new local {WORKSPACE} "{PROMPT}"'),
+    SmokeApp(
+        Harness.VSCODE_COPILOT, "VS Code Copilot harness", f'Phone: /new copilot {WORKSPACE} "{PROMPT}"'
+    ),
+    SmokeApp(Harness.OPENCODE, "OpenCode", f'Phone: /new opencode {WORKSPACE} "{PROMPT}"'),
     SmokeApp(
         Harness.CURSOR,
         "Cursor IDE (hooks and parking)",
         f"Mac: open .scratch in Cursor and send this in a new agent chat: {PROMPT}",
     ),
-    SmokeApp(Harness.CURSOR_CLI, "Cursor CLI", f"Phone: /new cursor {WORKSPACE} {PROMPT}"),
+    SmokeApp(Harness.CURSOR_CLI, "Cursor CLI", f'Phone: /new cursor {WORKSPACE} "{PROMPT}"'),
 )
 
 

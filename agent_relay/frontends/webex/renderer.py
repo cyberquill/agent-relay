@@ -166,12 +166,21 @@ class WebexRenderer:
         self._clock = clock
         self._pacer = Pacer(config.pace_s, clock, sleep)
         self._threads: dict[str, _Thread] = {}
+        self._creating: dict[str, asyncio.Lock] = {}
         self._locks: dict[str, asyncio.Lock] = {}
 
     # threads
 
     async def thread_for(self, session: SessionRecord) -> str:
         """The root message id of the session's thread, creating it on first use."""
+        existing = self._threads.get(session.session_key)
+        if existing is not None:
+            return existing.root_id
+        lock = self._creating.setdefault(session.session_key, asyncio.Lock())
+        async with lock:
+            return await self._open_thread(session)
+
+    async def _open_thread(self, session: SessionRecord) -> str:
         existing = self._threads.get(session.session_key)
         if existing is not None:
             return existing.root_id
