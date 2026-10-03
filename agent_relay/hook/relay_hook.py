@@ -1,8 +1,9 @@
 """`relay-hook`: the program every harness runs for its hooks. Stdlib-only, for startup time.
 
 It forwards the hook payload to `relayd` and writes back exactly what `relayd` decides. If
-`relayd` is down, or the payload is unreadable, it exits 0 with no output, which every harness
-treats as "no opinion".
+`relayd` is down, has no opinion, or the payload is unreadable, it answers "no opinion": no output
+for Copilot and OpenCode, and valid JSON for Cursor, whose permission hooks block on missing or
+invalid output.
 
 Usage: relay-hook --harness <copilot|cursor|opencode> --event <native event name>
 """
@@ -22,6 +23,14 @@ from agent_relay import paths
 
 _HEADER = struct.Struct(">I")
 CONNECT_TIMEOUT_S = 0.2
+CURSOR_PERMISSION_EVENTS = frozenset({"preToolUse", "beforeShellExecution", "beforeMCPExecution"})
+
+
+def no_opinion(harness: str, event: str) -> str:
+    """Cursor merges hook answers as deny > ask > allow, so `allow` defers to every other hook."""
+    if harness != "cursor":
+        return ""
+    return '{"permission": "allow"}' if event in CURSOR_PERMISSION_EVENTS else "{}"
 
 
 def _args(argv: list[str]) -> tuple[str, str] | None:
@@ -69,21 +78,24 @@ def run(argv: list[str], stdin_text: str, sock_path: Path) -> tuple[int, str]:
     if parsed is None:
         return 0, ""
     harness, event = parsed
+    passthrough = (0, no_opinion(harness, event))
     try:
         payload = json.loads(stdin_text) if stdin_text.strip() else {}
     except json.JSONDecodeError:
-        return 0, ""
+        return passthrough
     if not isinstance(payload, dict):
-        return 0, ""
+        return passthrough
     try:
         reply = exchange({"op": "hook", "harness": harness, "event": event, "payload": payload}, sock_path)
     except (OSError, ValueError, struct.error):
-        return 0, ""
+        return passthrough
     if reply is None:
-        return 0, ""
+        return passthrough
     out = reply.get("stdout")
     code = reply.get("exit", 0)
-    text = "" if out is None else (out if isinstance(out, str) else json.dumps(out))
+    if out is None or out == "":
+        return (code if isinstance(code, int) else 0), passthrough[1]
+    text = out if isinstance(out, str) else json.dumps(out)
     return (code if isinstance(code, int) else 0), text
 
 

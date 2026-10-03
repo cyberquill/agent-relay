@@ -10,6 +10,7 @@ from pydantic import JsonValue
 from agent_relay import paths
 from agent_relay.fileops import PlannedWrite, render_json
 from agent_relay.hook.installers import hook_command, is_relay_entry, timeout_for
+from agent_relay.hook.relay_hook import CURSOR_PERMISSION_EVENTS
 from agent_relay.models.config import RelayConfig
 
 EVENTS: dict[str, str] = {
@@ -26,7 +27,7 @@ EVENTS: dict[str, str] = {
     "afterAgentThought": "observe",
     "stop": "park",
 }
-FAIL_CLOSED = {"preToolUse", "beforeShellExecution", "beforeMCPExecution"}
+FAIL_CLOSED = CURSOR_PERMISSION_EVENTS
 
 
 def hooks_file() -> Path:
