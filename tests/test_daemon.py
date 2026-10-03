@@ -114,7 +114,7 @@ async def test_serve_boots_answers_ipc_and_webex_then_stops() -> None:
     mercury = IdleSocket([json.dumps(webex.activity_for(hello))])
     config = RelayConfig(
         webex=WebexConfig(allowed_email=webex.user_email, u2c_url=U2C),
-        adapters=AdaptersConfig(opencode=False),
+        adapters=AdaptersConfig(opencode=False, ahp=False),
     )
     stop = asyncio.Event()
     async with webex.client() as http:

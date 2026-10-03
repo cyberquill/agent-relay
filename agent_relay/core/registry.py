@@ -238,7 +238,7 @@ class Registry:
         return await self._run(_list)
 
     async def set_session_fields(self, session_key: str, **fields: str | None) -> None:
-        allowed = {"status", "model", "webex_thread_id", "title", "workspace", "harness_id"}
+        allowed = {"status", "model", "webex_thread_id", "title", "workspace", "harness", "harness_id"}
         unknown = set(fields) - allowed
         if unknown:
             raise ValueError(f"unknown session fields: {sorted(unknown)}")

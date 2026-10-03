@@ -12,6 +12,7 @@ from pydantic import JsonValue
 
 from agent_relay.adapters.base import Decision
 from agent_relay.core import away
+from agent_relay.core.hooks import APPROVED_CALL_KEY, HOOKED
 from agent_relay.core.parking import LIMIT_TEXT, RENEW_TEXT
 from agent_relay.core.registry import Registry
 from agent_relay.daemon import Core
@@ -466,3 +467,16 @@ async def test_phone_sessions_are_gated_even_with_away_off(core: tuple[Core, Rec
     stdout = reply["stdout"]
     assert isinstance(stdout, dict) and stdout["decision"] == "deny"
     assert await built.registry.kv_get("approved_call:call_1") == "deny"
+
+
+async def test_hooked_marker_and_copilot_call_decisions(core: tuple[Core, Recorder, list[str]]) -> None:
+    """The AHP adapter relies on both: hooked sessions keep tool events here, and a phone decision for
+    a tool call is reused when the Agent Host asks to confirm the same call."""
+    built, rec, _ = core
+    await away.set_away(built.registry, True)
+    answering = asyncio.create_task(_answer_when_asked(built, rec, "allow"))
+    await hook(built, "copilot", "PreToolUse", LOCAL_PRE)
+    await answering
+    (session,) = await built.registry.list_sessions()
+    assert session.extra.get(HOOKED) is True
+    assert await built.registry.kv_get(APPROVED_CALL_KEY.format(call_id="t1")) == "allow"

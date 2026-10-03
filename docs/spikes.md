@@ -38,7 +38,9 @@ Evidence:
 - The `copilotcli` session config defaults to `isolation: "worktree"`, which created a branch in the scratch
   repo. The adapter passes `config: {isolation: "folder"}` unless the user asks for isolation.
 - Live run (2 of 3 attempts used for this): `Reply with exactly: OK` returned `OK`, then `chat/turnComplete`.
-  Trace in `tests/fixtures/ahp/ok_turn.trace.json` (scrubbed).
+  Trace in `tests/fixtures/ahp/ok_turn.trace.json` (scrubbed). The scrubber also hid numeric token
+  counts (`maxOutputTokens`, `inputTokens` and so on, keys that contain "Token"). C7 set those back to `0`
+  so the fixture matches the schema's number type; no credential was involved.
 
 ## S2 — Long-blocking stop hooks
 

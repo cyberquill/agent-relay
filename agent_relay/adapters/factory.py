@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from agent_relay.adapters.ahp.adapter import AhpAdapter
 from agent_relay.adapters.base import Adapter
 from agent_relay.adapters.opencode.adapter import OpenCodeAdapter
 from agent_relay.core.registry import Registry
@@ -14,6 +15,8 @@ log = get_logger(__name__)
 
 def build_adapters(config: RelayConfig, registry: Registry) -> list[Adapter]:
     adapters: list[Adapter] = []
+    if config.adapters.ahp:
+        adapters.append(AhpAdapter(registry))
     if config.adapters.opencode:
         password = get_secret(Secret.OPENCODE_PASSWORD)
         if password is None:

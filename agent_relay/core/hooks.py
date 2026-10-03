@@ -53,6 +53,7 @@ APPROVED_CALL_KEY = "approved_call:{call_id}"
 OPENCODE_SERVER_PREFIX = "opencode.server:"
 LAST_TEXT = "last_text"
 RENEWING = "renewing"
+HOOKED = "hooked"
 
 
 def _reply(stdout: dict[str, JsonValue] | None) -> Reply:
@@ -99,6 +100,8 @@ class HookService:
             if hook.kind in (HookKind.SESSION_END, HookKind.SUBAGENT_STOP):
                 return {}
             session = await self._register(hook)
+        if session.extra.get(HOOKED) is not True:
+            await self._registry.set_session_extra(session.session_key, HOOKED, True)
         try:
             return await self._dispatch(session, hook)
         except Exception:
@@ -231,7 +234,7 @@ class HookService:
             return _reply(outputs.permission(hook, True, "approved from the phone"))
         outcome = await self._broker.request(session, tool, describe_tool(hook))
         await self._registry.kv_set(recent, "allow" if outcome.allowed else "deny")
-        if hook.family is HookFamily.OPENCODE and hook.tool_use_id:
+        if hook.tool_use_id:
             await self._registry.kv_set(
                 APPROVED_CALL_KEY.format(call_id=hook.tool_use_id), "allow" if outcome.allowed else "deny"
             )
