@@ -1,0 +1,14 @@
+.venv/
+.cache/
+__pycache__/
+*.pyc
+.scratch/
+node_modules/
+extensions/relay-bridge/out/
+extensions/relay-bridge/*.vsix
+plugins/opencode/dist/
+build/
+dist/
+.env
+*.captured.json
+local_relay.toml
