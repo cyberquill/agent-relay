@@ -158,9 +158,7 @@ class Handlers:
                 key = ctx.session.session_key if ctx.session else None
                 await self.reply(ctx, await svc.set_away(not cmd.args or cmd.args[0] == "on", key))
             case CommandName.BACK:
-                key = None
-                if ctx.session is not None:
-                    key = self._require(ctx, Capability.PARK, "parking").session_key
+                key = ctx.session.session_key if ctx.session else None
                 await self.reply(ctx, await svc.back(key))
             case CommandName.DOCTOR:
                 await self.reply(ctx, await self._doctor())

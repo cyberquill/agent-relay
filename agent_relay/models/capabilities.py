@@ -41,5 +41,4 @@ COMMAND_REQUIRES: dict[str, Capability] = {
     "/model": Capability.MODEL_SELECT,
     "/models": Capability.MODEL_SELECT,
     "/stop": Capability.CANCEL,
-    "/back": Capability.PARK,
 }

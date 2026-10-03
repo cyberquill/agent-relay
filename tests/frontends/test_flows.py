@@ -117,9 +117,25 @@ async def test_unsupported_command_is_refused_per_capability(relay: Relay) -> No
     relay.router.add_adapter(CrashingAdapter())
     await relay.frontend.renderer.thread_for(session)
     stored = await relay.service.session(session.session_key)
-    for command in ("/model m", "/stop", "/back"):
+    for command in ("/model m", "/stop"):
         await relay.say(command, parent_id=stored.webex_thread_id)
         assert "does not support" in relay.bot_texts()[-1]
+
+
+async def test_back_in_a_thread_releases_any_parked_session(relay: Relay) -> None:
+    """Relay's stop hook parks; the adapter's capabilities have no say in it."""
+    session = await relay.registry.upsert_session(
+        SessionRecord(session_key="cursor_cdp:x", harness=Harness.CURSOR_CDP, harness_id="x", workspace="/w")
+    )
+    relay.router.add_adapter(CrashingAdapter())
+    await relay.frontend.renderer.thread_for(session)
+    stored = await relay.service.session(session.session_key)
+    await relay.say("/back", parent_id=stored.webex_thread_id)
+    assert relay.bot_texts()[-1] == "That session is not parked."
+    await relay.registry.set_session_fields(session.session_key, status=SessionStatus.PARKED.value)
+    await relay.say("/back", parent_id=stored.webex_thread_id)
+    assert set(relay.bot_texts()[-2:]) == {"Released.", "▶️ Released (/back)."}
+    assert await relay.registry.kv_get(f"release:{session.session_key}") == "/back"
 
 
 async def test_unknown_thread_and_top_level_hint(relay: Relay) -> None:
