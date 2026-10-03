@@ -162,8 +162,12 @@ class RelayService:
         record = await adapter.start_session(
             StartRequest(workspace=str(paths.expand_user(target.path)), prompt=prompt, model=chosen)
         )
-        record = record.model_copy(update={"origin": Origin.PHONE, "status": SessionStatus.RUNNING})
-        record = await self.registry.upsert_session(record)
+        stored = await self.registry.get_session(record.session_key)
+        if stored is not None and stored.origin is Origin.PHONE:
+            record = stored
+        else:
+            record = record.model_copy(update={"origin": Origin.PHONE, "status": SessionStatus.RUNNING})
+            record = await self.registry.upsert_session(record)
         if chosen:
             await self.registry.kv_set(STICKY_MODEL_KEY.format(harness=harness.value), chosen)
         await self.router.publish(

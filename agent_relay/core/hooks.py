@@ -48,6 +48,8 @@ APPROVAL_KINDS = frozenset(
 )
 AFTER_KINDS = frozenset({HookKind.POST_TOOL, HookKind.SHELL_AFTER, HookKind.MCP_AFTER, HookKind.TOOL_FAILURE})
 COPILOT_FAMILY = (Harness.VSCODE_COPILOT, Harness.VSCODE_LOCAL, Harness.COPILOT_CLI)
+CURSOR_FAMILY = (Harness.CURSOR, Harness.CURSOR_CLI)
+ACP_OWNED = frozenset({Harness.CURSOR_CLI})
 CURSOR_GATED = ("shell", "terminal", "mcp")
 RECENT_APPROVAL_KEY = "approved_recent:{digest}"
 APPROVED_CALL_KEY = "approved_call:{call_id}"
@@ -91,6 +93,8 @@ class HookService:
                 )
             return {}
         session = await self._existing(hook)
+        if session is not None and session.harness in ACP_OWNED:
+            return {}
         phone_session = session is not None and session.origin is Origin.PHONE
         workspace = hook.workspace or (session.workspace if session else None)
         if not phone_session and not await away.is_away(self._registry, workspace):
@@ -116,7 +120,12 @@ class HookService:
     # sessions
 
     async def _existing(self, hook: HookInput) -> SessionRecord | None:
-        candidates = COPILOT_FAMILY if hook.family is HookFamily.COPILOT else (hook.harness,)
+        if hook.family is HookFamily.COPILOT:
+            candidates: tuple[Harness, ...] = COPILOT_FAMILY
+        elif hook.family is HookFamily.CURSOR:
+            candidates = CURSOR_FAMILY
+        else:
+            candidates = (hook.harness,)
         for harness in candidates:
             found = await self._registry.find_session(harness, hook.session_id)
             if found is not None:

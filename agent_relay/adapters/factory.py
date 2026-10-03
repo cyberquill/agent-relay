@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from agent_relay.adapters.ahp.adapter import AhpAdapter
 from agent_relay.adapters.base import Adapter
+from agent_relay.adapters.cursor_cli.adapter import CursorCliAdapter
 from agent_relay.adapters.opencode.adapter import OpenCodeAdapter
 from agent_relay.adapters.vscode_local.adapter import VsCodeLocalAdapter
 from agent_relay.adapters.vscode_local.hub import BridgeHub
@@ -21,6 +22,8 @@ def build_adapters(config: RelayConfig, registry: Registry, hub: BridgeHub | Non
         adapters.append(AhpAdapter(registry))
     if config.adapters.vscode_local and hub is not None:
         adapters.append(VsCodeLocalAdapter(registry, hub))
+    if config.adapters.cursor_cli:
+        adapters.append(CursorCliAdapter(registry))
     if config.adapters.opencode:
         password = get_secret(Secret.OPENCODE_PASSWORD)
         if password is None:

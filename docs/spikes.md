@@ -136,3 +136,10 @@ Command: `cursor-agent status` → `Not logged in`.
 Path: `relay doctor` reports "Cursor CLI not logged in: run `cursor-agent login`". The adapter checks status
 before `authenticate` and reports `auth needed` to the phone instead of starting the process. Live test
 AC-22 needs the login first; it is a C15 step.
+
+Follow-up at C9: `cursor-agent models` also needs the login, so its output format was not observed.
+`catalog.parse_models` accepts `id`, `id - Label`, `id: Label` and bulleted lines, and treats `(current)`
+or `(default)` as the default model. The ACP flow (`initialize`, `authenticate` with `cursor_login`,
+`session/new` or `session/load`, `session/prompt`, the `cursor/*` extension requests) follows the
+published ACP spec and Cursor's ACP docs; `tests/fakes/acp_agent.py` speaks exactly that subset. C15 runs
+AC-22 against the real CLI after `cursor-agent login`.
