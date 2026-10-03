@@ -1,0 +1,8 @@
+{
+  "name": "agent-relay",
+  "short_name": "relay",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#111827",
+  "theme_color": "#1f2937"
+}

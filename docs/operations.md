@@ -100,6 +100,23 @@ this only when the installed file's sha256 matches `patches/stepping-away/base.s
 backed up, and `relay uninstall` restores it byte for byte. If you edited the skill since, install
 leaves it alone and says so. In that case, merge the patch by hand.
 
+## The PWA (off by default)
+
+A browser front end with the same commands as Webex, for use over Tailscale.
+It is not a replacement for Webex: relayd still needs the bot token.
+
+1. Create a token: `security add-generic-password -U -s agent-relay -a pwa-token -w` (paste a long
+   random value, for example from `openssl rand -base64 32`).
+2. Set `pwa.enabled = true` in `relay.toml` (`pwa.port` defaults to 8787) and restart relayd. Without
+   the token relayd refuses to start and says which command adds it.
+3. Open `http://127.0.0.1:8787` and paste the token. It is kept for the browser tab only.
+4. To reach it from the phone, `relay pwa expose` prints the `tailscale serve` command. The relay never
+   runs it, and never uses Funnel.
+
+The server listens on 127.0.0.1 only; the address is not configurable. Every `/api` route answers 401
+without the token. Replies, token streams, tool lines, approvals and questions arrive over one event
+stream, scrubbed like everything the relay sends.
+
 ## One MCP server list: `relay config import` and `relay config sync`
 
 `~/.agents/mcp.yaml` is the single list of MCP servers. Edit it, then render it everywhere.

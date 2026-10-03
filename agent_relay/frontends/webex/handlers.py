@@ -11,8 +11,8 @@ from agent_relay.core import away
 from agent_relay.core.service import APP_LABELS, RelayError, RelayService, resolve_app
 from agent_relay.frontends import commands
 from agent_relay.frontends.commands import Command, CommandName, HelpHint, Invalid, Prompt, Unknown
+from agent_relay.frontends.surface import Surface
 from agent_relay.frontends.webex import cards
-from agent_relay.frontends.webex.renderer import WebexRenderer
 from agent_relay.log import get_logger
 from agent_relay.models.capabilities import Capability
 from agent_relay.models.sessions import SessionRecord
@@ -44,7 +44,7 @@ class Handlers:
     def __init__(
         self,
         service: RelayService,
-        renderer: WebexRenderer,
+        renderer: Surface,
         doctor: Callable[[], Awaitable[str]] | None = None,
     ) -> None:
         self._service = service

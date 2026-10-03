@@ -8,9 +8,9 @@ from collections.abc import Awaitable, Callable
 
 import httpx
 
-from agent_relay.adapters.base import Decision
 from agent_relay.core.registry import Registry
 from agent_relay.core.service import RelayService
+from agent_relay.frontends import actions
 from agent_relay.frontends.webex.access import AccessControl
 from agent_relay.frontends.webex.api import AttachmentAction, Message, WebexApi
 from agent_relay.frontends.webex.handlers import Context, Handlers
@@ -24,7 +24,6 @@ log = get_logger(__name__)
 LAST_SEEN_KEY = "webex.last_seen"
 SEEN_PREFIX = "webex.seen:"
 CATCH_UP_PAGES = 10
-DECISIONS: dict[str, Decision] = {"allow": "allow", "allow_session": "allow_session", "deny": "deny"}
 
 
 class WebexFrontend:
@@ -102,27 +101,11 @@ class WebexFrontend:
         if not verdict.allowed:
             log.info(f"ignored card submission: {verdict.reason}")
             return
-        inputs = action.inputs
-        kind = inputs.get("relay")
-        request_id = inputs.get("request_id")
-        if kind == "approval" and isinstance(request_id, str):
-            decision = DECISIONS.get(str(inputs.get("decision")))
-            if decision is None:
-                return
-            if not await self._service.answer_approval(request_id, decision):
-                await self._already_resolved(request_id)
-        elif kind == "question" and isinstance(request_id, str):
-            answer: str | None = None
-            if inputs.get("op") != "skip":
-                custom, choice = inputs.get("custom"), inputs.get("choice")
-                answer = (custom if isinstance(custom, str) and custom.strip() else None) or (
-                    choice if isinstance(choice, str) and choice else None
-                )
-            if not await self._service.answer_question(request_id, answer):
-                await self._already_resolved(request_id)
-        elif kind == "new":
-            await self.handlers.new_step(inputs)
-        else:
+        outcome = await actions.submit(self._service, self.handlers, action.inputs)
+        request_id = action.inputs.get("request_id")
+        if outcome == "already_answered" and isinstance(request_id, str):
+            await self._already_resolved(request_id)
+        elif outcome == "ignored":
             log.info("ignored a card submission with no relay action")
 
     async def _already_resolved(self, request_id: str) -> None:

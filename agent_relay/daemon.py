@@ -30,6 +30,7 @@ from agent_relay.core.signals import Signals
 from agent_relay.core.updates import UpdateWatcher
 from agent_relay.doctor.daemon import DaemonView, WebexLink, daemon_checks
 from agent_relay.doctor.model import Check
+from agent_relay.frontends.pwa.server import build_pwa
 from agent_relay.frontends.webex.bot import WebexFrontend, build_frontend
 from agent_relay.frontends.webex.ws_client import Connector, WebexWsClient, default_connector
 from agent_relay.ipc import IpcServer
@@ -201,6 +202,7 @@ async def serve(
     stop: asyncio.Event,
     http: httpx.AsyncClient | None = None,
     connector: Connector = default_connector,
+    pwa_token: str | None = None,
 ) -> None:
     registry = Registry(paths.db_path())
     await registry.open()
@@ -236,6 +238,9 @@ async def serve(
         asyncio.create_task(core.broker.sweeper(), name="pending-sweeper"),
         asyncio.create_task(watcher.run(), name="update-watcher"),
     ]
+    pwa = build_pwa(config.pwa, core.service, core.router, pwa_token, core.doctor_text)
+    if pwa is not None:
+        tasks.append(asyncio.create_task(pwa.server.run(), name="pwa"))
     log.info("relayd ready")
     waiter = asyncio.create_task(stop.wait())
     try:
@@ -245,6 +250,8 @@ async def serve(
                 log.error(f"{task.get_name()} stopped: {task.exception()}")
     finally:
         waiter.cancel()
+        if pwa is not None:
+            pwa.server.stop()
         for task in tasks:
             task.cancel()
         for task in tasks:
@@ -274,6 +281,7 @@ def preflight() -> tuple[RelayConfig, str]:
 def main() -> int:
     try:
         config, token = preflight()
+        pwa_token = require_secret(Secret.PWA_TOKEN) if config.pwa.enabled else None
     except (MissingSecretError, ConfigError) as exc:
         sys.stderr.write(f"relayd: {exc}\n")
         return EXIT_CONFIG
@@ -290,7 +298,7 @@ def main() -> int:
         loop = asyncio.get_running_loop()
         for sig in (signal.SIGTERM, signal.SIGINT):
             loop.add_signal_handler(sig, stop.set)
-        await serve(config, token, stop)
+        await serve(config, token, stop, pwa_token=pwa_token)
 
     try:
         asyncio.run(_run())

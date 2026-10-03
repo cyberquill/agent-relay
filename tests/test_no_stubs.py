@@ -27,7 +27,7 @@ _MARKERS = re.compile(
             r"\bX" + r"XX\b",
             r"NotImplemented" + r"Error",
             r"left as an " + r"exercise",
-            r"\b[Pp]lace" + r"holder\b(?![\"']\s*:)",
+            r"(?<!\.)\b[Pp]lace" + r"holder\b(?![\"']\s*:)(?!\s*=)",
         ]
     )
 )
@@ -103,7 +103,12 @@ def test_scanner_detects_stubs(tmp_path: Path) -> None:
     tree_hits = _stub_functions_at(sample)
     assert len(tree_hits) == 2
     assert _MARKERS.search("raise " + "NotImplemented" + "Error")
-    assert not _MARKERS.search('"place' + 'holder": "Type here"')
+    word = "place" + "holder"
+    assert not _MARKERS.search(f'"{word}": "Type here"')
+    assert not _MARKERS.search(f'<textarea {word}="Prompt">')
+    assert not _MARKERS.search(f'input.{word} = block.{word} || "";')
+    assert _MARKERS.search(f"return a {word} value for now")
+    assert _MARKERS.search(f"# {word.capitalize()}: replace before release")
 
 
 def _stub_functions_at(file: Path) -> list[str]:
