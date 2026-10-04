@@ -3,6 +3,7 @@
 For each app: start a session, watch it stream, approve one tool, park it with `/away`, reply in the
 thread, and release it with `/back`. Registration, parking and release are checked against relayd;
 what only the phone shows (streaming, the approval card, the reply) is confirmed by the human.
+OpenCode and the Cursor CLI never park (D11, ACP): their turn ends idle and the reply wakes them.
 """
 
 from __future__ import annotations
@@ -28,6 +29,7 @@ class SmokeApp:
     harness: Harness
     label: str
     start: str
+    parks: bool = True
 
 
 APPS: tuple[SmokeApp, ...] = (
@@ -35,13 +37,13 @@ APPS: tuple[SmokeApp, ...] = (
     SmokeApp(
         Harness.VSCODE_COPILOT, "VS Code Copilot harness", f'Phone: /new copilot {WORKSPACE} "{PROMPT}"'
     ),
-    SmokeApp(Harness.OPENCODE, "OpenCode", f'Phone: /new opencode {WORKSPACE} "{PROMPT}"'),
+    SmokeApp(Harness.OPENCODE, "OpenCode", f'Phone: /new opencode {WORKSPACE} "{PROMPT}"', parks=False),
     SmokeApp(
         Harness.CURSOR,
         "Cursor IDE (hooks and parking)",
         f"Mac: open .scratch in Cursor and send this in a new agent chat: {PROMPT}",
     ),
-    SmokeApp(Harness.CURSOR_CLI, "Cursor CLI", f'Phone: /new cursor {WORKSPACE} "{PROMPT}"'),
+    SmokeApp(Harness.CURSOR_CLI, "Cursor CLI", f'Phone: /new cursor {WORKSPACE} "{PROMPT}"', parks=False),
 )
 
 
@@ -117,11 +119,26 @@ class Smoke:
             lambda: self._confirm(
                 app, "approve", "Did an approval card arrive, and did Allow run the command?"
             ),
-            lambda: self._parked(app, key),
-            lambda: self._confirm(app, "reply", "Did your reply in the thread reach the parked agent?"),
-            lambda: self._released(app, key),
         )
+        if app.parks:
+            steps += (
+                lambda: self._parked(app, key),
+                lambda: self._confirm(app, "reply", "Did your reply in the thread reach the parked agent?"),
+                lambda: self._released(app, key),
+            )
+        else:
+            steps += (
+                lambda: self._idle(app, key),
+                lambda: self._confirm(app, "reply", "Did your reply in the thread wake the idle agent?"),
+            )
         return all(step() for step in steps)
+
+    def _idle(self, app: SmokeApp, key: str) -> bool:
+        self.say(f"  {app.label} never parks; wait for the turn to end, then reply in the thread.")
+        hit = self.waiter.until(
+            app.harness, lambda now: key if now.get(key, Session(key, "")).status == "idle" else None
+        )
+        return self._record(app, "idle", hit is not None, f"{key} idle" if hit else "never went idle")
 
     def _parked(self, app: SmokeApp, key: str) -> bool:
         self.say("  Phone: send /away, then a new prompt in the thread; wait for 'parked'.")

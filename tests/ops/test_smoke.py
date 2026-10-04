@@ -14,16 +14,17 @@ LOCAL = next(app for app in APPS if app.harness is Harness.VSCODE_LOCAL)
 class Daemon:
     """Replays a scripted sequence of `sessions` replies, one per poll."""
 
-    def __init__(self, *frames: list[tuple[str, str]]) -> None:
+    def __init__(self, *frames: list[tuple[str, str]], harness: Harness = Harness.VSCODE_LOCAL) -> None:
         self._frames: Iterator[list[tuple[str, str]]] = iter(frames)
         self._last: list[tuple[str, str]] = []
+        self._harness = harness
 
     def __call__(self, message: JsonObj) -> JsonObj:
         assert message == {"op": "sessions"}
         self._last = next(self._frames, self._last)
         return {
             "sessions": [
-                {"session_key": key, "harness": Harness.VSCODE_LOCAL.value, "status": status}
+                {"session_key": key, "harness": self._harness.value, "status": status}
                 for key, status in self._last
             ]
         }
@@ -90,6 +91,22 @@ def test_a_session_that_ends_on_back_counts_as_released() -> None:
     run, _ = smoke(Daemon([], parked, parked, parked, []), ["y", "y", "y"])
     assert run.run_app(LOCAL)
     assert run.results[-1].step == "back" and run.results[-1].ok
+
+
+def test_an_app_that_never_parks_is_checked_idle_and_woken() -> None:
+    opencode = next(app for app in APPS if app.harness is Harness.OPENCODE)
+    daemon = Daemon([], [("oc:new", "running")], [("oc:new", "idle")], harness=Harness.OPENCODE)
+    run, said = smoke(daemon, ["y", "y", "y"])
+    assert run.run_app(opencode)
+    assert [(r.step, r.ok) for r in run.results] == [
+        ("register", True),
+        ("stream", True),
+        ("approve", True),
+        ("idle", True),
+        ("reply", True),
+    ]
+    assert not any("/back" in line for line in said)
+    assert {app.harness for app in APPS if not app.parks} == {Harness.OPENCODE, Harness.CURSOR_CLI}
 
 
 def test_never_parking_is_a_failure_after_the_timeout() -> None:
