@@ -328,3 +328,14 @@ hands the waiting approvals back to the desk.
 | Cursor CLI | approve | ✅ | human: y |
 | Cursor CLI | idle | ✅ | cursor_cli:221381c9-a008-4f1a-afc5-50645d66fb3d idle |
 | Cursor CLI | reply | ✅ | human: y |
+
+### Live smoke 2026-10-04 08:41 UTC
+
+| App | Step | Result | Evidence |
+|---|---|---|---|
+| Cursor IDE (hooks and parking) | register | ✅ | cursor:0ebc1785-3f0c-432b-a495-4a4d4ee23c25 |
+| Cursor IDE (hooks and parking) | stream | ✅ | human: y |
+| Cursor IDE (hooks and parking) | approve | ✅ | human: y |
+| Cursor IDE (hooks and parking) | park | ✅ | cursor:0ebc1785-3f0c-432b-a495-4a4d4ee23c25 parked |
+| Cursor IDE (hooks and parking) | reply | ✅ | human: y |
+| Cursor IDE (hooks and parking) | back | ✅ | cursor:0ebc1785-3f0c-432b-a495-4a4d4ee23c25 released |

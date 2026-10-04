@@ -7,8 +7,8 @@ For users, start with [`docs/user-guide.md`](docs/user-guide.md).
 
 ## Where things stand
 
-- **Code:** checkpoints C0–C14 are built and committed. C15 (live verification) is nearly done: every
-  app the phone can drive has passed the live smoke test.
+- **Code:** checkpoints C0–C14 are built and committed. C15 (live verification) is nearly done: all
+  five apps have passed the live smoke test.
 - **Checks:** `uv run tox` is green: format, lint, mypy `--strict`, pytest (641 passed, 6 skipped live
   tests) and `ts`.
 - **Install:** applied to the real home directory after gate G1 and re-applied after D69. relayd runs
@@ -59,14 +59,13 @@ All recorded in [`docs/operations.md`](docs/operations.md#the-live-smoke-test), 
 | VS Code Copilot (Agent Host) | ✅ register, stream, approve, park, reply, back |
 | OpenCode | ✅ register, stream, approve, idle, wake |
 | Cursor CLI | ✅ register, stream, approve, idle, wake |
-| Cursor IDE (hooks and parking) | not run yet; needs a person at the desk |
+| Cursor IDE (hooks and parking) | ✅ register, stream, approve, park, reply, back |
 
 ## What's left
 
 ### 1. Needs a person at the Mac
 
-- [ ] **Cursor IDE smoke** (`--only cursor`). Start the script, then type its prompt in a Cursor chat
-      opened on `.scratch`; the phone steps are driven from Webex as before.
+- [x] **Cursor IDE smoke** (`--only cursor`): passed 2026-10-04 08:41 UTC.
 - [ ] **G2, ask first:** the screen-locked test (S7). Get approval before locking the screen.
 - [ ] **AC-24 / D35:** `uv sync --frozen --extra cdp`, `relay config set cdp.enabled true`,
       `relay start`, quit and relaunch Cursor with the debug port, then `relay selftest cursor-cdp`
@@ -83,7 +82,7 @@ in its own command first; don't run it alongside the smoke run.
 ```bash
 cd ~/Desktop/Repository/Personal/agent-relay
 : > /tmp/smoke_answers
-(export RELAY_LIVE=1; tail -f /tmp/smoke_answers | uv run --frozen python -u scripts/smoke_live.py --only cursor --timeout 240 --record)
+(export RELAY_LIVE=1; tail -f /tmp/smoke_answers | uv run --frozen python -u scripts/smoke_live.py --only vscode_local --timeout 240 --record)
 # answer each y/n with: echo y >> /tmp/smoke_answers
 ```
 
@@ -102,7 +101,7 @@ cd ~/Desktop/Repository/Personal/agent-relay
 - [ ] `docs/spikes.md` complete; `docs/deviations.md` lists every departure.
 - [x] No stubs or TODOs (`test_no_stubs` passes).
 - [x] `relay doctor` all green after G1.
-- [ ] Live smoke works for every app: four of five pass; the Cursor IDE run is left.
+- [x] Live smoke works for VS Code Local, VS Code Copilot, OpenCode, the Cursor IDE and the Cursor CLI.
 - [ ] The README quick start works from a clean `RELAY_HOME`.
 
 ### 3. Smaller follow-ups noticed during testing
