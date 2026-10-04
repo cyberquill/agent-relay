@@ -308,3 +308,13 @@ hands the waiting approvals back to the desk.
 | VS Code Copilot harness | park | ✅ | vscode_copilot:f077b1e0-6b86-4ade-a287-823a5f51b634 parked |
 | VS Code Copilot harness | reply | ✅ | human: y |
 | VS Code Copilot harness | back | ✅ | vscode_copilot:f077b1e0-6b86-4ade-a287-823a5f51b634 released |
+
+### Live smoke 2026-10-04 07:22 UTC
+
+| App | Step | Result | Evidence |
+|---|---|---|---|
+| OpenCode | register | ✅ | opencode:ses_efa3584c7ffe8OcQqD0xpE3otB |
+| OpenCode | stream | ✅ | human: y |
+| OpenCode | approve | ✅ | human: y |
+| OpenCode | idle | ✅ | opencode:ses_efa3584c7ffe8OcQqD0xpE3otB idle |
+| OpenCode | reply | ✅ | human: y |
