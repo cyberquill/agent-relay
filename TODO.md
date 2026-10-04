@@ -72,9 +72,9 @@ All recorded in [`docs/operations.md`](docs/operations.md#the-live-smoke-test), 
       with the chat pane open. Relaunching Cursor ends the Cursor chat that is driving the build.
 - [ ] **D61:** with away mode off, check that a command outside Cursor's allowlist still prompts at
       the desk.
-- [ ] **D25:** check that Cursor hooks carry the ACP `sessionId` for a phone-started Cursor CLI session
-      (relay.db shows no second `cursor` session for the same chat).
-- [ ] Tick the matching boxes in `docs/acceptance.md` and update D25, D35 and D61.
+- [x] **D25:** the Cursor CLI smoke produced no duplicate `cursor` hook session and one approval card
+      (recorded in D25).
+- [ ] Tick the matching boxes in `docs/acceptance.md` and update D35 and D61.
 
 How to drive a smoke run (see "The live smoke test" in `docs/operations.md`). Reset the answers file
 in its own command first; don't run it alongside the smoke run.
