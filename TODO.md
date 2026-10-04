@@ -70,8 +70,9 @@ All recorded in [`docs/operations.md`](docs/operations.md#the-live-smoke-test), 
 - [ ] **AC-24 / D35:** `uv sync --frozen --extra cdp`, `relay config set cdp.enabled true`,
       `relay start`, quit and relaunch Cursor with the debug port, then `relay selftest cursor-cdp`
       with the chat pane open. Relaunching Cursor ends the Cursor chat that is driving the build.
-- [ ] **D61:** with away mode off, check that a command outside Cursor's allowlist still prompts at
-      the desk.
+- [ ] **D61, partly done:** the A/B run showed no difference with and without the relay's hooks for
+      commands Cursor auto-runs (see D61). Still to find: a command Cursor prompts for on its own (for
+      example with sandboxed auto-run turned off), then confirm it still prompts with the hooks in place.
 - [x] **D25:** the Cursor CLI smoke produced no duplicate `cursor` hook session and one approval card
       (recorded in D25).
 - [ ] Tick the matching boxes in `docs/acceptance.md` and update D35 and D61.
@@ -91,8 +92,8 @@ cd ~/Desktop/Repository/Personal/agent-relay
   Don't use the Webex MCP for this.
 - **Send `/away` as a reply inside the session's thread, never at the top level.** A top-level
   `/away` turns away mode on for every workspace and gates the Cursor chat driving the test.
-- Away mode is currently **on for `.scratch`** from the smoke runs. Turn it off when done:
-  `uv run relay away off --workspace "$PWD/.scratch"`.
+- Away mode is **off** everywhere after the last smoke run. A run turns it on for `.scratch` from the
+  thread; turn it off afterwards with `uv run relay away off --workspace "$PWD/.scratch"`.
 
 ### 2. Definition of Done (PLAN §9)
 
