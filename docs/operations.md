@@ -297,3 +297,14 @@ hands the waiting approvals back to the desk.
 | VS Code Local | park | ✅ | vscode_local:phone-6f3b92d31b1f41f2a34e8ef424aa0bd0 parked |
 | VS Code Local | reply | ✅ | human: y |
 | VS Code Local | back | ✅ | vscode_local:phone-6f3b92d31b1f41f2a34e8ef424aa0bd0 released |
+
+### Live smoke 2026-10-04 07:14 UTC
+
+| App | Step | Result | Evidence |
+|---|---|---|---|
+| VS Code Copilot harness | register | ✅ | vscode_copilot:f077b1e0-6b86-4ade-a287-823a5f51b634 |
+| VS Code Copilot harness | stream | ✅ | human: y |
+| VS Code Copilot harness | approve | ✅ | human: y |
+| VS Code Copilot harness | park | ✅ | vscode_copilot:f077b1e0-6b86-4ade-a287-823a5f51b634 parked |
+| VS Code Copilot harness | reply | ✅ | human: y |
+| VS Code Copilot harness | back | ✅ | vscode_copilot:f077b1e0-6b86-4ade-a287-823a5f51b634 released |
