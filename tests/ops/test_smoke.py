@@ -84,6 +84,14 @@ def test_a_no_from_the_human_stops_the_app() -> None:
     assert [(r.step, r.ok) for r in run.results][-1] == ("stream", False)
 
 
+def test_a_session_that_ends_on_back_counts_as_released() -> None:
+    """relayd's `sessions` op leaves ended sessions out, so a vanished session is no longer parked."""
+    parked = [("local:new", "parked")]
+    run, _ = smoke(Daemon([], parked, parked, parked, []), ["y", "y", "y"])
+    assert run.run_app(LOCAL)
+    assert run.results[-1].step == "back" and run.results[-1].ok
+
+
 def test_never_parking_is_a_failure_after_the_timeout() -> None:
     run, _ = smoke(Daemon([], [("local:new", "running")]), ["y", "y"], timeout=5.0)
     assert not run.run_app(LOCAL)

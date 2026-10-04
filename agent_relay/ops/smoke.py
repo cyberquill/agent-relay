@@ -133,7 +133,7 @@ class Smoke:
     def _released(self, app: SmokeApp, key: str) -> bool:
         self.say("  Phone: send /back in the thread.")
         hit = self.waiter.until(
-            app.harness, lambda now: key if now.get(key, Session(key, "parked")).status != "parked" else None
+            app.harness, lambda now: key if now.get(key, Session(key, "ended")).status != "parked" else None
         )
         return self._record(app, "back", hit is not None, f"{key} released" if hit else "still parked")
 

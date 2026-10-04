@@ -204,6 +204,8 @@ class HookService:
         if kind is HookKind.NOTIFICATION:
             return await self._notification(session, hook)
         if kind is HookKind.SESSION_END:
+            if session.harness is Harness.VSCODE_COPILOT:
+                return {}
             await self._registry.set_session_fields(session.session_key, status=SessionStatus.ENDED.value)
             await self._router.publish(
                 SessionReleased(

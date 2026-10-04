@@ -25,6 +25,7 @@ from agent_relay.models.events import (
     Harness,
     Origin,
     SessionParked,
+    SessionReleased,
     SessionStarted,
     TurnCompleted,
 )
@@ -566,6 +567,10 @@ async def test_agent_host_hooks_with_their_own_session_id_join_the_phone_session
     assert session.extra.get(HOOKED) is True
     assert [e.session_key for e in rec.of(ApprovalRequested)] == ["vscode_copilot:A1"]
     assert not rec.of(SessionStarted)
+    end: dict[str, JsonValue] = {"session_id": "H1", "cwd": "/w/proj", "reason": "exit"}
+    assert await hook(built, "copilot", "SessionEnd", end) == {}
+    assert (await _session(built, "vscode_copilot:A1")).status is SessionStatus.RUNNING
+    assert not rec.of(SessionReleased)
 
 
 async def test_an_agent_host_claim_is_not_taken_by_a_copilot_cli_hook(
