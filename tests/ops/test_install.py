@@ -34,6 +34,8 @@ class Commands:
 
     def __call__(self, argv: Sequence[str]) -> tuple[int, str]:
         self.seen.append(list(argv))
+        if list(argv[:2]) == ["launchctl", "print"]:
+            return 113, "Could not find service"
         return 0, ""
 
     def heads(self) -> list[str]:
@@ -191,6 +193,8 @@ def test_apply_runs_launchctl_and_installs_the_extension(seed: Seed) -> None:
     assert [str(seed.code), "--install-extension", str(install.vsix_path()), "--force"] in commands.seen
     for agent in (paths.launch_agents_dir() / f"{label}" for label in labels):
         assert agent.is_file()
+    launchctl = [a[1] for a in commands.seen if a[0] == "launchctl"]
+    assert launchctl == ["bootout", "print", "bootstrap"] * 3, "bootstrap waits for launchd to let go"
 
 
 def test_uninstall_boots_agents_out_and_removes_the_extension(seed: Seed) -> None:
@@ -209,7 +213,7 @@ def test_a_failed_command_is_reported_not_hidden(seed: Seed) -> None:
     def refuse(argv: Sequence[str]) -> tuple[int, str]:
         return (5, "Bootstrap failed: 5: Input/output error") if "bootstrap" in argv else (0, "")
 
-    outcome = apply_install(planned(seed), refuse)
+    outcome = apply_install(planned(seed), refuse, sleep=lambda _: None)
     assert not outcome.ok
     assert all("exited 5" in problem for problem in outcome.problems)
     assert len(outcome.problems) == 3

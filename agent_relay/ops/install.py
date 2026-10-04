@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import subprocess
 import tempfile
+import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -181,7 +182,9 @@ def _command(argv: Sequence[str], runner: Runner, outcome: Outcome, required: bo
         outcome.problems.append(f"`{' '.join(argv)}` exited {code}: {output[:300]}")
 
 
-def apply_install(plan: InstallPlan, runner: Runner = run) -> Outcome:
+def apply_install(
+    plan: InstallPlan, runner: Runner = run, sleep: Callable[[float], None] = time.sleep
+) -> Outcome:
     blocked = next((link.path for link in plan.links if link.blocked()), None)
     if blocked is not None:
         raise LinkBlockedError(blocked)
@@ -193,6 +196,7 @@ def apply_install(plan: InstallPlan, runner: Runner = run) -> Outcome:
     outcome.changed += apply_moves(plan.dedupe.moves, manifest)
     for agent in plan.agents:
         _command(launchd.bootout_command(agent), runner, outcome, required=False)
+        launchd.wait_unloaded(agent, runner, sleep)
         _command(launchd.bootstrap_command(agent), runner, outcome)
     if plan.vsix:
         _command([str(paths.VSCODE_CLI), "--install-extension", str(vsix_path()), "--force"], runner, outcome)

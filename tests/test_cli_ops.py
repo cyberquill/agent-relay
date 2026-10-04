@@ -17,6 +17,7 @@ from agent_relay.ipc import JsonObj
 from agent_relay.models.config import RelayConfig
 from agent_relay.models.events import Harness, Origin
 from agent_relay.models.sessions import SessionRecord, SessionStatus
+from agent_relay.ops import launchd
 from agent_relay.settings import load_config, load_workspaces
 from tests.sync.helpers import FAKE_SECRETS, install_fixtures
 
@@ -164,7 +165,7 @@ def test_start_bootstraps_when_unloaded_then_kickstarts() -> None:
 def test_stop_gives_up_waiting_with_a_note(capsys: pytest.CaptureFixture[str]) -> None:
     stuck = Launchctl(loaded=True, lingers=10_000)
     cli_daemon.stop_daemon(stuck, sleep=lambda _: None)
-    assert len(stuck.seen) == 1 + cli_daemon.STOP_POLLS
+    assert len(stuck.seen) == 1 + launchd.UNLOAD_POLLS
     assert "give it a moment" in capsys.readouterr().err
 
 

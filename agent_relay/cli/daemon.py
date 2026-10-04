@@ -18,8 +18,6 @@ from agent_relay.ops import launchd
 from agent_relay.ops.install import Runner, run
 
 IPC_TIMEOUT_S = 10.0
-STOP_POLLS = 40
-STOP_POLL_S = 0.25
 NOT_RUNNING = "relayd is not running; start it with `relay start`"
 
 
@@ -64,12 +62,7 @@ def stop_daemon(runner: Runner = run, sleep: Callable[[float], None] = time.slee
     code, output = runner(launchd.bootout_command(agent))
     if code != 0:
         raise fail(f"relayd is not loaded in launchd ({code}): {output[:200]}")
-    target = f"gui/{os.getuid()}/{agent.label}"
-    for _ in range(STOP_POLLS):
-        if runner(["launchctl", "print", target])[0] != 0:
-            break
-        sleep(STOP_POLL_S)
-    else:
+    if not launchd.wait_unloaded(agent, runner, sleep):
         note(f"launchd still lists {agent.label}; give it a moment before `relay start`")
     return f"stopped {agent.label} (launchd restarts it at next login, or with `relay start`)"
 

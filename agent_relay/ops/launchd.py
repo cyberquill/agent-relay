@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import os
 import plistlib
+import time
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -13,6 +15,8 @@ from agent_relay.fileops import PlannedWrite
 LABEL_PREFIX = "io.github.cyberquill.agent-relay"
 SEARCH_PATH = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 WEEKLY_UPDATE = {"Weekday": 0, "Hour": 3, "Minute": 17}
+UNLOAD_POLLS = 40
+UNLOAD_POLL_S = 0.25
 
 type PlistValue = str | int | bool | list[str] | dict[str, str] | dict[str, int]
 
@@ -86,3 +90,19 @@ def bootstrap_command(agent: LaunchAgent, uid: int | None = None) -> list[str]:
 
 def bootout_command(agent: LaunchAgent, uid: int | None = None) -> list[str]:
     return ["launchctl", "bootout", f"gui/{os.getuid() if uid is None else uid}/{agent.label}"]
+
+
+def wait_unloaded(
+    agent: LaunchAgent,
+    runner: Callable[[Sequence[str]], tuple[int, str]],
+    sleep: Callable[[float], None] = time.sleep,
+    polls: int = UNLOAD_POLLS,
+) -> bool:
+    """Wait until launchd no longer lists `agent`. `bootout` returns before it lets go, and a
+    `bootstrap` in that window fails with error 5 (or a `kickstart` with 37)."""
+    target = f"gui/{os.getuid()}/{agent.label}"
+    for _ in range(polls):
+        if runner(["launchctl", "print", target])[0] != 0:
+            return True
+        sleep(UNLOAD_POLL_S)
+    return False
