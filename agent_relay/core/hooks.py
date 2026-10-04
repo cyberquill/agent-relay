@@ -13,7 +13,7 @@ from pydantic import JsonValue
 
 from agent_relay.core import away
 from agent_relay.core.approvals import DEADLINE_REASON, ApprovalBroker
-from agent_relay.core.claims import UNCLAIMED_PREFIX, take_claim
+from agent_relay.core.claims import UNCLAIMED_PREFIX, aliased, link_alias, take_claim
 from agent_relay.core.parking import ParkManager, phone_text
 from agent_relay.core.registry import Registry
 from agent_relay.core.router import Router
@@ -130,22 +130,33 @@ class HookService:
             found = await self._registry.find_session(harness, hook.session_id)
             if found is not None:
                 return found
+        if hook.family is HookFamily.COPILOT:
+            key = await aliased(self._registry, hook.session_id)
+            found = await self._registry.get_session(key) if key else None
+            if found is not None:
+                return found
         return await self._claimed(hook)
 
     async def _claimed(self, hook: HookInput) -> SessionRecord | None:
-        """Bind the first unmatched Local hook in a workspace to the chat the phone just opened there."""
-        local = hook.family is HookFamily.COPILOT and hook.event[:1].isupper()
-        if not local or hook.kind is HookKind.SESSION_END or hook.session_id == "unknown":
+        """Bind the first unmatched VS Code hook in a workspace to the chat the phone just opened there."""
+        vscode = hook.family is HookFamily.COPILOT and hook.event[:1].isupper()
+        if not vscode or hook.kind is HookKind.SESSION_END or hook.session_id == "unknown":
             return None
         claim = await take_claim(self._registry, hook.workspace)
         if claim is None:
             return None
         session = await self._registry.get_session(claim.session_key)
-        if session is None or not session.harness_id.startswith(UNCLAIMED_PREFIX):
+        if session is None:
             return None
-        await self._registry.set_session_fields(session.session_key, harness_id=hook.session_id)
-        log.info(f"linked {session.session_key} to Local chat {hook.session_id}")
-        return await self._registry.get_session(session.session_key)
+        if session.harness_id.startswith(UNCLAIMED_PREFIX):
+            await self._registry.set_session_fields(session.session_key, harness_id=hook.session_id)
+            log.info(f"linked {session.session_key} to Local chat {hook.session_id}")
+            return await self._registry.get_session(session.session_key)
+        if session.harness is Harness.VSCODE_COPILOT:
+            await link_alias(self._registry, hook.session_id, session.session_key)
+            log.info(f"linked {session.session_key} to Agent Host hook session {hook.session_id}")
+            return session
+        return None
 
     async def _register(self, hook: HookInput) -> SessionRecord:
         record = await self._registry.upsert_session(

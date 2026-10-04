@@ -12,6 +12,7 @@ from pydantic import JsonValue
 
 from agent_relay.adapters.base import Decision
 from agent_relay.core import away
+from agent_relay.core.claims import make_claim
 from agent_relay.core.hooks import APPROVED_CALL_KEY, HOOKED
 from agent_relay.core.parking import LIMIT_TEXT, RENEW_TEXT
 from agent_relay.core.registry import Registry
@@ -536,6 +537,56 @@ async def test_phone_sessions_are_gated_even_with_away_off(core: tuple[Core, Rec
     stdout = reply["stdout"]
     assert isinstance(stdout, dict) and stdout["decision"] == "deny"
     assert await built.registry.kv_get("approved_call:call_1") == "deny"
+
+
+async def test_agent_host_hooks_with_their_own_session_id_join_the_phone_session(
+    core: tuple[Core, Recorder, list[str]],
+) -> None:
+    """VS Code's hooks report a session id unrelated to the Agent Host's, so the phone's claim links them."""
+    built, rec, _ = core
+    await built.registry.upsert_session(
+        SessionRecord(
+            session_key="vscode_copilot:A1",
+            harness=Harness.VSCODE_COPILOT,
+            harness_id="A1",
+            workspace="/w/proj",
+            origin=Origin.PHONE,
+            status=SessionStatus.RUNNING,
+        )
+    )
+    await make_claim(built.registry, "/w/proj", "vscode_copilot:A1")
+    start: dict[str, JsonValue] = {"session_id": "H1", "cwd": "/w/proj", "source": "new"}
+    assert await hook(built, "copilot", "SessionStart", start) == {}
+    answering = asyncio.create_task(_answer_when_asked(built, rec, "allow"))
+    reply = await hook(built, "copilot", "PreToolUse", {**LOCAL_PRE, "session_id": "H1"})
+    await answering
+    assert reply["stdout"]["permissionDecision"] == "allow"  # type: ignore[index,call-overload]
+    (session,) = await built.registry.list_sessions()
+    assert session.session_key == "vscode_copilot:A1" and session.harness_id == "A1"
+    assert session.extra.get(HOOKED) is True
+    assert [e.session_key for e in rec.of(ApprovalRequested)] == ["vscode_copilot:A1"]
+    assert not rec.of(SessionStarted)
+
+
+async def test_an_agent_host_claim_is_not_taken_by_a_copilot_cli_hook(
+    core: tuple[Core, Recorder, list[str]],
+) -> None:
+    built, _, _ = core
+    await away.set_away(built.registry, True)
+    await make_claim(built.registry, "/w/proj", "vscode_copilot:A1")
+    await built.registry.upsert_session(
+        SessionRecord(
+            session_key="vscode_copilot:A1",
+            harness=Harness.VSCODE_COPILOT,
+            harness_id="A1",
+            workspace="/w/proj",
+            origin=Origin.PHONE,
+            status=SessionStatus.RUNNING,
+        )
+    )
+    await hook(built, "copilot", "sessionStart", {"sessionId": "C9", "cwd": "/w/proj"})
+    keys = sorted(s.session_key for s in await built.registry.list_sessions())
+    assert keys == ["copilot_cli:C9", "vscode_copilot:A1"]
 
 
 async def test_hooked_marker_and_copilot_call_decisions(core: tuple[Core, Recorder, list[str]]) -> None:

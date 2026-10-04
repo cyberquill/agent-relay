@@ -1,7 +1,9 @@
-"""Workspace claims: link a phone-started Local chat to the hook session it produces.
+"""Workspace claims: link a phone-started VS Code chat to the hook session it produces.
 
-VS Code does not hand back an id when a chat is opened through a command. The adapter records a
-claim for the workspace instead; the first unmatched Local hook from that workspace binds to it.
+VS Code does not hand back an id when a chat is opened through a command, and the hooks of an Agent
+Host session report an id of their own. The adapter records a claim for the workspace instead; the
+first unmatched VS Code hook from that workspace binds to it. A claim on a session that already has
+a harness id becomes an alias from the hook's session id to the session.
 """
 
 from __future__ import annotations
@@ -15,6 +17,7 @@ from agent_relay import paths
 from agent_relay.core.registry import Registry
 
 CLAIM_KEY = "local_claim:{workspace}"
+ALIAS_KEY = "hook_alias:{hook_session_id}"
 CLAIM_TTL_S = 120.0
 UNCLAIMED_PREFIX = "unclaimed-"
 
@@ -55,3 +58,11 @@ async def take_claim(
     except (ValueError, KeyError, TypeError):
         return None
     return claim if claim.expires > clock() else None
+
+
+async def link_alias(registry: Registry, hook_session_id: str, session_key: str) -> None:
+    await registry.kv_set(ALIAS_KEY.format(hook_session_id=hook_session_id), session_key)
+
+
+async def aliased(registry: Registry, hook_session_id: str) -> str | None:
+    return await registry.kv_get(ALIAS_KEY.format(hook_session_id=hook_session_id))

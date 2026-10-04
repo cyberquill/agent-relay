@@ -17,6 +17,7 @@ from agent_relay.adapters.ahp.endpoints import Endpoint
 from agent_relay.adapters.ahp.rpc import AhpConnectionError, AhpRpcError, Connection
 from agent_relay.adapters.base import UnsupportedError
 from agent_relay.core import away
+from agent_relay.core.claims import take_claim
 from agent_relay.core.hooks import APPROVED_CALL_KEY, HOOKED
 from agent_relay.core.registry import Registry
 from agent_relay.core.service import RelayError
@@ -146,6 +147,8 @@ async def test_phone_session_replays_the_recorded_turn(rig: Rig) -> None:
     assert (await rig.session(record.session_key)).extra.get(TURN_EXTRA) is None
     started = rig.rec.of(SessionStarted)
     assert [s.origin for s in started] == [Origin.PHONE]
+    claim = await take_claim(rig.registry, WORKSPACE)
+    assert claim is not None and claim.session_key == record.session_key
 
 
 async def test_wrong_token_never_connects(registry: Registry, relay_home: Path) -> None:

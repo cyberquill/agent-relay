@@ -33,6 +33,7 @@ from agent_relay.adapters.base import (
     UnsupportedError,
 )
 from agent_relay.core import away
+from agent_relay.core.claims import make_claim
 from agent_relay.core.hooks import APPROVED_CALL_KEY, HOOKED
 from agent_relay.core.registry import Registry
 from agent_relay.core.service import RelayError
@@ -423,6 +424,7 @@ class AhpAdapter(Adapter):
                     extra={SESSION_EXTRA: session, CHAT_EXTRA: chat, PROVIDER_EXTRA: PROVIDER},
                 )
             )
+            await make_claim(self._registry, request.workspace, record.session_key)
             await conn.request("createChat", m.CreateChatParams(channel=session, chat=chat))
             await self._subscribe(conn, chat)
         except AhpRpcError as exc:
