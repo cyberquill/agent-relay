@@ -261,8 +261,9 @@ async def serve(
     try:
         done, _ = await asyncio.wait([waiter, *tasks], return_when=asyncio.FIRST_COMPLETED)
         for task in done:
-            if task is not waiter and task.exception() is not None:
-                log.error(f"{task.get_name()} stopped: {task.exception()}")
+            exc = task.exception() if task is not waiter else None
+            if exc is not None:
+                log.error(f"{task.get_name()} stopped: {type(exc).__name__}: {exc}", exc_info=exc)
     finally:
         waiter.cancel()
         announce.cancel()

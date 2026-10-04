@@ -178,7 +178,11 @@ class WebexWsClient:
         if verb == "update" and self._share_id is not None:
             activity_id, self._share_id = self._share_id, None
         url = conversation_url.replace(f"conversations/{conversation_id}", f"{kind}/{activity_id}")
-        response = await self._http.get(url)
+        try:
+            response = await self._http.get(url)
+        except httpx.HTTPError as exc:
+            log.warning(f"could not resolve activity {activity_id}: {type(exc).__name__}; left to catch-up")
+            return None
         if response.status_code >= 400:
             log.warning(f"could not resolve activity {activity_id}: HTTP {response.status_code}")
             return None
@@ -240,23 +244,33 @@ class WebexWsClient:
             log.info("Webex websocket connected")
             try:
                 if self._on_connected is not None:
-                    await self._on_connected()
+                    try:
+                        await self._on_connected()
+                    except Exception:
+                        log.exception("catch-up after connecting failed; listening anyway")
                 while True:
                     await self.handle_frame(ws, await ws.recv())
             finally:
                 self.connected = False
 
     async def run(self) -> None:
-        """Connect and listen forever, reconnecting with exponential backoff."""
-        await self.cleanup_stale_devices()
-        device = await self.register_device()
+        """Connect and listen forever, reconnecting with exponential backoff.
+
+        Network failures, including HTTP calls to Webex, are retried; a rejected token is not.
+        """
+        device: dict[str, JsonValue] | None = None
+        cleaned = False
         delay = self._backoff_min
         not_found = 0
         while True:
-            url = cast(str, device["webSocketUrl"])
             before = self.connections
             try:
-                await self._listen(url)
+                if not cleaned:
+                    await self.cleanup_stale_devices()
+                    cleaned = True
+                if device is None:
+                    device = await self.register_device()
+                await self._listen(cast(str, device["webSocketUrl"]))
             except asyncio.CancelledError:
                 raise
             except InvalidStatus as exc:
@@ -267,8 +281,8 @@ class WebexWsClient:
                     not_found += 1
                     if not_found > MAX_404_RETRIES:
                         raise DeviceError("device registration keeps returning 404") from exc
-                    device = await self.register_device()
-            except (ConnectionClosed, OSError, socket.gaierror) as exc:
+                    device = None
+            except (ConnectionClosed, OSError, socket.gaierror, httpx.HTTPError) as exc:
                 self.last_error = f"websocket dropped ({type(exc).__name__})"
                 log.warning(f"{self.last_error}; reconnecting in {delay:.0f}s")
             if self.connections > before:

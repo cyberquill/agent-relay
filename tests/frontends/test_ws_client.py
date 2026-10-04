@@ -149,6 +149,56 @@ async def test_bad_token_is_reported() -> None:
             await client.run()
 
 
+async def test_waking_from_sleep_retries_http_failures_instead_of_stopping() -> None:
+    """After a sleep the network comes back in pieces: none of these may end the client."""
+    webex = FakeWebex()
+    inner = webex.transport()
+    first_u2c, first_lookup = [True], [True]
+
+    async def flaky(request: httpx.Request) -> httpx.Response:
+        if request.url.host == "u2c.fake" and first_u2c[0]:
+            first_u2c[0] = False
+            raise httpx.ConnectError("no route to host", request=request)
+        if request.url.host == "conv.fake" and first_lookup[0]:
+            first_lookup[0] = False
+            raise httpx.ReadTimeout("", request=request)
+        return await inner.handle_async_request(request)
+
+    lost, kept = webex.user_says("lost"), webex.user_says("kept")
+    frames = [json.dumps(webex.activity_for(lost)), json.dumps(webex.activity_for(kept))]
+    mercury = Mercury([FakeSocket(frames, ConnectionClosedError(None, None))])
+    seen: list[Activity] = []
+    delays: list[float] = []
+
+    async def on_activity(activity: Activity) -> None:
+        seen.append(activity)
+
+    async def on_connected() -> None:
+        raise httpx.ReadTimeout("")
+
+    async def sleep(d: float) -> None:
+        delays.append(d)
+        if len(delays) >= 2:
+            raise Stop
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(flaky)) as http:
+        client = WebexWsClient(
+            "tok",
+            http,
+            U2C,
+            on_activity,
+            on_connected,
+            connector=mercury.connect,
+            sleep=sleep,
+            backoff=(1, 8),
+        )
+        with pytest.raises(Stop):
+            await client.run()
+    assert client.connections == 1
+    assert seen == [Activity("post", kept)]
+    assert delays == [1, 1]
+
+
 async def test_catch_up_after_reconnect_processes_missed_messages_exactly_once(relay: Relay) -> None:
     webex = relay.webex
     first = webex.user_says("/help")
