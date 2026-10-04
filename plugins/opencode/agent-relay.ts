@@ -1,5 +1,7 @@
 // agent-relay OpenCode plugin: forwards tool calls to relayd for phone approval while away mode
 // is on, and registers this OpenCode server with the relay. Fails open when relayd is down.
+// OpenCode calls every exported function of a plugin file as a plugin, so only the plugin itself is
+// exported; the helpers ride on it as properties for the tests.
 import { connect } from "node:net";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -7,20 +9,20 @@ import { join } from "node:path";
 type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
 type Reply = { stdout?: Json; exit?: number };
 
-export function socketPath(env: Record<string, string | undefined> = process.env): string {
+function socketPath(env: Record<string, string | undefined> = process.env): string {
   if (env.RELAY_SOCKET) return env.RELAY_SOCKET;
   const home = env.RELAY_HOME ?? homedir();
   return join(home, "Library", "Application Support", "agent-relay", "relay.sock");
 }
 
-export function encodeFrame(message: Json): Buffer {
+function encodeFrame(message: Json): Buffer {
   const body = Buffer.from(JSON.stringify(message), "utf8");
   const header = Buffer.alloc(4);
   header.writeUInt32BE(body.length, 0);
   return Buffer.concat([header, body]);
 }
 
-export function request(message: Json, sock: string = socketPath(), connectTimeoutMs = 200): Promise<Reply | null> {
+function request(message: Json, sock: string = socketPath(), connectTimeoutMs = 200): Promise<Reply | null> {
   return new Promise((resolve) => {
     let settled = false;
     let buffer = Buffer.alloc(0);
@@ -53,11 +55,11 @@ export function request(message: Json, sock: string = socketPath(), connectTimeo
   });
 }
 
-export function hook(event: string, payload: { [key: string]: Json }, sock?: string): Promise<Reply | null> {
+function hook(event: string, payload: { [key: string]: Json }, sock?: string): Promise<Reply | null> {
   return request({ op: "hook", harness: "opencode", event, payload }, sock);
 }
 
-export function decisionOf(reply: Reply | null): { allow: boolean; reason: string } {
+function decisionOf(reply: Reply | null): { allow: boolean; reason: string } {
   const out = reply?.stdout;
   if (out && typeof out === "object" && !Array.isArray(out) && out.decision === "deny") {
     const reason = typeof out.reason === "string" ? out.reason : "Denied from the phone";
@@ -70,7 +72,7 @@ type PluginInput = { directory?: string; worktree?: string; serverUrl?: URL | st
 type ToolInput = { tool: string; sessionID: string; callID: string };
 type ToolOutput = { args?: Json; title?: string; output?: string };
 
-export const AgentRelay = async (input: PluginInput) => {
+async function agentRelay(input: PluginInput) {
   const directory = input.directory ?? input.worktree ?? process.cwd();
   const serverUrl = input.serverUrl ? String(input.serverUrl) : "";
   await hook("plugin.register", { directory, serverUrl, pid: process.pid });
@@ -96,6 +98,7 @@ export const AgentRelay = async (input: PluginInput) => {
       });
     },
   };
-};
+}
 
+export const AgentRelay = Object.assign(agentRelay, { socketPath, encodeFrame, request, hook, decisionOf });
 export default AgentRelay;

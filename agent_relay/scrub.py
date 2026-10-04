@@ -7,7 +7,7 @@ from collections.abc import Mapping, Sequence
 
 REDACTED = "<redacted>"
 
-_SECRET_KEY = re.compile(r"(token|secret|password|passwd|api[_-]?key|authorization|cookie|tkn)", re.I)
+_SECRET_KEY = re.compile(r"(token|secret|password|passwd|api[_-]?key|authorization|cookie|tkn|^key$)", re.I)
 
 _PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----", re.S),
@@ -21,12 +21,13 @@ _PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"\b[sp]k_(?:live|test)_[0-9A-Za-z]{16,}"),
     re.compile(r"\bxox[abprs]-[0-9A-Za-z-]{10,}"),
     re.compile(r"\bsk-[A-Za-z0-9_-]{20,}"),
+    re.compile(r"\bhf_[A-Za-z0-9]{30,}"),
     re.compile(r"[A-Za-z0-9]{40,}_[A-Z0-9]{4}_[0-9a-f-]{36}"),
 )
 
 _KEY_VALUE = re.compile(
     r"""(?ix)
-    (?P<key>["']?[\w.-]*(?:token|secret|password|passwd|api[_-]?key|tkn)[\w.-]*["']?)
+    (?P<key>["']?[\w.-]*(?:token|secret|password|passwd|api[_-]?key|tkn)[\w.-]*["']?|"key")
     (?P<sep>\s*[:=]\s*)
     (?P<quote>["']?)
     (?P<value>[^"'\s,&}]{4,})

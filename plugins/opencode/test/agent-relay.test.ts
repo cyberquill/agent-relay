@@ -4,7 +4,10 @@ import { createServer, type Server, type Socket } from "node:net";
 import { join } from "node:path";
 import { after, before, beforeEach, describe, test } from "node:test";
 
-import { AgentRelay, decisionOf, encodeFrame, request, socketPath } from "../agent-relay.ts";
+import * as plugin from "../agent-relay.ts";
+import { AgentRelay } from "../agent-relay.ts";
+
+const { decisionOf, encodeFrame, request, socketPath } = AgentRelay;
 
 type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
 type Frame = { [key: string]: Json };
@@ -86,6 +89,12 @@ describe("decisionOf", () => {
 });
 
 describe("plugin", () => {
+  test("exports nothing but the plugin, since OpenCode runs every exported function as one", () => {
+    const exported = Object.values(plugin);
+    assert.ok(exported.length > 0);
+    for (const value of exported) assert.equal(value, AgentRelay);
+  });
+
   test("registers the server on load", async () => {
     await AgentRelay({ directory: "/w/proj", serverUrl: new URL("http://127.0.0.1:4096") });
     assert.equal(received[0]?.event, "plugin.register");

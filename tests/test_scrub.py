@@ -24,6 +24,7 @@ SECRETS = [
     "eyJhbGciOiJIUzI1NiJ9." + "eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U",
     _FAKE_WEBEX,
     "4f9K2mQ7xR1tB8nV3cZ6wL0pY5hJ2gD9sA7eU4iO",
+    "hf_" + "abcdefghijklmnopqrstuvwxyzabcdefgh",
 ]
 
 CONTEXTS = [
@@ -60,6 +61,17 @@ def test_private_key_block() -> None:
 def test_ordinary_text_untouched() -> None:
     text = "Ran `uv run tox` in /Users/dev/Desktop/Repository/agent-relay at commit 5f2a9c1e0b7d4a3f8e6c"
     assert scrub_text(text) == text
+
+
+def test_opencode_provider_keys_are_redacted() -> None:
+    """OpenCode's `/config/providers` returns each provider's API key under a bare `key` field."""
+    body = '{"id":"acme","source":"env","key":"plainlowercasekey","models":{}}'
+    assert "plainlowercasekey" not in scrub_text(body)
+    assert scrub_obj({"id": "acme", "key": "plainlowercasekey", "session_key": "s1"}) == {
+        "id": "acme",
+        "key": REDACTED,
+        "session_key": "s1",
+    }
 
 
 def test_scrub_obj_redacts_secret_keys() -> None:
