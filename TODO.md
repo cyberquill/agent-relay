@@ -1,17 +1,20 @@
 # agent-relay: status and what's left
 
-Last updated 2026-10-04 02:45, at commit `f2454cb` plus the commit that adds this file.
+Last updated 2026-10-04, after commit `f8f5c4f` and the commit that adds the user guide.
 The plan is [`docs/PLAN.md`](docs/PLAN.md). Departures are in [`docs/deviations.md`](docs/deviations.md)
-(D1–D65), and each acceptance criterion maps to its tests in [`docs/acceptance.md`](docs/acceptance.md).
+(D1–D69), and each acceptance criterion maps to its tests in [`docs/acceptance.md`](docs/acceptance.md).
+For users, start with [`docs/user-guide.md`](docs/user-guide.md).
 
 ## Where things stand
 
-- **Code:** checkpoints C0–C14 are built and committed. C15 (live verification) is in progress.
-- **Checks:** `uv run tox` is green: format, lint, mypy `--strict`, pytest (624 passed, 6 skipped live
+- **Code:** checkpoints C0–C14 are built and committed. C15 (live verification) is nearly done: every
+  app the phone can drive has passed the live smoke test.
+- **Checks:** `uv run tox` is green: format, lint, mypy `--strict`, pytest (641 passed, 6 skipped live
   tests) and `ts`.
-- **Install:** applied to the real home directory after gate G1. relayd runs under launchd,
-  `relay doctor` reports 0 failing, away mode is **off** everywhere, and the Webex bot is connected.
-- **Live smoke test:** VS Code Local is the only app run so far, and 5 of its 6 steps pass (see below).
+- **Install:** applied to the real home directory after gate G1 and re-applied after D69. relayd runs
+  under launchd, `relay doctor` reports 0 failing, and the Webex bot is connected.
+- **Live tests:** AC-16 (Agent Host sessions), AC-20 (OpenCode) and AC-22 (Cursor CLI) pass on the real
+  apps. AC-24 (Cursor CDP self-test) is still open.
 
 ## Done
 
@@ -24,7 +27,7 @@ The plan is [`docs/PLAN.md`](docs/PLAN.md). Departures are in [`docs/deviations.
 | relay-mcp | `notify_phone`, `ask_phone` |
 | Skills | `agent-relay-away` (`/away`, `/back`), the `stepping-away` patch, plugin bundles |
 | relay CLI | `install`/`uninstall`, `start`/`stop`, `status`, `doctor`, `ws`, `away`, `config`, `skills dedupe`, `selftest`, update handling |
-| Docs | README quick start, operations guide, security model, acceptance map, deviations, spikes |
+| Docs | README quick start, user guide, operations guide, security model, acceptance map, deviations, spikes |
 
 ## Bugs found by live testing (all fixed, tested and committed)
 
@@ -36,38 +39,51 @@ The plan is [`docs/PLAN.md`](docs/PLAN.md). Departures are in [`docs/deviations.
 | `9ba5871` | "Parked" was posted with away mode off; a bare `/away` only reported the state | D63 |
 | `f5e4147` | Turning away mode off left desk approvals waiting for the phone until their 10-minute deadline | D64 |
 | `f2454cb` | `/back` inside a thread was refused for every app ("does not support parking") | D65 |
+| `e452caa` | An HTTP failure in the Webex websocket client stopped relayd instead of retrying | D66 |
+| `98ee590` | A phone-started Agent Host session got a duplicate Copilot CLI session and a split thread | D67 |
+| `5c4c802` | The Copilot CLI process's `SessionEnd` posted "Released (session ended)" for a live Agent Host session | D67 |
+| `7065437` | Cursor CLI tool lines showed raw JSON for a single argument | D68 |
+| `99dd699` | With relayd unreachable, OpenCode called the plugin's helper exports as plugins and returned HTTP 500 | D69 |
+| `024489b` | `relay start` right after `relay stop` failed with launchd error 37 | D55 |
+| `f8f5c4f` | `relay install --apply` failed with launchd error 5 and left relayd and OpenCode unloaded | D55 |
+| `86f0e53` | The smoke script expected OpenCode and the Cursor CLI to park; they go idle and wake (D11) | D57 |
 
-## Live smoke results so far
+## Live smoke results
 
-VS Code Local, run 2026-10-04 02:33–02:42, driven from Webex:
+All recorded in [`docs/operations.md`](docs/operations.md#the-live-smoke-test), driven from Webex on
+2026-10-04:
 
-| Step | Result | Evidence |
-|---|---|---|
-| register | ✅ | `vscode_local:phone-bd4de31822a74056ab31d8d9d7f216df` |
-| stream | ✅ | the tool step streamed into the thread |
-| approve | ✅ | the card arrived; Allow ran `echo relay-smoke`; "OK" came back |
-| park | ✅ | `/away` in the thread, then a thread prompt; relayd showed `parked` |
-| reply | ✅ | "📨 delivered to the parked session", then "PONG" |
-| back | ❌ | "does not support parking", fixed in `f2454cb` after this run; needs a re-run |
+| App | Result |
+|---|---|
+| VS Code Local | ✅ register, stream, approve, park, reply, back |
+| VS Code Copilot (Agent Host) | ✅ register, stream, approve, park, reply, back |
+| OpenCode | ✅ register, stream, approve, idle, wake |
+| Cursor CLI | ✅ register, stream, approve, idle, wake |
+| Cursor IDE (hooks and parking) | not run yet; needs a person at the desk |
 
 ## What's left
 
-### 1. Finish the live smoke test (C15)
+### 1. Needs a person at the Mac
 
-- [ ] Re-run VS Code Local in full on the fixed relayd (relayd was restarted on `f2454cb`).
-- [ ] VS Code Copilot (`--only vscode_copilot`).
-- [ ] OpenCode (`--only opencode`).
-- [ ] Cursor CLI (`--only cursor_cli`).
-- [ ] Cursor IDE, hooks and parking (`--only cursor`). The chat starts at the desk, so a person has
-      to type the prompt in Cursor.
-- [ ] Record every result in `docs/operations.md` (`--record`, or paste the table).
+- [ ] **Cursor IDE smoke** (`--only cursor`). Start the script, then type its prompt in a Cursor chat
+      opened on `.scratch`; the phone steps are driven from Webex as before.
+- [ ] **G2, ask first:** the screen-locked test (S7). Get approval before locking the screen.
+- [ ] **AC-24 / D35:** `uv sync --frozen --extra cdp`, `relay config set cdp.enabled true`,
+      `relay start`, quit and relaunch Cursor with the debug port, then `relay selftest cursor-cdp`
+      with the chat pane open. Relaunching Cursor ends the Cursor chat that is driving the build.
+- [ ] **D61:** with away mode off, check that a command outside Cursor's allowlist still prompts at
+      the desk.
+- [ ] **D25:** check that Cursor hooks carry the ACP `sessionId` for a phone-started Cursor CLI session
+      (relay.db shows no second `cursor` session for the same chat).
+- [ ] Tick the matching boxes in `docs/acceptance.md` and update D25, D35 and D61.
 
-How to drive it (see "The live smoke test" in `docs/operations.md`):
+How to drive a smoke run (see "The live smoke test" in `docs/operations.md`). Reset the answers file
+in its own command first; don't run it alongside the smoke run.
 
 ```bash
 cd ~/Desktop/Repository/Personal/agent-relay
 : > /tmp/smoke_answers
-(export RELAY_LIVE=1; tail -f /tmp/smoke_answers | uv run --frozen python -u scripts/smoke_live.py --only vscode_local --timeout 240 --record)
+(export RELAY_LIVE=1; tail -f /tmp/smoke_answers | uv run --frozen python -u scripts/smoke_live.py --only cursor --timeout 240 --record)
 # answer each y/n with: echo y >> /tmp/smoke_answers
 ```
 
@@ -75,39 +91,27 @@ cd ~/Desktop/Repository/Personal/agent-relay
   `webex_cli.py send --room <bot room> [--parent <thread root>] --markdown '…'`.
   Don't use the Webex MCP for this.
 - **Send `/away` as a reply inside the session's thread, never at the top level.** A top-level
-  `/away` turns away mode on for every workspace and gates the Cursor chat driving the test (this
-  happened once; see D64).
-- Card clicks: `/tmp/card_submit.py <message id> '<inputs json>'` is a throwaway helper outside the
-  repo and may be gone after a reboot. It posts an attachment action as the user via `webex_cli`.
-- Read an approval card's `request_id` from relay.db (read-only):
-  `sqlite3 ~/Library/Application\ Support/agent-relay/relay.db "select request_id from pending where status='open'"`.
+  `/away` turns away mode on for every workspace and gates the Cursor chat driving the test.
+- Away mode is currently **on for `.scratch`** from the smoke runs. Turn it off when done:
+  `uv run relay away off --workspace "$PWD/.scratch"`.
 
-### 2. Other live checks still open
-
-- [ ] **G2, ask first:** the screen-locked test (S7). Get approval before locking the screen.
-- [ ] **AC-16:** list sessions on the real editor host (`tests/live/test_ahp_live.py`).
-- [ ] **AC-22:** the Cursor CLI returns `OK` (`tests/live/test_cursor_cli_live.py`); `cursor-agent` is now logged in.
-- [ ] **AC-24 / D35:** `relay config set cdp.enabled true`, then `relay selftest cursor-cdp` with Cursor open.
-- [ ] **D18:** check that a Copilot CLI hook session is refined into a VS Code Copilot session.
-- [ ] **D25:** check that Cursor hooks carry the ACP `sessionId` for a phone-started Cursor CLI session.
-- [ ] **D61:** with away mode off, check that a command outside Cursor's allowlist still prompts at the desk.
-- [ ] Tick the matching boxes in `docs/acceptance.md` and update D18, D25, D35 and D61.
-
-### 3. Definition of Done (PLAN §9)
+### 2. Definition of Done (PLAN §9)
 
 - [ ] Every checkpoint C0–C15 committed with `uv run tox` green, including `ts`.
-- [ ] AC-1 to AC-40 all ticked in `docs/acceptance.md`.
+- [ ] AC-1 to AC-40 all ticked in `docs/acceptance.md` (AC-24 is the one open live criterion).
 - [ ] `docs/spikes.md` complete; `docs/deviations.md` lists every departure.
 - [x] No stubs or TODOs (`test_no_stubs` passes).
 - [x] `relay doctor` all green after G1.
-- [ ] Live smoke works for VS Code Local, VS Code Copilot, OpenCode, the Cursor IDE and the Cursor CLI.
+- [ ] Live smoke works for every app: four of five pass; the Cursor IDE run is left.
 - [ ] The README quick start works from a clean `RELAY_HOME`.
 
-### 4. Smaller follow-ups noticed during testing
+### 3. Smaller follow-ups noticed during testing
 
 - [ ] The VS Code model card lists internal utility models (`copilot-utility`, `copilot-utility-small`,
       `copilot-dictation-cleanup-luna`) under the same labels as real models. Consider hiding them.
-- [ ] Leftover sessions from earlier runs (for example `vscode_local:phone-f5533e57…`) are still listed;
-      end them with `/stop` or let them age out.
-- [ ] Unexplained: tool calls failed for about 8 minutes around 01:55–02:03. relayd logged nothing
-      then, so the cause looks like Cursor, not relay. Watch for a repeat.
+- [ ] Leftover sessions from earlier smoke runs are still listed; end them with `/stop` or let them
+      age out.
+- [ ] Upstream: `cursor-agent` sometimes appends "Error: RetriableError: WritableIterable is closed"
+      to the reply of a woken turn. The reply itself is complete. Report it to Cursor if it persists.
+- [ ] The OpenCode provider config can print provider tokens in a terminal. The
+      scrubber now catches them (D69).

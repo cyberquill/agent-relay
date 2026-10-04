@@ -3,6 +3,9 @@
 Drive VS Code Copilot (Local and Copilot harnesses), Cursor and OpenCode on this Mac from an Android
 phone over a Webex 1:1 space. Sessions run in the same harness the desktop uses.
 
+New here? Start with the [user guide](docs/user-guide.md): what to prepare on the Mac, and how to use it
+from the phone.
+
 ## Quick start
 
 ```bash
@@ -42,6 +45,7 @@ Live tests run only with `RELAY_LIVE=1`; see [`docs/operations.md`](docs/operati
 
 ## Docs
 
+- [`docs/user-guide.md`](docs/user-guide.md): Mac preparation and day-to-day use, at a high level
 - [`docs/PLAN.md`](docs/PLAN.md): design and acceptance criteria
 - [`docs/operations.md`](docs/operations.md): install, daily use, every command
 - [`docs/security.md`](docs/security.md): threat model and controls
