@@ -318,3 +318,13 @@ hands the waiting approvals back to the desk.
 | OpenCode | approve | ✅ | human: y |
 | OpenCode | idle | ✅ | opencode:ses_efa3584c7ffe8OcQqD0xpE3otB idle |
 | OpenCode | reply | ✅ | human: y |
+
+### Live smoke 2026-10-04 07:23 UTC
+
+| App | Step | Result | Evidence |
+|---|---|---|---|
+| Cursor CLI | register | ✅ | cursor_cli:221381c9-a008-4f1a-afc5-50645d66fb3d |
+| Cursor CLI | stream | ✅ | human: y |
+| Cursor CLI | approve | ✅ | human: y |
+| Cursor CLI | idle | ✅ | cursor_cli:221381c9-a008-4f1a-afc5-50645d66fb3d idle |
+| Cursor CLI | reply | ✅ | human: y |
