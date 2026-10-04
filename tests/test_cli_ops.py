@@ -118,13 +118,21 @@ def test_status_renders_the_daemon_reply(monkeypatch: pytest.MonkeyPatch) -> Non
 
 
 class Launchctl:
-    def __init__(self, loaded: bool) -> None:
+    """`lingers`: how many `print` calls still find the service after a bootout, as launchd does."""
+
+    def __init__(self, loaded: bool, lingers: int = 0) -> None:
         self.loaded = loaded
+        self.lingers = lingers
         self.seen: list[list[str]] = []
 
     def __call__(self, argv: Sequence[str]) -> tuple[int, str]:
         self.seen.append(list(argv))
+        if argv[1] == "bootout":
+            self.loaded = False
         if argv[1] == "print" and not self.loaded:
+            if self.lingers > 0:
+                self.lingers -= 1
+                return 0, ""
             return 113, "Could not find service"
         return 0, ""
 
@@ -145,9 +153,19 @@ def test_start_bootstraps_when_unloaded_then_kickstarts() -> None:
     loaded = Launchctl(loaded=True)
     cli_daemon.start_daemon(loaded)
     assert [c[1] for c in loaded.seen] == ["print", "kickstart"]
-    stopping = Launchctl(loaded=True)
-    cli_daemon.stop_daemon(stopping)
+    stopping = Launchctl(loaded=True, lingers=2)
+    naps: list[float] = []
+    cli_daemon.stop_daemon(stopping, sleep=naps.append)
     assert stopping.seen[0][:2] == ["launchctl", "bootout"], "kill would be undone by KeepAlive"
+    assert [c[1] for c in stopping.seen] == ["bootout", "print", "print", "print"]
+    assert len(naps) == 2, "stop returns only once launchd has let go, so start can bootstrap"
+
+
+def test_stop_gives_up_waiting_with_a_note(capsys: pytest.CaptureFixture[str]) -> None:
+    stuck = Launchctl(loaded=True, lingers=10_000)
+    cli_daemon.stop_daemon(stuck, sleep=lambda _: None)
+    assert len(stuck.seen) == 1 + cli_daemon.STOP_POLLS
+    assert "give it a moment" in capsys.readouterr().err
 
 
 def test_cdp_selftest_refuses_while_the_adapter_is_off() -> None:
