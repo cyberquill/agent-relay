@@ -286,3 +286,14 @@ away mode on for every workspace, and every desk session with relay hooks then a
 each tool call. That includes the Cursor or VS Code chat you may be running the test from: its tools
 wait for the phone until away mode goes off again (`relay away off`, or `/away off` in Webex), which
 hands the waiting approvals back to the desk.
+
+### Live smoke 2026-10-04 06:55 UTC
+
+| App | Step | Result | Evidence |
+|---|---|---|---|
+| VS Code Local | register | ✅ | vscode_local:phone-6f3b92d31b1f41f2a34e8ef424aa0bd0 |
+| VS Code Local | stream | ✅ | human: y |
+| VS Code Local | approve | ✅ | human: y |
+| VS Code Local | park | ✅ | vscode_local:phone-6f3b92d31b1f41f2a34e8ef424aa0bd0 parked |
+| VS Code Local | reply | ✅ | human: y |
+| VS Code Local | back | ✅ | vscode_local:phone-6f3b92d31b1f41f2a34e8ef424aa0bd0 released |
