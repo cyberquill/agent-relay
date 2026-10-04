@@ -116,6 +116,23 @@ def test_map_update_covers_text_and_tools() -> None:
     assert m.map_update({"sessionUpdate": "tool_call"}) == []
 
 
+@pytest.mark.parametrize(
+    ("title", "raw", "detail"),
+    [
+        ("echo relay-smoke", {"command": "echo relay-smoke"}, ""),
+        ("Shell", {"command": "git push"}, "git push"),
+        ("Edit", {"path": "a.py", "old": "x"}, '{"path": "a.py", "old": "x"}'),
+        ("Run", {"count": 3}, '{"count": 3}'),
+    ],
+)
+def test_tool_detail_is_the_lone_argument_unless_it_repeats_the_title(
+    title: str, raw: JsonValue, detail: str
+) -> None:
+    update: Params = {"sessionUpdate": "tool_call", "toolCallId": "t", "title": title, "rawInput": raw}
+    assert m.map_update(update) == [m.ToolStart("t", title, detail)]
+    assert m.describe_permission({"toolCall": {"title": title, "rawInput": raw}}) == (title, detail)
+
+
 def test_pick_option_prefers_kinds_then_documented_ids() -> None:
     offered: JsonValue = [
         {"optionId": "yes", "kind": "allow_once"},

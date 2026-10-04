@@ -31,6 +31,17 @@ def _str(value: JsonValue, fallback: str = "") -> str:
     return value if isinstance(value, str) else fallback
 
 
+def _detail(raw: JsonValue, title: str) -> str:
+    """A tool's input for the phone: a lone string argument as itself (blank when it is the title)."""
+    if raw is None or raw == {}:
+        return ""
+    if isinstance(raw, dict) and len(raw) == 1:
+        (value,) = raw.values()
+        if isinstance(value, str):
+            return "" if value == title else _clip(value, DETAIL_CLIP)
+    return _clip(json.dumps(raw, default=str), DETAIL_CLIP)
+
+
 def _dicts(value: JsonValue) -> list[Params]:
     return [v for v in value if isinstance(v, dict)] if isinstance(value, list) else []
 
@@ -80,9 +91,7 @@ def map_update(update: Params) -> list[Mapped]:
     status = update.get("status")
     mapped: list[Mapped] = []
     if kind == "tool_call":
-        raw = update.get("rawInput")
-        detail = _clip(json.dumps(raw, default=str), DETAIL_CLIP) if raw not in (None, {}) else ""
-        mapped.append(ToolStart(tool_id, name, detail))
+        mapped.append(ToolStart(tool_id, name, _detail(update.get("rawInput"), name)))
     if kind in ("tool_call", "tool_call_update") and status in ("completed", "failed"):
         summary = _clip(_content_text(update.get("content")), DETAIL_CLIP)
         mapped.append(ToolEnd(tool_id, name, status == "completed", summary))
@@ -96,9 +105,7 @@ def describe_permission(params: Params) -> tuple[str, str]:
     call = params.get("toolCall")
     call = call if isinstance(call, dict) else {}
     tool = _str(call.get("title")) or _str(call.get("kind"), "tool")
-    raw = call.get("rawInput")
-    detail = _clip(json.dumps(raw, default=str), DETAIL_CLIP) if raw not in (None, {}) else ""
-    return tool, detail
+    return tool, _detail(call.get("rawInput"), tool)
 
 
 def pick_option(options: JsonValue, decision: Decision) -> str:

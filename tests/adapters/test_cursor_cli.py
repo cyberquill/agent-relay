@@ -250,7 +250,7 @@ async def test_permission_requests_are_answered_from_the_phone(
 ) -> None:
     await rig.start("use a tool")
     ask = await rig.asked(ApprovalRequested)
-    assert (ask.tool, ask.detail) == ("Run ls", '{"command": "ls"}')
+    assert (ask.tool, ask.detail) == ("Run ls", "ls")
     assert await rig.core.service.answer_approval(ask.request_id, decision)  # type: ignore[arg-type]
     (done,) = await rig.turns(1)
     assert done.text == f"tool {option}"
