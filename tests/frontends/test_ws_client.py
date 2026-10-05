@@ -119,6 +119,37 @@ async def test_404_refreshes_device_and_backoff_grows() -> None:
     assert delays == [1, 2, 1]
 
 
+async def test_a_drop_after_a_good_connection_logs_the_short_delay_it_will_use(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    webex = FakeWebex()
+    async with webex.client() as http:
+        mercury = Mercury(
+            [
+                ConnectionRefusedError(),
+                ConnectionRefusedError(),
+                FakeSocket([], ConnectionClosedError(None, None)),
+            ]
+        )
+        delays: list[float] = []
+
+        async def sleep(d: float) -> None:
+            delays.append(d)
+            if len(delays) >= 3:
+                raise Stop
+
+        async def on_activity(_: Activity) -> None:
+            return None
+
+        client = WebexWsClient(
+            "tok", http, U2C, on_activity, connector=mercury.connect, sleep=sleep, backoff=(1, 240)
+        )
+        with caplog.at_level("WARNING"), pytest.raises(Stop):
+            await client.run()
+    assert delays == [1, 2, 1]
+    assert [r.getMessage() for r in caplog.records][-1].endswith("reconnecting in 1s")
+
+
 async def test_repeated_404_gives_up() -> None:
     webex = FakeWebex()
     async with webex.client() as http:

@@ -66,7 +66,7 @@ All recorded in [`docs/operations.md`](docs/operations.md#the-live-smoke-test), 
 ### 1. Needs a person at the Mac
 
 - [x] **Cursor IDE smoke** (`--only cursor`): passed 2026-10-04 08:41 UTC.
-- [ ] **G2, ask first:** the screen-locked test (S7). Get approval before locking the screen.
+- [x] **G2 / S7:** the screen-locked test passed for all four phone-driven apps (see `docs/spikes.md`).
 - [ ] **AC-24 / D35:** `uv sync --frozen --extra cdp`, `relay config set cdp.enabled true`,
       `relay start`, quit and relaunch Cursor with the debug port, then `relay selftest cursor-cdp`
       with the chat pane open. Relaunching Cursor ends the Cursor chat that is driving the build.
@@ -92,8 +92,8 @@ cd ~/Desktop/Repository/Personal/agent-relay
   Don't use the Webex MCP for this.
 - **Send `/away` as a reply inside the session's thread, never at the top level.** A top-level
   `/away` turns away mode on for every workspace and gates the Cursor chat driving the test.
-- Away mode is **off** everywhere after the last smoke run. A run turns it on for `.scratch` from the
-  thread; turn it off afterwards with `uv run relay away off --workspace "$PWD/.scratch"`.
+- A smoke run that parks needs away mode on for `.scratch` first
+  (`uv run relay away on --workspace "$PWD/.scratch"`); turn it off afterwards with `away off`.
 
 ### 2. Definition of Done (PLAN §9)
 

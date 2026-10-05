@@ -283,6 +283,8 @@ class WebexWsClient:
                         raise DeviceError("device registration keeps returning 404") from exc
                     device = None
             except (ConnectionClosed, OSError, socket.gaierror, httpx.HTTPError) as exc:
+                if self.connections > before:
+                    delay = self._backoff_min
                 self.last_error = f"websocket dropped ({type(exc).__name__})"
                 log.warning(f"{self.last_error}; reconnecting in {delay:.0f}s")
             if self.connections > before:

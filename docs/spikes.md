@@ -11,7 +11,7 @@ Python 3.13.5. Tokens are redacted in every command below. Fixtures live under `
 | S4 | Not measured live | Park via `Stop` and also continue through `relay-bridge` (both built) |
 | S5 | Not measured live | Fallback as specified, plus "open the workspace first" |
 | S6 | Fuses allow it; live connect not attempted | CDP adapter ships disabled; `relay selftest cursor-cdp` gates it |
-| S7 | Runs at C15, after gate G2 | — |
+| S7 | **Yes**: all four phone-driven apps work with the screen locked | No lock-screen warning is needed |
 | S8 | **Imports, but unusable in an asyncio daemon** | Vendored async port of its websocket client |
 | S9 | **Both variants exist** | Implement both; choose at runtime from `/doc` |
 | S10 | **No**: `cursor-agent status` prints `Not logged in` | `doctor` prints `cursor-agent login`; the adapter reports "auth needed" |
@@ -93,6 +93,24 @@ Evidence: `RunAsNode Enabled`, `EnableNodeCliInspectArguments Enabled`; there is
 `--remote-debugging-port`, so the Chromium switch is not blocked. A live connect was not attempted:
 relaunching Cursor with the flag would end the running Cursor session. Path: the adapter ships disabled;
 `relay selftest cursor-cdp` checks every selector before it can be enabled, and `doctor` explains the state.
+
+## S7 — Does anything stop working with the screen locked?
+
+Run at C15 on 2026-10-05, after gate G2, with the screen locked from before the first session until after
+the last (the script checks the lock state through `ioreg` before each app and at its end).
+
+For each of VS Code Copilot (Agent Host and hooks), VS Code Local (relay-bridge extension and hooks),
+OpenCode and the Cursor CLI, a session was started from Webex and driven through the same steps as the
+live smoke test: stream, approval card, park or idle, reply, and `/back` for the parking apps. All
+passed with the screen locked. The relay-bridge extension, the Agent Host socket, the OpenCode server
+and the Cursor CLI all kept running.
+
+The first attempt did not start VS Code Copilot because the Mac briefly could not resolve DNS as the
+screen locked. That hit the test script's own Webex send; relayd's websocket dropped for two seconds
+and reconnected by itself. A repeat run with the screen locked from the start passed. A log line
+printed the wrong delay for that reconnect; it now prints the delay it uses.
+
+Path: nothing to build. `doctor` does not warn about a locked screen.
 
 ## S8 — `webex_bot` on Python 3.13
 

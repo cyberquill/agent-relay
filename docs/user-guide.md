@@ -133,8 +133,11 @@ relayd can only work while the Mac is awake and online.
   unless an external display, keyboard and power are connected.
 - **Waking up**: after sleep, relayd reconnects to Webex by itself and catches up on messages you sent
   in the meantime.
-- **Screen lock**: locking the screen should not stop anything, since relayd and the agents run in the
-  background. This is still to be confirmed live (see [TODO.md](../TODO.md)).
+- **Screen lock**: locking the screen does not stop anything. VS Code Copilot, VS Code Local, OpenCode
+  and the Cursor CLI all ran a full session from the phone with the screen locked (see
+  [spikes.md](spikes.md#s7--does-anything-stop-working-with-the-screen-locked)). Logging out of macOS is
+  different: it stops your apps and relayd with them. A brief network drop may happen as the screen
+  locks; relayd reconnects within seconds.
 - **Network**: the Mac needs to reach Webex (`webexapis.com` and `*.wbx2.com`). On VPN, check that Webex
   works in a browser.
 
@@ -174,16 +177,15 @@ you come back to the desk and turn away mode off, cards from desk sessions move 
 
 ### When a turn ends
 
-What happens when the agent finishes depends on the app:
+For a session started from the phone, a reply in its thread always works: when the turn has ended, the
+relay starts a new one with your message.
 
-- **VS Code (Copilot and Local) and the Cursor desktop app** *park* the finished turn: the thread shows
-  **🅿️ Parked**. Reply in the thread and the agent carries on with your message. `/back` in the thread
-  releases it without a reply. A parked turn is released by itself after 4 hours (`park.deadline_s`).
-- **OpenCode and the Cursor CLI** simply go idle. Reply in the thread whenever you like and the session
-  wakes up with your message.
-
-Phone-started sessions behave this way all the time. Sessions started at the desk do so only while
-away mode is on.
+With away mode on, VS Code (Copilot and Local) and the Cursor desktop app also *park* the finished turn:
+the thread shows **🅿️ Parked** and the agent's turn is held open, so your reply continues the same turn
+instead of starting a new one. This is what lets you answer a session you started **at the desk**,
+which the relay cannot start turns for. `/back` in the thread releases a parked turn without a reply,
+and a parked turn is released by itself after 4 hours (`park.deadline_s`). OpenCode and the Cursor CLI
+never park; they go idle and your reply wakes them.
 
 ### Other commands
 
