@@ -67,9 +67,17 @@ All recorded in [`docs/operations.md`](docs/operations.md#the-live-smoke-test), 
 
 - [x] **Cursor IDE smoke** (`--only cursor`): passed 2026-10-04 08:41 UTC.
 - [x] **G2 / S7:** the screen-locked test passed for all four phone-driven apps (see `docs/spikes.md`).
-- [ ] **AC-24 / D35:** `uv sync --frozen --extra cdp`, `relay config set cdp.enabled true`,
-      `relay start`, quit and relaunch Cursor with the debug port, then `relay selftest cursor-cdp`
-      with the chat pane open. Relaunching Cursor ends the Cursor chat that is driving the build.
+- [ ] **AC-24 / D35 (prepared, waiting for a Cursor relaunch):** the CDP extra is installed and
+      `cdp.enabled` is **true** in `~/.config/agent-relay/relay.toml`, so `relay doctor` shows one
+      failure ("Cursor is not running with the debug port") until this is done. To finish:
+      1. Quit Cursor completely (Cmd+Q). That ends the chat that drives this build.
+      2. In Terminal.app (not Cursor): `cd ~/Desktop/Repository/Personal/agent-relay`, then
+         `uv run relay selftest cursor-cdp`. It starts Cursor with the debug port on `127.0.0.1:9223`
+         when Cursor is closed. Open Cursor's chat pane and run it again if any selector is missing.
+      3. For the pytest form: `RELAY_LIVE=1 uv run pytest tests/live/test_cursor_cdp_live.py`.
+      4. Then reopen this agent chat in Cursor, tick AC-24 in `docs/acceptance.md`, and update D35.
+      If a selector fails, edit `agent_relay/adapters/cursor_cdp/selectors.json`, bump its `version`,
+      and re-run. To back out: `uv run relay config set cdp.enabled false` and `uv run relay start`.
 - [ ] **D61, partly done:** the A/B run showed no difference with and without the relay's hooks for
       commands Cursor auto-runs (see D61). Still to find: a command Cursor prompts for on its own (for
       example with sandboxed auto-run turned off), then confirm it still prompts with the hooks in place.
