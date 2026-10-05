@@ -47,9 +47,12 @@ function reply(prompt) {
   return {tokens: ["Echo: ", prompt], pace: 30};
 }
 
+// Cursor swaps the chat a moment after the click, so the old replies are still on the page at first.
+// Only what was there at the click leaves; anything sent into the new chat meanwhile stays.
 document.getElementById("new-chat").addEventListener("click", () => {
   finish();
-  conversations.replaceChildren();
+  const old = [...conversations.children];
+  setTimeout(() => old.forEach((node) => node.remove()), 150);
 });
 
 picker.addEventListener("click", () => {

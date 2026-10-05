@@ -134,6 +134,16 @@ async def test_follow_up_prompt_runs_a_new_turn(rig: Rig) -> None:
     assert completed[1].text == "Echo: second"
 
 
+async def test_a_new_chat_over_an_older_one_still_returns_its_reply(rig: Rig) -> None:
+    """Cursor swaps the chat a moment after the click; the old replies must not hide the new one."""
+    await rig.adapter.start_session(StartRequest(workspace=rig.workspace, prompt="first"))
+    await rig.recorder.wait_completed(1)
+    second = await rig.adapter.start_session(StartRequest(workspace=rig.workspace, prompt="second"))
+    completed = await rig.recorder.wait_completed(2)
+    assert completed[1].text == "Echo: second"
+    assert rig.recorder.deltas(second.session_key) == "Echo: second"
+
+
 async def test_steering_while_running_is_queued_and_sent_after_the_turn(rig: Rig) -> None:
     session = await rig.adapter.start_session(
         StartRequest(workspace=rig.workspace, prompt="Reply with exactly: OK")

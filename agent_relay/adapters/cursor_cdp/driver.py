@@ -13,6 +13,7 @@ from agent_relay.adapters.cursor_cdp.selectors import SelectorSet
 
 BINDING = "__relaySnapshot"
 MENU_TIMEOUT_MS = 3_000
+NEW_CHAT_WAIT_MS = 5_000
 SELFTEST_HINT = "run `relay selftest cursor-cdp`"
 
 OBSERVER_JS = """
@@ -120,7 +121,21 @@ class Composer:
         return self.locator(name).first
 
     async def new_chat(self) -> None:
+        """Opens a fresh chat and returns once the previous chat's replies are gone from the page.
+
+        Cursor swaps the chat a moment after the click. A baseline taken before that still counts the old
+        chat's replies, so the new reply would never look new and the phone would get an empty answer."""
         await press(await self._one("new_chat"))
+        try:
+            await self.page.wait_for_function(
+                "css => document.querySelectorAll(css).length === 0",
+                arg=self._selectors.css("assistant_message"),
+                timeout=NEW_CHAT_WAIT_MS,
+            )
+        except PlaywrightError:
+            raise AdapterUnavailableError(
+                f"Cursor's new chat still shows the previous replies; {SELFTEST_HINT}"
+            ) from None
 
     async def _open_menu(self) -> list[Locator]:
         await press(await self._one("model_picker"))
