@@ -5,14 +5,19 @@
 <title>fixture-ws — Cursor</title>
 </head>
 <body>
+<!-- Shaped after Cursor 3.23.12's chat pane (selectors v2): the header "New Agent" link, the model picker
+     button around its text span, and one send slot that turns into Stop while a turn runs. -->
 <div class="composer-pane">
-  <button aria-label="New Chat" id="new-chat">+</button>
+  <a class="action-label codicon codicon-add-two" role="button" id="new-chat"
+     aria-label="New Agent (⌘N)&#10;[⌥] Replace Agent">+</a>
   <div class="conversations"></div>
   <div class="composer-bar">
-    <div class="aislash-editor-input" contenteditable="true"></div>
-    <button class="composer-unified-dropdown-model" id="picker">Auto</button>
+    <div class="aislash-editor-input" contenteditable="true" role="textbox"></div>
+    <button type="button" id="picker"><span class="vscode-model-picker__trigger-text">Auto</span></button>
     <div id="menu" hidden></div>
-    <span id="actions"><button data-testid="composer-send-button" id="send">Send</button></span>
+    <div class="send-with-mode">
+      <div class="anysphere-icon-button" id="send"><span class="label">Send</span></div>
+    </div>
   </div>
 </div>
 <script>
@@ -20,17 +25,18 @@ const MODELS = ["Auto", "GPT-5", "Sonnet 4.5"];
 const conversations = document.querySelector(".conversations");
 const composer = document.querySelector(".aislash-editor-input");
 const picker = document.getElementById("picker");
+const pickerText = picker.querySelector(".vscode-model-picker__trigger-text");
 const menu = document.getElementById("menu");
-const actions = document.getElementById("actions");
+const sendButton = document.getElementById("send");
 window.__prompts = [];
 let timers = [];
 
-function stopButton() { return document.querySelector("[data-testid='composer-stop-button']"); }
+function stopIcon() { return sendButton.querySelector(".codicon-debug-stop"); }
 
 function finish() {
   timers.forEach(clearTimeout);
   timers = [];
-  const stop = stopButton();
+  const stop = stopIcon();
   if (stop) { stop.remove(); }
 }
 
@@ -51,7 +57,7 @@ picker.addEventListener("click", () => {
     const item = document.createElement("div");
     item.setAttribute("data-testid", "model-picker-item");
     item.textContent = label;
-    item.addEventListener("click", () => { picker.textContent = label; menu.hidden = true; });
+    item.addEventListener("click", () => { pickerText.textContent = label; menu.hidden = true; });
     return item;
   }));
   menu.hidden = false;
@@ -59,10 +65,11 @@ picker.addEventListener("click", () => {
 
 document.addEventListener("keydown", (event) => { if (event.key === "Escape") { menu.hidden = true; } });
 
-document.getElementById("send").addEventListener("click", () => {
+sendButton.addEventListener("click", () => {
+  if (stopIcon()) { finish(); return; }
   const prompt = composer.innerText.trim();
   composer.replaceChildren();
-  window.__prompts.push({prompt, model: picker.textContent});
+  window.__prompts.push({prompt, model: pickerText.textContent});
   const user = document.createElement("div");
   user.setAttribute("data-message-role", "human");
   user.textContent = prompt;
@@ -70,11 +77,10 @@ document.getElementById("send").addEventListener("click", () => {
   const ai = document.createElement("div");
   ai.setAttribute("data-message-role", "ai");
   conversations.append(ai);
-  const stop = document.createElement("button");
-  stop.setAttribute("data-testid", "composer-stop-button");
+  const stop = document.createElement("span");
+  stop.className = "codicon codicon-debug-stop";
   stop.textContent = "Stop";
-  stop.addEventListener("click", finish);
-  actions.append(stop);
+  sendButton.append(stop);
   const {tokens, pace} = reply(prompt);
   tokens.forEach((token, i) => {
     timers.push(setTimeout(() => { ai.textContent += token; }, pace * (i + 1)));

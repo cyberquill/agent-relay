@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "selectors": {
     "composer": {
       "css": "div.aislash-editor-input[contenteditable='true']",
@@ -7,22 +7,22 @@
       "purpose": "The chat composer input"
     },
     "send": {
-      "css": "[data-testid='composer-send-button'], .composer-send-button",
+      "css": ".send-with-mode .anysphere-icon-button",
       "required": true,
-      "purpose": "Sends the composer text"
+      "purpose": "Sends the composer text; the same button becomes Stop while a turn runs"
     },
     "stop": {
-      "css": "[data-testid='composer-stop-button'], .composer-stop-button",
+      "css": ".send-with-mode .codicon-debug-stop",
       "required": false,
       "purpose": "Stops the running turn; present only while a turn runs"
     },
     "new_chat": {
-      "css": "[aria-label='New Chat'], [aria-label^='New Chat ']",
+      "css": "a.codicon-add-two[aria-label^='New Agent']",
       "required": true,
       "purpose": "Opens a new chat in the composer"
     },
     "model_picker": {
-      "css": "[data-testid='composer-model-picker'], .composer-unified-dropdown-model",
+      "css": "button:has(> .vscode-model-picker__trigger-text)",
       "required": true,
       "purpose": "Opens the model menu"
     },

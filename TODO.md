@@ -67,23 +67,19 @@ All recorded in [`docs/operations.md`](docs/operations.md#the-live-smoke-test), 
 
 - [x] **Cursor IDE smoke** (`--only cursor`): passed 2026-10-04 08:41 UTC.
 - [x] **G2 / S7:** the screen-locked test passed for all four phone-driven apps (see `docs/spikes.md`).
-- [ ] **AC-24 / D35 (prepared, waiting for a Cursor relaunch):** the CDP extra is installed and
-      `cdp.enabled` is **true** in `~/.config/agent-relay/relay.toml`, so `relay doctor` shows one
-      failure ("Cursor is not running with the debug port") until this is done. To finish:
-      1. Quit Cursor completely (Cmd+Q). That ends the chat that drives this build.
-      2. In Terminal.app (not Cursor): `cd ~/Desktop/Repository/Personal/agent-relay`, then
-         `uv run relay selftest cursor-cdp`. It starts Cursor with the debug port on `127.0.0.1:9223`
-         when Cursor is closed. Open Cursor's chat pane and run it again if any selector is missing.
-      3. For the pytest form: `RELAY_LIVE=1 uv run pytest tests/live/test_cursor_cdp_live.py`.
-      4. Then reopen this agent chat in Cursor, tick AC-24 in `docs/acceptance.md`, and update D35.
-      If a selector fails, edit `agent_relay/adapters/cursor_cdp/selectors.json`, bump its `version`,
-      and re-run. To back out: `uv run relay config set cdp.enabled false` and `uv run relay start`.
+- [x] **AC-24 / D35:** the self-test passes on Cursor 3.23.12 with selectors v2 (the first run found
+      three stale selectors, now fixed). `cdp.enabled` is **true** in `~/.config/agent-relay/relay.toml`
+      and Cursor runs with the debug port.
+- [ ] **CDP, still unverified live (D35):** drive a real phone prompt through `/new cursor-ide scratch
+      "…"` once to confirm the send button click, the stop icon, and the reply capture work; and open
+      the model menu once to find the right `model_option` selector (`/models cursor-ide`). Re-run
+      `uv run relay selftest cursor-cdp` while Cursor is idle to check the idle send button.
 - [ ] **D61, partly done:** the A/B run showed no difference with and without the relay's hooks for
       commands Cursor auto-runs (see D61). Still to find: a command Cursor prompts for on its own (for
       example with sandboxed auto-run turned off), then confirm it still prompts with the hooks in place.
 - [x] **D25:** the Cursor CLI smoke produced no duplicate `cursor` hook session and one approval card
       (recorded in D25).
-- [ ] Tick the matching boxes in `docs/acceptance.md` and update D35 and D61.
+- [x] AC-24 is ticked in `docs/acceptance.md` and D35 is updated; D61 stays partly open (above).
 
 How to drive a smoke run (see "The live smoke test" in `docs/operations.md`). Reset the answers file
 in its own command first; don't run it alongside the smoke run.
@@ -106,7 +102,7 @@ cd ~/Desktop/Repository/Personal/agent-relay
 ### 2. Definition of Done (PLAN §9)
 
 - [ ] Every checkpoint C0–C15 committed with `uv run tox` green, including `ts`.
-- [ ] AC-1 to AC-40 all ticked in `docs/acceptance.md` (AC-24 is the one open live criterion).
+- [x] AC-1 to AC-40 all ticked in `docs/acceptance.md`.
 - [ ] `docs/spikes.md` complete; `docs/deviations.md` lists every departure.
 - [x] No stubs or TODOs (`test_no_stubs` passes).
 - [x] `relay doctor` all green after G1.

@@ -35,7 +35,7 @@ it waits for. Live tests run only with `RELAY_LIVE=1`.
 - [x] **AC-21** Cursor CLI contract test against a fake ACP agent — `tests/adapters/test_cursor_cli.py`
 - [x] **AC-22** Live: the Cursor CLI returns `OK` — `tests/live/test_cursor_cli_live.py` (passed at C15, 2026-10-04)
 - [x] **AC-23** Cursor CDP unit tests against a saved DOM fixture — `tests/adapters/test_cursor_cdp.py`
-- [ ] **AC-24** Live: the Cursor CDP self-test passes — `tests/live/test_cursor_cdp_live.py` (pending C15: `relay selftest cursor-cdp` with Cursor open)
+- [x] **AC-24** Live: the Cursor CDP self-test passes — `tests/live/test_cursor_cdp_live.py` (passed at C15, 2026-10-05, Cursor 3.23.12, selectors v2, after the first run found three stale selectors; see D35)
 
 ## Hooks, approvals and parking (C3, C5)
 
