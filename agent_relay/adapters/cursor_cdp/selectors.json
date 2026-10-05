@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "selectors": {
     "composer": {
       "css": "div.aislash-editor-input[contenteditable='true']",
@@ -27,7 +27,7 @@
       "purpose": "Opens the model menu"
     },
     "model_option": {
-      "css": "[data-testid='model-picker-item'], .composer-model-picker-item",
+      "css": "li[data-testid^='model-item-']",
       "required": false,
       "purpose": "One model in the open model menu"
     },

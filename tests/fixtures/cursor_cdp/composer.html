@@ -56,13 +56,18 @@ document.getElementById("new-chat").addEventListener("click", () => {
 });
 
 picker.addEventListener("click", () => {
+  const addModels = document.createElement("li");
+  addModels.setAttribute("role", "menuitem");
+  addModels.setAttribute("data-testid", "add-models");
+  addModels.textContent = "Add Models";
   menu.replaceChildren(...MODELS.map((label) => {
-    const item = document.createElement("div");
-    item.setAttribute("data-testid", "model-picker-item");
+    const item = document.createElement("li");
+    item.setAttribute("role", "menuitem");
+    item.setAttribute("data-testid", `model-item-${label.toLowerCase().replace(/\W+/g, "-")}`);
     item.textContent = label;
     item.addEventListener("click", () => { pickerText.textContent = label; menu.hidden = true; });
     return item;
-  }));
+  }), addModels);
   menu.hidden = false;
 });
 

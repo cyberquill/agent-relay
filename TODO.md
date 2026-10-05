@@ -70,10 +70,11 @@ All recorded in [`docs/operations.md`](docs/operations.md#the-live-smoke-test), 
 - [x] **AC-24 / D35:** the self-test passes on Cursor 3.23.12 with selectors v2 (the first run found
       three stale selectors, now fixed). `cdp.enabled` is **true** in `~/.config/agent-relay/relay.toml`
       and Cursor runs with the debug port.
-- [ ] **CDP, still unverified live (D35):** drive a real phone prompt through `/new cursor-ide scratch
-      "…"` once to confirm the send button click, the stop icon, and the reply capture work; and open
-      the model menu once to find the right `model_option` selector (`/models cursor-ide`). Re-run
-      `uv run relay selftest cursor-cdp` while Cursor is idle to check the idle send button.
+- [x] **CDP live (D35):** a real phone prompt and a follow-up both returned correct replies, and the
+      `model_option` selector is fixed (selectors v3, nine models found).
+- [ ] **CDP, still unverified live:** `/models cursor-ide` after the v3 fix, choosing a model with
+      `/new cursor-ide scratch "…" <model>`, and `/stop` on a running turn (one live session
+      creation is left of the three allowed).
 - [ ] **D61, partly done:** the A/B run showed no difference with and without the relay's hooks for
       commands Cursor auto-runs (see D61). Still to find: a command Cursor prompts for on its own (for
       example with sandboxed auto-run turned off), then confirm it still prompts with the hooks in place.
