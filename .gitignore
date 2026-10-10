@@ -12,3 +12,4 @@ dist/
 .env
 *.captured.json
 local_relay.toml
+sandbox/
