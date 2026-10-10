@@ -124,6 +124,8 @@ class RelayConfig(_Section):
 class Workspace(_Section):
     name: str
     path: str
+    # A multi-root `.code-workspace`; `path` is then its first folder, the cwd its hooks report.
+    file: str | None = None
 
 
 class WorkspacesConfig(_Section):

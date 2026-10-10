@@ -178,7 +178,12 @@ class RelayService:
             raise RelayError(f"Unknown workspace `{workspace}`. Try `/ws`.")
         chosen = model or await self.sticky_model(harness)
         record = await adapter.start_session(
-            StartRequest(workspace=str(paths.expand_user(target.path)), prompt=prompt, model=chosen)
+            StartRequest(
+                workspace=str(paths.expand_user(target.path)),
+                prompt=prompt,
+                model=chosen,
+                workspace_file=str(paths.expand_user(target.file)) if target.file else None,
+            )
         )
         stored = await self.registry.get_session(record.session_key)
         if stored is not None and stored.origin is Origin.PHONE:

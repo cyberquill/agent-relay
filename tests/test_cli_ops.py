@@ -89,6 +89,21 @@ def test_workspaces_add_list_and_remove(tmp_path: Path) -> None:
     assert runner.invoke(app, ["ws", "rm", "proj"]).exit_code == 1
 
 
+def test_workspaces_add_a_code_workspace_file(tmp_path: Path) -> None:
+    for name in ("a", "b"):
+        (tmp_path / name).mkdir()
+    file = tmp_path / "team.code-workspace"
+    file.write_text('{"folders": [{"path": "a"}, {"path": "b"}], // comment\n}')
+    assert runner.invoke(app, ["ws", "add", "team", str(file)]).exit_code == 0
+    [entry] = load_workspaces().workspaces
+    assert (entry.path, entry.file) == (str((tmp_path / "a").resolve()), str(file.resolve()))
+    assert f"team\t{file.resolve()}" in runner.invoke(app, ["ws", "list"]).output
+    gone = tmp_path / "gone.code-workspace"
+    gone.write_text('{"folders": [{"path": "missing"}]}')
+    result = runner.invoke(app, ["ws", "add", "gone", str(gone)])
+    assert result.exit_code == 1 and "is not a directory" in result.output
+
+
 def test_away_without_relayd_points_at_relay_start() -> None:
     result = runner.invoke(app, ["away", "on"])
     assert result.exit_code == 1

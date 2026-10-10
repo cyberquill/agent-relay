@@ -28,6 +28,7 @@ from agent_relay.log import get_logger
 from agent_relay.models.capabilities import Capabilities
 from agent_relay.models.events import ErrorEvent, Harness, Origin
 from agent_relay.models.sessions import SessionRecord, SessionStatus
+from agent_relay.settings import code_workspace_folders
 
 log = get_logger(__name__)
 
@@ -130,10 +131,11 @@ class VsCodeLocalAdapter(Adapter):
 
     async def start_session(self, request: StartRequest) -> SessionRecord:
         workspace = request.workspace
-        window = self._hub.window_for(workspace)
+        find = self._finder(request)
+        window = find()
         if window is None:
-            await self._open_workspace(workspace)
-            window = await self._hub.wait_for_window(workspace, self._open_timeout)
+            await self._open_workspace(request.workspace_file or workspace, Path(workspace))
+            window = await self._hub.wait_for(find, self._open_timeout)
         local_id = uuid.uuid4().hex
         session_key = f"{self.harness.value}:phone-{local_id}"
         extra = {WINDOW_KEY: window.window_id, VIA_KEY: VIA_BRIDGE} if window else {VIA_KEY: VIA_CLI}
@@ -190,6 +192,15 @@ class VsCodeLocalAdapter(Adapter):
 
     # helpers
 
+    def _finder(self, request: StartRequest) -> Callable[[], BridgeWindow | None]:
+        if request.workspace_file is None:
+            return lambda: self._hub.window_for(request.workspace)
+        try:
+            folders = code_workspace_folders(Path(request.workspace_file))
+        except ValueError as exc:
+            raise AdapterUnavailableError(str(exc)) from exc
+        return lambda: self._hub.window_holding(folders)
+
     def _window(self, session: SessionRecord) -> BridgeWindow | None:
         pinned = session.extra.get(WINDOW_KEY)
         if isinstance(pinned, str) and pinned in self._hub.windows:
@@ -217,12 +228,12 @@ class VsCodeLocalAdapter(Adapter):
         else:
             raise AdapterUnavailableError(NO_WINDOW)
 
-    async def _open_workspace(self, workspace: str) -> None:
+    async def _open_workspace(self, target: str, cwd: Path) -> None:
         if not self._cli.exists():
             raise AdapterUnavailableError(f"The VS Code CLI is missing at {self._cli}.")
-        code = await self._launch([str(self._cli), workspace], Path(workspace))
+        code = await self._launch([str(self._cli), target], cwd)
         if code != 0:
-            raise AdapterUnavailableError(f"`code {workspace}` exited with {code}")
+            raise AdapterUnavailableError(f"`code {target}` exited with {code}")
 
     async def _cli_chat(self, workspace: str, text: str, model: str | None) -> None:
         if not self._cli.exists():

@@ -9,6 +9,7 @@ from agent_relay.models.config import RelayConfig, Workspace, WorkspacesConfig
 from agent_relay.settings import (
     MissingSecretError,
     Secret,
+    code_workspace_folders,
     load_config,
     load_workspaces,
     require_secret,
@@ -57,3 +58,33 @@ def test_workspaces(relay_home: Path) -> None:
     assert resolve_workspace(str(repo), loaded) == loaded.workspaces[0]
     assert workspace_for_path(str(repo / "sub"), loaded) == loaded.workspaces[0]
     assert workspace_for_path("/elsewhere", loaded) is None
+
+
+def test_code_workspace_folders_resolve_against_the_file(tmp_path: Path) -> None:
+    file = tmp_path / "ws" / "team.code-workspace"
+    file.parent.mkdir()
+    file.write_text(
+        '{\n  // comment\n  "folders": [\n'
+        '    {"name": "a", "path": "../a"}, {"path": "/abs/b"}, {"name": "no-path"},\n  ],\n}'
+    )
+    assert code_workspace_folders(file) == [(tmp_path / "a").resolve(), Path("/abs/b").resolve()]
+
+
+@pytest.mark.parametrize("body", ['{"folders": []}', '{"settings": {}}', "not json"])
+def test_code_workspace_without_folders_is_rejected(tmp_path: Path, body: str) -> None:
+    file = tmp_path / "x.code-workspace"
+    file.write_text(body)
+    with pytest.raises(ValueError):
+        code_workspace_folders(file)
+
+
+def test_workspace_file_roundtrips_and_is_omitted_when_unset() -> None:
+    ws = WorkspacesConfig(
+        workspaces=[
+            Workspace(name="multi", path="/w/a", file="/w/m.code-workspace"),
+            Workspace(name="one", path="/w/b"),
+        ]
+    )
+    saved = save_workspaces(ws)
+    assert load_workspaces() == ws
+    assert saved.read_text().count("file") == 1

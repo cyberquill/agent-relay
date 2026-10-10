@@ -49,7 +49,7 @@ def _turn_replay() -> list[dict[str, JsonValue]]:
 class FakeAgentHost:
     socket_path: str
     token: str = "fake-connection-token"
-    protocol_version: str = "0.9.0"
+    protocol_version: str = "0.10.0"
     auto_reply: bool = True
     sessions: dict[str, dict[str, JsonValue]] = field(default_factory=dict)
     requests: list[tuple[str, dict[str, JsonValue]]] = field(default_factory=list)

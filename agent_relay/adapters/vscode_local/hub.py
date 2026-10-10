@@ -10,7 +10,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import itertools
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import cast
@@ -126,6 +126,12 @@ class BridgeHub:
     def any_window(self) -> BridgeWindow | None:
         return next(reversed(self.windows.values()), None)
 
+    def window_holding(self, folders: Sequence[Path]) -> BridgeWindow | None:
+        """The latest registered window that has every one of `folders` open (a multi-root workspace)."""
+        wanted = {normalize(str(f)) for f in folders}
+        held = [w for w in self.windows.values() if wanted <= set(w.folders)]
+        return held[-1] if held else None
+
     async def wait_for(
         self, predicate: Callable[[], BridgeWindow | None], timeout: float
     ) -> BridgeWindow | None:
@@ -133,9 +139,6 @@ class BridgeHub:
             with contextlib.suppress(TimeoutError):
                 await asyncio.wait_for(self._changed.wait_for(lambda: predicate() is not None), timeout)
             return predicate()
-
-    async def wait_for_window(self, workspace: str, timeout: float) -> BridgeWindow | None:
-        return await self.wait_for(lambda: self.window_for(workspace), timeout)
 
     async def _notify(self) -> None:
         async with self._changed:

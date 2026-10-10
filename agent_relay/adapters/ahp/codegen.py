@@ -20,7 +20,7 @@ from pathlib import Path
 
 from pydantic import JsonValue
 
-PROTOCOL_VERSION = "0.9.0"
+PROTOCOL_VERSION = "0.10.0"
 HERE = Path(__file__).resolve().parent
 SCHEMA_DIR = HERE / "schema" / PROTOCOL_VERSION
 OUTPUT = HERE / "models.py"

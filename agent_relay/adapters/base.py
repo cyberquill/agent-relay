@@ -40,6 +40,7 @@ class StartRequest(BaseModel):
     prompt: str
     model: str | None = None
     isolation: bool = False
+    workspace_file: str | None = None
 
 
 Decision = Literal["allow", "allow_session", "deny"]

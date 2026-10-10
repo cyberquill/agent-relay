@@ -241,6 +241,47 @@ async def test_start_falls_back_to_code_chat_without_the_extension(rig: Rig) -> 
     assert WINDOW_KEY not in record.extra
 
 
+MULTI = (WORKSPACE, "/w/two")
+
+
+def _multi_root(tmp_path: Path) -> Path:
+    file = tmp_path / "team.code-workspace"
+    file.write_text('{"folders": [{"path": "/w/proj"}, {"path": "/w/two"}], // comment\n}')
+    save_workspaces(WorkspacesConfig(workspaces=[Workspace(name="proj", path=WORKSPACE, file=str(file))]))
+    return file
+
+
+async def test_multi_root_start_picks_the_window_holding_every_folder(rig: Rig, tmp_path: Path) -> None:
+    _multi_root(tmp_path)
+    single = await rig.bridge("single", (WORKSPACE,))
+    multi = await rig.bridge("multi", MULTI)
+    await rig.bridge("later-single", (WORKSPACE,))
+    record = await rig.start()
+    assert record.extra[WINDOW_KEY] == "multi"
+    assert multi.commands() == ["start"] and single.commands() == []
+    assert rig.launcher.calls == []
+
+
+async def test_multi_root_start_opens_the_workspace_file(rig: Rig, tmp_path: Path) -> None:
+    file = _multi_root(tmp_path)
+    await rig.bridge("single", (WORKSPACE,))
+
+    async def open_window() -> None:
+        await rig.bridge("multi", MULTI)
+
+    rig.launcher.on_open = open_window
+    record = await rig.start()
+    assert rig.launcher.calls == [([str(rig.cli), str(file)], Path(WORKSPACE))]
+    assert record.extra[WINDOW_KEY] == "multi"
+
+
+async def test_multi_root_start_with_an_unreadable_file_fails(rig: Rig, tmp_path: Path) -> None:
+    _multi_root(tmp_path).unlink()
+    with pytest.raises(AdapterUnavailableError, match="cannot read"):
+        await rig.start()
+    assert rig.launcher.calls == []
+
+
 async def test_fallback_prompt_starting_with_a_dash_is_not_an_option(rig: Rig) -> None:
     await rig.start("--help me")
     argv, _ = rig.launcher.calls[-1]

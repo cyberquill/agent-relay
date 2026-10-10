@@ -18,7 +18,7 @@ from agent_relay.adapters.ahp.rpc import upgrade_uri
 SOCKET = "/var/folders/x/T/vscode-ah-1/abc.sock"
 
 
-def endpoints_doc(version: str = "0.9.0", kind: str = "socket") -> str:
+def endpoints_doc(version: str = "0.10.0", kind: str = "socket") -> str:
     return json.dumps(
         {
             "userDataPath": "/Users/dev/Library/Application Support/Code",
@@ -38,14 +38,14 @@ def endpoints_doc(version: str = "0.9.0", kind: str = "socket") -> str:
 
 def test_parse_endpoints_picks_the_socket() -> None:
     endpoint = parse_endpoints(endpoints_doc())
-    assert (endpoint.socket_path, endpoint.protocol_version, endpoint.pid) == (SOCKET, "0.9.0", 42)
+    assert (endpoint.socket_path, endpoint.protocol_version, endpoint.pid) == (SOCKET, "0.10.0", 42)
     assert endpoint.token == "tok/with+chars"
     assert "tok" not in repr(endpoint)
 
 
 def test_parse_endpoints_rejects_unsupported_versions_and_bad_output() -> None:
-    with pytest.raises(AhpUnavailableError, match=r"speaks AHP 0\.8\.0"):
-        parse_endpoints(endpoints_doc("0.8.0"))
+    with pytest.raises(AhpUnavailableError, match=r"speaks AHP 0\.9\.0"):
+        parse_endpoints(endpoints_doc("0.9.0"))
     with pytest.raises(AhpUnavailableError, match="not running an Agent Host"):
         parse_endpoints(endpoints_doc(kind="pipe"))
     with pytest.raises(AhpUnavailableError, match="did not print JSON"):

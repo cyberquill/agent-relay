@@ -123,7 +123,7 @@ class Handlers:
                 await self.reply(ctx, "\n".join(lines) or "No adapters are enabled.")
             case CommandName.WS:
                 spaces = svc.workspaces()
-                lines = [f"- **{w.name}** `{w.path}`" for w in spaces] or [
+                lines = [f"- **{w.name}** `{w.file or w.path}`" for w in spaces] or [
                     "No workspaces. Add them with `relay ws add <name> <path>`."
                 ]
                 await self.reply(ctx, "\n".join(lines))
@@ -195,7 +195,7 @@ class Handlers:
             if not spaces:
                 await self.reply(top, "No workspaces. Add one with `relay ws add <name> <path>`.")
                 return
-            choices = [(w.name, f"{w.name} · {w.path}") for w in spaces]
+            choices = [(w.name, f"{w.name} · {w.file or w.path}") for w in spaces]
             await self.card(
                 top, "Pick a workspace", cards.choose("ws", "Which workspace?", choices, _strip(carry))
             )

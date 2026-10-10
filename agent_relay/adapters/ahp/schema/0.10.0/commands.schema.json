@@ -88,7 +88,7 @@
           "items": {
             "type": "string"
           },
-          "description": "Protocol versions the client is willing to speak, ordered from most\npreferred to least preferred. Each entry is a [SemVer](https://semver.org)\n`MAJOR.MINOR.PATCH` string (e.g. `\"0.1.0\"`).\n\nThe server selects the highest offered SemVer within its supported\ncaret-compatible ranges and returns that exact entry as\n`InitializeResult.protocolVersion`.\nIf the server cannot speak any of the offered versions, it MUST return\nerror code `-32005` (`UnsupportedProtocolVersion`) with required\n`UnsupportedProtocolVersionErrorData` containing `supportedVersions`."
+          "description": "Protocol versions the client is willing to speak, ordered from most\npreferred to least preferred. Each entry is a [SemVer](https://semver.org)\n`MAJOR.MINOR.PATCH` string (e.g. `\"0.1.0\"`).\n\nThe server selects one entry and returns it as `InitializeResult.protocolVersion`.\nIf the server cannot speak any of the offered versions, it MUST return\nerror code `-32005` (`UnsupportedProtocolVersion`) with required\n`UnsupportedProtocolVersionErrorData` containing `supportedVersions`."
         },
         "clientId": {
           "type": "string",

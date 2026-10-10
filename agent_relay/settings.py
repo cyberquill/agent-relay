@@ -12,6 +12,9 @@ import tomli_w
 
 from agent_relay import paths
 from agent_relay.models.config import RelayConfig, Workspace, WorkspacesConfig
+from agent_relay.sync import jsonc
+
+CODE_WORKSPACE_SUFFIX = ".code-workspace"
 
 KEYCHAIN_SERVICE = "agent-relay"
 
@@ -83,8 +86,25 @@ def load_workspaces(file: Path | None = None) -> WorkspacesConfig:
 def save_workspaces(config: WorkspacesConfig, file: Path | None = None) -> Path:
     target = file or paths.workspaces_toml()
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(tomli_w.dumps(config.model_dump(mode="json")), encoding="utf-8")
+    target.write_text(tomli_w.dumps(config.model_dump(mode="json", exclude_none=True)), encoding="utf-8")
     return target
+
+
+def code_workspace_folders(file: Path) -> list[Path]:
+    """The folders of a VS Code `.code-workspace` file, resolved against the file's directory."""
+    try:
+        data = jsonc.loads(file.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise ValueError(f"cannot read {file}: {exc}") from exc
+    entries = data.get("folders") if isinstance(data, dict) else None
+    folders: list[Path] = []
+    for entry in entries if isinstance(entries, list) else []:
+        raw = entry.get("path") if isinstance(entry, dict) else None
+        if isinstance(raw, str):
+            folders.append((file.parent / paths.expand_user(raw)).resolve())
+    if not folders:
+        raise ValueError(f"{file} lists no folders")
+    return folders
 
 
 def resolve_workspace(name_or_path: str, workspaces: WorkspacesConfig) -> Workspace | None:

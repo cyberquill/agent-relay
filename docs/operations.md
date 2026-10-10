@@ -40,12 +40,18 @@ posts "Mac online" in the bot room with any sessions it recovered.
 
 ```bash
 relay ws add scratch ~/Desktop/Repository/Personal/agent-relay/.scratch
+relay ws add myapp ~/code/myapp.code-workspace
 relay ws list
 relay ws rm scratch
 relay config show
 relay config set cdp.enabled true          # values are JSON, else a string
 relay config set approvals.deadline_s 300
 ```
+
+A workspace is a folder or a multi-root `.code-workspace` file. For a file, VS Code Local chats go to the
+window that has every one of its folders open, and `code <file>` opens it when none does. The other
+harnesses, and the claim that links a phone chat to its hooks, use the file's first folder: that is the
+working directory VS Code reports for a multi-root window.
 
 A setting the config model rejects (an unknown key, a global auto-approve pattern such as `*`) leaves
 `relay.toml` unchanged. Restart relayd after changing a setting.
