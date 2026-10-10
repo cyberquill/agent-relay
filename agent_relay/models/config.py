@@ -62,7 +62,7 @@ class ParkConfig(_Section):
     deadline_s: int = Field(default=14_400, ge=60)
     slice_s: int = Field(default=1_500, ge=10)
     hook_timeout_margin_s: int = Field(default=120, ge=5)
-    local_max_continuations: int = Field(default=20, ge=1)
+    vscode_max_continuations: int = Field(default=20, ge=1)
     copilot_max_blocks: int = Field(default=8, ge=1)
 
     @model_validator(mode="after")
@@ -89,7 +89,7 @@ class OpenCodeConfig(_Section):
 
 class AdaptersConfig(_Section):
     ahp: bool = True
-    vscode_local: bool = True
+    vscode: bool = True
     opencode: bool = True
     cursor_cli: bool = True
 

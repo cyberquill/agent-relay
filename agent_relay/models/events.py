@@ -11,7 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 class Harness(StrEnum):
     VSCODE_COPILOT = "vscode_copilot"
-    VSCODE_LOCAL = "vscode_local"
+    VSCODE = "vscode"
     COPILOT_CLI = "copilot_cli"
     CURSOR = "cursor"
     CURSOR_CLI = "cursor_cli"

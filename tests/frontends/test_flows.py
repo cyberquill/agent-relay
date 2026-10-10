@@ -50,7 +50,7 @@ async def test_new_in_one_line_and_default_model(relay: Relay) -> None:
 
 
 async def test_new_takes_the_third_word_as_a_model_only_if_the_app_lists_it(relay: Relay) -> None:
-    """`/new local scratch Run the shell …` once started a chat with model `Run` (seen live)."""
+    """`/new vscode scratch Run the shell …` once started a chat with model `Run` (seen live)."""
     started = []
     for line in ("Run the tests now", "m2 fix it", "hello"):
         await relay.say(f"/new opencode proj {line}")

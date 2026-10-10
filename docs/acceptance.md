@@ -29,7 +29,7 @@ it waits for. Live tests run only with `RELAY_LIVE=1`.
 - [x] **AC-15** The AHP adapter turns replayed traces into the expected events — `tests/adapters/test_ahp.py`
 - [x] **AC-16** Live: list sessions on the real editor host — `tests/live/test_ahp_live.py` (passed at C15, 2026-10-04; the C15 smoke run of the Copilot harness is in docs/operations.md)
 - [x] **AC-17** relay-bridge protocol unit tests with a mocked `vscode` — `extensions/relay-bridge/test/bridge.test.ts`
-- [x] **AC-18** The vscode_local adapter against a fake bridge — `tests/adapters/test_vscode_local.py`
+- [x] **AC-18** The vscode adapter against a fake bridge — `tests/adapters/test_vscode.py`
 - [x] **AC-19** OpenCode contract test against a fake server with a recorded `/doc` and SSE — `tests/adapters/test_opencode.py`
 - [x] **AC-20** Live: an OpenCode session in `.scratch` streams `OK` and aborts — `tests/live/test_opencode_live.py` (run at C6, docs/spikes.md S9; re-run at C15 after D69)
 - [x] **AC-21** Cursor CLI contract test against a fake ACP agent — `tests/adapters/test_cursor_cli.py`

@@ -1,6 +1,6 @@
-"""`~/.copilot/hooks/agent-relay.json`: VS Code Local, the VS Code Copilot harness and Copilot CLI.
+"""`~/.copilot/hooks/agent-relay.json`: VS Code's own agent, the VS Code Copilot harness and Copilot CLI.
 
-Shared events use PascalCase (VS Code-compatible snake_case payloads, which Local understands).
+Shared events use PascalCase (VS Code-compatible snake_case payloads, which VS Code's own agent understands).
 Copilot-only events use their documented camelCase names.
 """
 
@@ -52,6 +52,6 @@ def plan(config: RelayConfig, python: str | None = None) -> list[PlannedWrite]:
         PlannedWrite(
             path=paths.copilot_dir() / "hooks" / "agent-relay.json",
             content=render_json(render(config, python)),
-            reason="relay-hook for VS Code Local, the Copilot harness and Copilot CLI",
+            reason="relay-hook for VS Code, the Copilot harness and Copilot CLI",
         )
     ]

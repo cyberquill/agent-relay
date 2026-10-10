@@ -1,1 +1,1 @@
-"""VS Code Local agent chats through the relay-bridge extension."""
+"""VS Code agent chats through the relay-bridge extension."""

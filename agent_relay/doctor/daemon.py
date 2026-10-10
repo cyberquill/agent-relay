@@ -17,7 +17,7 @@ from agent_relay.models.events import Harness
 
 ADAPTER_FIX: dict[Harness, str] = {
     Harness.VSCODE_COPILOT: "open VS Code with chat.agentHost.enabled on",
-    Harness.VSCODE_LOCAL: "open VS Code with the relay-bridge extension installed",
+    Harness.VSCODE: "open VS Code with the relay-bridge extension installed",
     Harness.CURSOR_CLI: "run `cursor-agent login`",
     Harness.CURSOR_CDP: "relay selftest cursor-cdp",
     Harness.OPENCODE: "load the opencode launch agent (relay install --apply)",

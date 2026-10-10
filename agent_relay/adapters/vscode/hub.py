@@ -103,7 +103,7 @@ def _str_list(value: object) -> list[str]:
 
 
 class BridgeHub:
-    """Registry of connected VS Code windows. Shared by the IPC server and the vscode_local adapter."""
+    """Registry of connected VS Code windows. Shared by the IPC server and the vscode adapter."""
 
     def __init__(self, call_timeout: float = CALL_TIMEOUT_S, max_events: int = 256) -> None:
         self.call_timeout = call_timeout

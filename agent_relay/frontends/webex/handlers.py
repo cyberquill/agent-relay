@@ -166,7 +166,7 @@ class Handlers:
                 await self.reply(ctx, await svc.panic())
 
     async def _is_model(self, app: str, word: str) -> bool:
-        """`/new local scratch Run tests` has no model: the third word is one only if the app lists it."""
+        """`/new vscode scratch Run tests` has no model: the third word is one only if the app lists it."""
         if word in (DEFAULT_MODEL, "default", "-"):
             return True
         adapter = self._service.router.adapter(resolve_app(app))

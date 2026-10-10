@@ -32,12 +32,10 @@ from agent_relay.settings import load_workspaces, resolve_workspace
 log = get_logger(__name__)
 
 APP_ALIASES: dict[str, Harness] = {
+    "vscode": Harness.VSCODE,
     "copilot": Harness.VSCODE_COPILOT,
-    "vscode": Harness.VSCODE_COPILOT,
     "vscode-copilot": Harness.VSCODE_COPILOT,
     "ahp": Harness.VSCODE_COPILOT,
-    "local": Harness.VSCODE_LOCAL,
-    "vscode-local": Harness.VSCODE_LOCAL,
     "copilot-cli": Harness.COPILOT_CLI,
     "cursor": Harness.CURSOR_CLI,
     "cursor-cli": Harness.CURSOR_CLI,
@@ -47,8 +45,8 @@ APP_ALIASES: dict[str, Harness] = {
     "oc": Harness.OPENCODE,
 }
 APP_LABELS: dict[Harness, str] = {
+    Harness.VSCODE: "VS Code",
     Harness.VSCODE_COPILOT: "VS Code · Copilot",
-    Harness.VSCODE_LOCAL: "VS Code · Local",
     Harness.COPILOT_CLI: "Copilot CLI",
     Harness.CURSOR: "Cursor IDE (hooks)",
     Harness.CURSOR_CLI: "Cursor CLI",

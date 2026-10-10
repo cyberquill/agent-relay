@@ -21,8 +21,8 @@ For users, start with [`docs/user-guide.md`](docs/user-guide.md).
 | Area | What exists |
 |---|---|
 | relayd | Router, SQLite registry, approvals with deadlines, parking, away-mode scopes, IPC socket, launchd agent, rotating logs |
-| relay-hook | Installed for Cursor, VS Code (Local and Copilot), Copilot CLI and OpenCode; fails open, and always answers Cursor with valid JSON (D61) |
-| Adapters | VS Code Local (relay-bridge extension), VS Code Copilot (Agent Host Protocol), OpenCode server, Cursor CLI (ACP), Cursor IDE over CDP (gated off by default) |
+| relay-hook | Installed for Cursor, VS Code (its own agent and Copilot), Copilot CLI and OpenCode; fails open, and always answers Cursor with valid JSON (D61) |
+| Adapters | VS Code (its own agent, through the relay-bridge extension), VS Code Copilot (Agent Host Protocol), OpenCode server, Cursor CLI (ACP), Cursor IDE over CDP (gated off by default) |
 | Front ends | Webex bot (websocket, Adaptive Cards, threads per session), optional PWA on loopback |
 | relay-mcp | `notify_phone`, `ask_phone` |
 | Skills | `agent-relay-away` (`/away`, `/back`), the `stepping-away` patch, plugin bundles |
@@ -55,7 +55,7 @@ All recorded in [`docs/operations.md`](docs/operations.md#the-live-smoke-test), 
 
 | App | Result |
 |---|---|
-| VS Code Local | ✅ register, stream, approve, park, reply, back |
+| VS Code (`vscode`) | ✅ register, stream, approve, park, reply, back |
 | VS Code Copilot (Agent Host) | ✅ register, stream, approve, park, reply, back |
 | OpenCode | ✅ register, stream, approve, idle, wake |
 | Cursor CLI | ✅ register, stream, approve, idle, wake |
@@ -88,7 +88,7 @@ in its own command first; don't run it alongside the smoke run.
 ```bash
 cd ~/Desktop/Repository/Personal/agent-relay
 : > /tmp/smoke_answers
-(export RELAY_LIVE=1; tail -f /tmp/smoke_answers | uv run --frozen python -u scripts/smoke_live.py --only vscode_local --timeout 240 --record)
+(export RELAY_LIVE=1; tail -f /tmp/smoke_answers | uv run --frozen python -u scripts/smoke_live.py --only vscode --timeout 240 --record)
 # answer each y/n with: echo y >> /tmp/smoke_answers
 ```
 
@@ -107,7 +107,7 @@ cd ~/Desktop/Repository/Personal/agent-relay
 - [ ] `docs/spikes.md` complete; `docs/deviations.md` lists every departure.
 - [x] No stubs or TODOs (`test_no_stubs` passes).
 - [x] `relay doctor` all green after G1.
-- [x] Live smoke works for VS Code Local, VS Code Copilot, OpenCode, the Cursor IDE and the Cursor CLI.
+- [x] Live smoke works for VS Code, VS Code Copilot, OpenCode, the Cursor IDE and the Cursor CLI.
 - [ ] The README quick start works from a clean `RELAY_HOME`.
 
 ### 3. Smaller follow-ups noticed during testing

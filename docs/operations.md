@@ -39,7 +39,7 @@ posts "Mac online" in the bot room with any sessions it recovered.
 ## Workspaces and settings
 
 ```bash
-relay ws add scratch ~/Desktop/Repository/Personal/agent-relay/.scratch
+relay ws add scratch ~/code/agent-relay/.scratch
 relay ws add myapp ~/code/myapp.code-workspace
 relay ws list
 relay ws rm scratch
@@ -48,7 +48,7 @@ relay config set cdp.enabled true          # values are JSON, else a string
 relay config set approvals.deadline_s 300
 ```
 
-A workspace is a folder or a multi-root `.code-workspace` file. For a file, VS Code Local chats go to the
+A workspace is a folder or a multi-root `.code-workspace` file. For a file, `vscode` chats go to the
 window that has every one of its folders open, and `code <file>` opens it when none does. The other
 harnesses, and the claim that links a phone chat to its hooks, use the file's first folder: that is the
 working directory VS Code reports for a multi-root window.
@@ -56,7 +56,7 @@ working directory VS Code reports for a multi-root window.
 A setting the config model rejects (an unknown key, a global auto-approve pattern such as `*`) leaves
 `relay.toml` unchanged. Restart relayd after changing a setting.
 
-## relay-bridge (VS Code Local chats)
+## relay-bridge (`vscode` chats)
 
 The `relay-bridge` extension runs in every VS Code window (`onStartupFinished`, `extensionKind: ui`)
 and keeps one connection to `relay.sock` (the `relayBridge.socketPath` setting, then `RELAY_SOCKET`,
@@ -72,7 +72,7 @@ Protocol (length-prefixed JSON frames, as for every IPC peer):
 | window → relayd | replies `{id, ok: true, result}` or `{id, ok: false, error}` |
 | window → relayd | events `{event: "folders", folders}`, `{event: "turn.done"}`, `{event: "error", message}` |
 
-Commands: `ping`, `models`, `start {query, model}` (new Local chat, agent mode), `prompt {query, model}`,
+Commands: `ping`, `models`, `start {query, model}` (new VS Code agent chat), `prompt {query, model}`,
 `cancel`, `acceptTool`, `skipTool`.
 
 Build and package:

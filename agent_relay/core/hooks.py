@@ -47,7 +47,7 @@ APPROVAL_KINDS = frozenset(
     {HookKind.PRE_TOOL, HookKind.PERMISSION, HookKind.SHELL_BEFORE, HookKind.MCP_BEFORE}
 )
 AFTER_KINDS = frozenset({HookKind.POST_TOOL, HookKind.SHELL_AFTER, HookKind.MCP_AFTER, HookKind.TOOL_FAILURE})
-COPILOT_FAMILY = (Harness.VSCODE_COPILOT, Harness.VSCODE_LOCAL, Harness.COPILOT_CLI)
+COPILOT_FAMILY = (Harness.VSCODE_COPILOT, Harness.VSCODE, Harness.COPILOT_CLI)
 CURSOR_FAMILY = (Harness.CURSOR, Harness.CURSOR_CLI)
 ACP_OWNED = frozenset({Harness.CURSOR_CLI})
 CURSOR_GATED = ("shell", "terminal", "mcp")
@@ -150,7 +150,7 @@ class HookService:
             return None
         if session.harness_id.startswith(UNCLAIMED_PREFIX):
             await self._registry.set_session_fields(session.session_key, harness_id=hook.session_id)
-            log.info(f"linked {session.session_key} to Local chat {hook.session_id}")
+            log.info(f"linked {session.session_key} to VS Code chat {hook.session_id}")
             return await self._registry.get_session(session.session_key)
         if session.harness is Harness.VSCODE_COPILOT:
             await link_alias(self._registry, hook.session_id, session.session_key)

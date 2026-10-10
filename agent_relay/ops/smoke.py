@@ -33,7 +33,7 @@ class SmokeApp:
 
 
 APPS: tuple[SmokeApp, ...] = (
-    SmokeApp(Harness.VSCODE_LOCAL, "VS Code Local", f'Phone: /new local {WORKSPACE} "{PROMPT}"'),
+    SmokeApp(Harness.VSCODE, "VS Code", f'Phone: /new vscode {WORKSPACE} "{PROMPT}"'),
     SmokeApp(
         Harness.VSCODE_COPILOT, "VS Code Copilot harness", f'Phone: /new copilot {WORKSPACE} "{PROMPT}"'
     ),

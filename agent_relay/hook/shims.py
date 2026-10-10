@@ -4,7 +4,7 @@ Formats handled:
 - Copilot family, camelCase (`sessionStart`, `agentStop`, `permissionRequest`, ...): Copilot CLI and
   the VS Code Copilot harness running on the Agent Host.
 - Copilot family, PascalCase with snake_case fields (`PreToolUse`, `Stop`, ...): the VS
-  Code-compatible format, which both the Copilot runtime and the VS Code Local harness send.
+  Code-compatible format, which both the Copilot runtime and the VS Code harness send.
 - Cursor (`preToolUse`, `stop`, `afterAgentResponse`, ...), snake_case fields.
 - OpenCode plugin events (`tool.execute.before`, `session.idle`, `plugin.register`, ...).
 """
@@ -186,14 +186,14 @@ def _workspace(payload: dict[str, JsonValue]) -> str | None:
 
 
 def _copilot_harness(event: str, kind: HookKind, payload: dict[str, JsonValue]) -> Harness:
-    """Local vs the Copilot runtime. The relay later refines COPILOT_CLI into VSCODE_COPILOT for
-    sessions it knows through the Agent Host."""
+    """VS Code's own agent vs the Copilot runtime. The relay later refines COPILOT_CLI into
+    VSCODE_COPILOT for sessions it knows through the Agent Host."""
     if event[:1].islower():
         return Harness.COPILOT_CLI
     if kind in (HookKind.PRE_TOOL, HookKind.POST_TOOL) and "tool_use_id" in payload:
-        return Harness.VSCODE_LOCAL
+        return Harness.VSCODE
     if kind == HookKind.STOP and "stop_reason" not in payload:
-        return Harness.VSCODE_LOCAL
+        return Harness.VSCODE
     return Harness.COPILOT_CLI
 
 

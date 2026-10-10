@@ -2,17 +2,17 @@
   {
     "event": "PreToolUse",
     "payload": {"hook_event_name": "PreToolUse", "session_id": "loc-1", "timestamp": "2026-10-03T10:00:00.000Z", "cwd": "/Users/dev/proj", "transcript_path": "/tmp/t.json", "tool_name": "run_in_terminal", "tool_input": {"command": "rm -rf build"}, "tool_use_id": "tu-1"},
-    "expect": {"kind": "pre_tool", "harness": "vscode_local", "format": "snake", "session_id": "loc-1", "tool_name": "run_in_terminal", "workspace": "/Users/dev/proj", "tool_use_id": "tu-1"}
+    "expect": {"kind": "pre_tool", "harness": "vscode", "format": "snake", "session_id": "loc-1", "tool_name": "run_in_terminal", "workspace": "/Users/dev/proj", "tool_use_id": "tu-1"}
   },
   {
     "event": "PostToolUse",
     "payload": {"hook_event_name": "PostToolUse", "session_id": "loc-1", "timestamp": "2026-10-03T10:00:01.000Z", "cwd": "/Users/dev/proj", "tool_name": "run_in_terminal", "tool_input": {"command": "ls"}, "tool_use_id": "tu-2", "tool_response": "a\nb"},
-    "expect": {"kind": "post_tool", "harness": "vscode_local", "format": "snake", "tool_output": "a\nb"}
+    "expect": {"kind": "post_tool", "harness": "vscode", "format": "snake", "tool_output": "a\nb"}
   },
   {
     "event": "Stop",
     "payload": {"hook_event_name": "Stop", "session_id": "loc-1", "timestamp": "2026-10-03T10:00:02.000Z", "cwd": "/Users/dev/proj", "transcript_path": "/tmp/t.json", "stop_hook_active": false},
-    "expect": {"kind": "stop", "harness": "vscode_local", "format": "snake", "stop_hook_active": false}
+    "expect": {"kind": "stop", "harness": "vscode", "format": "snake", "stop_hook_active": false}
   },
   {
     "event": "Stop",

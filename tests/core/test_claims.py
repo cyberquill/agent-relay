@@ -1,4 +1,4 @@
-"""Workspace claims that link a phone-started Local chat to its first hook."""
+"""Workspace claims that link a phone-started VS Code chat to its first hook."""
 
 from __future__ import annotations
 
@@ -9,9 +9,9 @@ from agent_relay.core.registry import Registry
 
 
 async def test_a_claim_is_taken_once(registry: Registry) -> None:
-    await make_claim(registry, "/w/proj", "vscode_local:phone-1")
+    await make_claim(registry, "/w/proj", "vscode:phone-1")
     claim = await take_claim(registry, "/w/proj")
-    assert claim is not None and claim.session_key == "vscode_local:phone-1"
+    assert claim is not None and claim.session_key == "vscode:phone-1"
     assert await take_claim(registry, "/w/proj") is None
 
 

@@ -120,7 +120,7 @@ async def test_registers_session_and_auto_allows_read_only(core: tuple[Core, Rec
     )
     assert reply["stdout"]["permissionDecision"] == "allow"  # type: ignore[index,call-overload]
     sessions = await built.registry.list_sessions()
-    assert [s.session_key for s in sessions] == ["vscode_local:L1"]
+    assert [s.session_key for s in sessions] == ["vscode:L1"]
     assert rec.of(SessionStarted) and not rec.of(ApprovalRequested)
 
 
@@ -332,8 +332,8 @@ async def test_park_continues_with_phone_message(
     task = asyncio.create_task(
         hook(built, "copilot", "Stop", {**STOP_LOCAL, "transcript_path": str(transcript)})
     )
-    await _wait_status(built, "vscode_local:L1", SessionStatus.PARKED)
-    receipt = await built.service.prompt("vscode_local:L1", "now add tests")
+    await _wait_status(built, "vscode:L1", SessionStatus.PARKED)
+    receipt = await built.service.prompt("vscode:L1", "now add tests")
     reply = await task
     assert receipt == "delivered to the parked session"
     stdout = reply["stdout"]
@@ -341,7 +341,7 @@ async def test_park_continues_with_phone_message(
     assert "now add tests" in str(stdout["reason"])
     assert rec.of(TurnCompleted)[0].text == "All done."
     assert rec.of(SessionParked)
-    assert (await _session(built, "vscode_local:L1")).status is SessionStatus.RUNNING
+    assert (await _session(built, "vscode:L1")).status is SessionStatus.RUNNING
 
 
 async def test_cursor_park_uses_followup_and_last_response(core: tuple[Core, Recorder, list[str]]) -> None:
@@ -426,7 +426,7 @@ async def test_steering_goes_out_on_next_post_tool(core: tuple[Core, Recorder, l
     built, _, _ = core
     await away.set_away(built.registry, True)
     await hook(built, "copilot", "PreToolUse", {**LOCAL_PRE, "tool_name": "read_file"})
-    receipt = await built.service.prompt("vscode_local:L1", "use pytest, not unittest")
+    receipt = await built.service.prompt("vscode:L1", "use pytest, not unittest")
     assert receipt.startswith("queued as steering")
     reply = await hook(
         built, "copilot", "PostToolUse", {**LOCAL_PRE, "tool_name": "read_file", "tool_response": "ok"}

@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from agent_relay import paths
 from agent_relay.core.registry import Registry
 
-CLAIM_KEY = "local_claim:{workspace}"
+CLAIM_KEY = "vscode_claim:{workspace}"
 ALIAS_KEY = "hook_alias:{hook_session_id}"
 CLAIM_TTL_S = 120.0
 UNCLAIMED_PREFIX = "unclaimed-"

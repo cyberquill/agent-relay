@@ -1,7 +1,7 @@
 {
   "name": "relay-bridge",
   "displayName": "Agent Relay Bridge",
-  "description": "Lets agent-relay start and steer VS Code Local agent chats from your phone",
+  "description": "Lets agent-relay start and steer VS Code agent chats from your phone",
   "publisher": "agent-relay",
   "version": "0.1.0",
   "private": true,

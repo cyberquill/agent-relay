@@ -11,7 +11,7 @@ import pytest
 
 from agent_relay import log as relay_log
 from agent_relay.adapters.factory import build_adapters
-from agent_relay.adapters.vscode_local.hub import BridgeHub
+from agent_relay.adapters.vscode.hub import BridgeHub
 from agent_relay.core.approvals import ALLOW_SESSION_KEY, ApprovalBroker, is_read_only
 from agent_relay.core.registry import Registry
 from agent_relay.core.router import Router

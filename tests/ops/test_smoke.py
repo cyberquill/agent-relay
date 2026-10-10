@@ -8,13 +8,13 @@ from agent_relay.ipc import JsonObj
 from agent_relay.models.events import Harness
 from agent_relay.ops.smoke import APPS, Smoke, Waiter, render
 
-LOCAL = next(app for app in APPS if app.harness is Harness.VSCODE_LOCAL)
+LOCAL = next(app for app in APPS if app.harness is Harness.VSCODE)
 
 
 class Daemon:
     """Replays a scripted sequence of `sessions` replies, one per poll."""
 
-    def __init__(self, *frames: list[tuple[str, str]], harness: Harness = Harness.VSCODE_LOCAL) -> None:
+    def __init__(self, *frames: list[tuple[str, str]], harness: Harness = Harness.VSCODE) -> None:
         self._frames: Iterator[list[tuple[str, str]]] = iter(frames)
         self._last: list[tuple[str, str]] = []
         self._harness = harness
@@ -54,10 +54,10 @@ def test_full_pass_walks_every_step() -> None:
     daemon = Daemon(
         old,
         old,
-        [*old, ("local:new", "running")],
-        [*old, ("local:new", "running")],
-        [*old, ("local:new", "parked")],
-        [*old, ("local:new", "running")],
+        [*old, ("vscode:new", "running")],
+        [*old, ("vscode:new", "running")],
+        [*old, ("vscode:new", "parked")],
+        [*old, ("vscode:new", "running")],
     )
     run, said = smoke(daemon, ["y", "yes", "Y"])
     assert run.run_app(LOCAL)
@@ -69,7 +69,7 @@ def test_full_pass_walks_every_step() -> None:
         ("reply", True),
         ("back", True),
     ]
-    assert run.results[0].evidence == "local:new"
+    assert run.results[0].evidence == "vscode:new"
     assert any("/away" in line for line in said) and any("/back" in line for line in said)
 
 
@@ -80,14 +80,14 @@ def test_no_session_fails_at_register_and_stops() -> None:
 
 
 def test_a_no_from_the_human_stops_the_app() -> None:
-    run, _ = smoke(Daemon([], [("local:new", "running")]), ["n"])
+    run, _ = smoke(Daemon([], [("vscode:new", "running")]), ["n"])
     assert not run.run_app(LOCAL)
     assert [(r.step, r.ok) for r in run.results][-1] == ("stream", False)
 
 
 def test_a_session_that_ends_on_back_counts_as_released() -> None:
     """relayd's `sessions` op leaves ended sessions out, so a vanished session is no longer parked."""
-    parked = [("local:new", "parked")]
+    parked = [("vscode:new", "parked")]
     run, _ = smoke(Daemon([], parked, parked, parked, []), ["y", "y", "y"])
     assert run.run_app(LOCAL)
     assert run.results[-1].step == "back" and run.results[-1].ok
@@ -110,23 +110,23 @@ def test_an_app_that_never_parks_is_checked_idle_and_woken() -> None:
 
 
 def test_never_parking_is_a_failure_after_the_timeout() -> None:
-    run, _ = smoke(Daemon([], [("local:new", "running")]), ["y", "y"], timeout=5.0)
+    run, _ = smoke(Daemon([], [("vscode:new", "running")]), ["y", "y"], timeout=5.0)
     assert not run.run_app(LOCAL)
     assert run.results[-1].step == "park" and not run.results[-1].ok
 
 
 def test_render_is_a_scrubbed_markdown_table() -> None:
-    run, _ = smoke(Daemon([], [("local:new", "running")]), ["n"])
+    run, _ = smoke(Daemon([], [("vscode:new", "running")]), ["n"])
     run.run_app(LOCAL)
     table = render(run.results, "2026-10-03 12:00 UTC")
     assert table.startswith("### Live smoke 2026-10-03 12:00 UTC\n")
-    assert "| VS Code Local | register | ✅ | local:new |" in table
-    assert "| VS Code Local | stream | ❌ | human: n |" in table
+    assert "| VS Code | register | ✅ | vscode:new |" in table
+    assert "| VS Code | stream | ❌ | human: n |" in table
 
 
 def test_every_app_in_the_definition_of_done_is_covered() -> None:
     assert {app.harness for app in APPS} == {
-        Harness.VSCODE_LOCAL,
+        Harness.VSCODE,
         Harness.VSCODE_COPILOT,
         Harness.OPENCODE,
         Harness.CURSOR,

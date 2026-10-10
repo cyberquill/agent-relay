@@ -1,4 +1,4 @@
-"""VS Code Local agent chats, driven through the relay-bridge extension.
+"""VS Code agent chats (VS Code's own "Local" agent), driven through the relay-bridge extension.
 
 Hooks carry everything the chat does (tools, approvals, the final reply); this adapter only opens,
 steers and cancels chats. Without a bridge window it falls back to `code chat -m agent -r`.
@@ -21,7 +21,7 @@ from agent_relay.adapters.base import (
     StartRequest,
     UnsupportedError,
 )
-from agent_relay.adapters.vscode_local.hub import BridgeEvent, BridgeHub, BridgeWindow
+from agent_relay.adapters.vscode.hub import BridgeEvent, BridgeHub, BridgeWindow
 from agent_relay.core.claims import UNCLAIMED_PREFIX, make_claim
 from agent_relay.core.registry import Registry
 from agent_relay.log import get_logger
@@ -34,8 +34,8 @@ log = get_logger(__name__)
 
 type Launcher = Callable[[Sequence[str], Path], Awaitable[int]]
 
-WINDOW_KEY = "local_window"
-VIA_KEY = "local_via"
+WINDOW_KEY = "vscode_window"
+VIA_KEY = "vscode_via"
 VIA_BRIDGE = "bridge"
 VIA_CLI = "cli"
 OPEN_TIMEOUT_S = 20.0
@@ -56,8 +56,8 @@ async def run_code(argv: Sequence[str], cwd: Path) -> int:
         raise AdapterUnavailableError("the VS Code CLI did not return in time") from None
 
 
-class VsCodeLocalAdapter(Adapter):
-    harness = Harness.VSCODE_LOCAL
+class VsCodeAdapter(Adapter):
+    harness = Harness.VSCODE
     capabilities = Capabilities(cold_start=True, model_select=True, approve=True, cancel=True, wake_idle=True)
 
     def __init__(
@@ -164,12 +164,12 @@ class VsCodeLocalAdapter(Adapter):
         record = await self._registry.get_session(session_key)
         if record is None:
             raise AdapterUnavailableError(f"session {session_key} vanished from the registry")
-        log.info(f"opened a Local chat for {session_key} via {extra[VIA_KEY]}")
+        log.info(f"opened a VS Code chat for {session_key} via {extra[VIA_KEY]}")
         return record
 
     async def send_prompt(self, session: SessionRecord, text: str) -> None:
         if session.status is SessionStatus.RUNNING:
-            raise UnsupportedError(self.harness, "steering a running Local chat")
+            raise UnsupportedError(self.harness, "steering a running VS Code chat")
         await self._deliver(session, text)
 
     async def wake(self, session: SessionRecord, text: str) -> None:
@@ -183,7 +183,7 @@ class VsCodeLocalAdapter(Adapter):
 
     async def cancel(self, session: SessionRecord) -> None:
         if not self._phone_opened(session):
-            raise UnsupportedError(self.harness, "stopping a Local chat opened at the desk")
+            raise UnsupportedError(self.harness, "stopping a VS Code chat opened at the desk")
         await self._require_window(session).call("cancel")
 
     async def answer_approval(self, session: SessionRecord, request_id: str, decision: Decision) -> None:
@@ -215,7 +215,7 @@ class VsCodeLocalAdapter(Adapter):
 
     async def _deliver(self, session: SessionRecord, text: str) -> None:
         if not self._phone_opened(session):
-            raise UnsupportedError(self.harness, "prompting a Local chat opened at the desk")
+            raise UnsupportedError(self.harness, "prompting a VS Code chat opened at the desk")
         if session.harness_id.startswith(UNCLAIMED_PREFIX) and session.workspace:
             await make_claim(self._registry, session.workspace, session.session_key)
         window = self._window(session)

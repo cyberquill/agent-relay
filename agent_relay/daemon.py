@@ -19,7 +19,7 @@ from pydantic import JsonValue
 from agent_relay import doctor, paths
 from agent_relay.adapters.factory import build_adapters
 from agent_relay.adapters.selftests import build_selftests
-from agent_relay.adapters.vscode_local.hub import BridgeHub
+from agent_relay.adapters.vscode.hub import BridgeHub
 from agent_relay.core import away, phone
 from agent_relay.core.approvals import ApprovalBroker
 from agent_relay.core.hooks import HookService

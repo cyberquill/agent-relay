@@ -144,7 +144,7 @@ def plan_install(
     plan.links.append(skill_link())
     plan.dedupe = plan_dedupe()
     plan.notes += [line for line in plan.dedupe.report() if line.startswith("keep ")]
-    if config.adapters.vscode_local:
+    if config.adapters.vscode:
         _plan_vsix(plan, extension_dir)
     return plan
 

@@ -63,8 +63,8 @@ def test_describe_tool_names_mcp_server() -> None:
 
 
 def test_permission_outputs_per_format() -> None:
-    local = normalize("copilot", "PreToolUse", {"session_id": "s", "tool_use_id": "t"})
-    assert outputs.permission(local, False, "no")["hookSpecificOutput"] == {
+    vscode = normalize("copilot", "PreToolUse", {"session_id": "s", "tool_use_id": "t"})
+    assert outputs.permission(vscode, False, "no")["hookSpecificOutput"] == {
         "hookEventName": "PreToolUse",
         "permissionDecision": "deny",
         "permissionDecisionReason": "no",

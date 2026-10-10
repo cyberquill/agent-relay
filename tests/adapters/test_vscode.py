@@ -1,4 +1,4 @@
-"""AC-18: the vscode_local adapter against a fake relay-bridge window on a real relay.sock."""
+"""AC-18: the vscode adapter against a fake relay-bridge window on a real relay.sock."""
 
 from __future__ import annotations
 
@@ -13,8 +13,8 @@ from pydantic import JsonValue
 
 from agent_relay import paths
 from agent_relay.adapters.base import AdapterUnavailableError, UnsupportedError
-from agent_relay.adapters.vscode_local.adapter import VIA_CLI, VIA_KEY, WINDOW_KEY, VsCodeLocalAdapter
-from agent_relay.adapters.vscode_local.hub import BridgeCommandError, BridgeGoneError, BridgeHub
+from agent_relay.adapters.vscode.adapter import VIA_CLI, VIA_KEY, WINDOW_KEY, VsCodeAdapter
+from agent_relay.adapters.vscode.hub import BridgeCommandError, BridgeGoneError, BridgeHub
 from agent_relay.core.claims import UNCLAIMED_PREFIX, claim_key
 from agent_relay.core.registry import Registry
 from agent_relay.daemon import Core
@@ -67,7 +67,7 @@ class FakeLauncher:
 class Rig:
     core: Core
     hub: BridgeHub
-    adapter: VsCodeLocalAdapter
+    adapter: VsCodeAdapter
     launcher: FakeLauncher
     rec: Recorder
     registry: Registry
@@ -81,7 +81,7 @@ class Rig:
         return bridge
 
     async def start(self, prompt: str = "fix the failing test", model: str | None = None) -> SessionRecord:
-        return await self.core.service.start("local", "proj", prompt, model)
+        return await self.core.service.start("vscode", "proj", prompt, model)
 
     async def session(self, key: str) -> SessionRecord:
         found = await self.registry.get_session(key)
@@ -106,7 +106,7 @@ async def rig(registry: Registry, relay_home: Path) -> AsyncIterator[Rig]:
     core.router.subscribe(rec)
     hub = BridgeHub(call_timeout=0.5)
     launcher = FakeLauncher()
-    adapter = VsCodeLocalAdapter(registry, hub, launcher=launcher, cli=cli, open_timeout=0.3)
+    adapter = VsCodeAdapter(registry, hub, launcher=launcher, cli=cli, open_timeout=0.3)
     core.router.add_adapter(adapter)
     server = IpcServer(paths.socket_path(), core.handle_ipc, streams=hub.streams())
     await server.start()
@@ -186,7 +186,7 @@ async def test_start_opens_a_local_chat_through_the_bridge(rig: Rig) -> None:
     record = await rig.start(model="gpt-5")
     assert bridge.args_of("start") == {"query": "fix the failing test", "model": "gpt-5"}
     assert rig.launcher.calls == []
-    assert record.harness is Harness.VSCODE_LOCAL
+    assert record.harness is Harness.VSCODE
     assert record.origin is Origin.PHONE
     assert record.status is SessionStatus.RUNNING
     assert record.harness_id.startswith(UNCLAIMED_PREFIX)
@@ -205,7 +205,7 @@ async def test_first_local_hook_claims_the_phone_chat(rig: Rig) -> None:
     linked = await rig.session(record.session_key)
     assert linked.harness_id == "L9"
     assert await rig.registry.kv_get(claim_key(WORKSPACE)) is None
-    found = await rig.registry.find_session(Harness.VSCODE_LOCAL, "L9")
+    found = await rig.registry.find_session(Harness.VSCODE, "L9")
     assert found is not None and found.session_key == record.session_key
     await rig.hook("UserPromptSubmit", {"session_id": "L10", "cwd": WORKSPACE, "prompt": "desk chat"})
     assert await rig.registry.find_session(Harness.COPILOT_CLI, "L10") is None
@@ -306,7 +306,7 @@ async def test_a_failing_start_ends_the_session(rig: Rig) -> None:
     with pytest.raises(BridgeCommandError, match="no chat view"):
         await rig.start()
     (record,) = [
-        s for s in await rig.registry.list_sessions(include_ended=True) if s.harness is Harness.VSCODE_LOCAL
+        s for s in await rig.registry.list_sessions(include_ended=True) if s.harness is Harness.VSCODE
     ]
     assert record.status is SessionStatus.ENDED
 
@@ -372,8 +372,8 @@ async def test_desk_local_chats_are_not_prompted_through_the_bridge(rig: Rig) ->
     bridge = await rig.bridge()
     desk = await rig.registry.upsert_session(
         SessionRecord(
-            session_key="vscode_local:D1",
-            harness=Harness.VSCODE_LOCAL,
+            session_key="vscode:D1",
+            harness=Harness.VSCODE,
             harness_id="D1",
             workspace=WORKSPACE,
             status=SessionStatus.IDLE,

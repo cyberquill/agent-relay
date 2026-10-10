@@ -70,8 +70,8 @@ class ParkManager:
     def block_limit(self, harness: Harness) -> int | None:
         if harness in (Harness.COPILOT_CLI, Harness.VSCODE_COPILOT):
             return self._config.copilot_max_blocks
-        if harness is Harness.VSCODE_LOCAL:
-            return self._config.local_max_continuations
+        if harness is Harness.VSCODE:
+            return self._config.vscode_max_continuations
         return None
 
     async def reset_blocks(self, session_key: str) -> None:

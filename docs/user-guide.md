@@ -10,7 +10,7 @@ It works with these apps:
 | App | What the phone can do | Word to use in `/new` |
 |---|---|---|
 | VS Code, Copilot agent (Agent Host) | Start sessions, stream replies, approve tools, park and wake | `copilot` |
-| VS Code, Local chat (through the relay-bridge extension) | Start sessions, stream replies, approve tools, park and wake | `local` |
+| VS Code, its own agent chat (VS Code calls it "Local"; through the relay-bridge extension) | Start sessions, stream replies, approve tools, park and wake | `vscode` |
 | Cursor CLI (`cursor-agent`) | Start sessions, stream replies, approve tools, wake an idle session | `cursor` |
 | OpenCode | Start sessions, stream replies, approve tools, wake an idle session | `opencode` |
 | Cursor desktop app | Sessions you start at the desk are handed to the phone while away mode is on | (started at the desk) |
@@ -133,7 +133,7 @@ relayd can only work while the Mac is awake and online.
   unless an external display, keyboard and power are connected.
 - **Waking up**: after sleep, relayd reconnects to Webex by itself and catches up on messages you sent
   in the meantime.
-- **Screen lock**: locking the screen does not stop anything. VS Code Copilot, VS Code Local, OpenCode
+- **Screen lock**: locking the screen does not stop anything. VS Code Copilot, VS Code, OpenCode
   and the Cursor CLI all ran a full session from the phone with the screen locked (see
   [spikes.md](spikes.md#s7--does-anything-stop-working-with-the-screen-locked)). Logging out of macOS is
   different: it stops your apps and relayd with them. A brief network drop may happen as the screen
@@ -180,7 +180,7 @@ you come back to the desk and turn away mode off, cards from desk sessions move 
 For a session started from the phone, a reply in its thread always works: when the turn has ended, the
 relay starts a new one with your message.
 
-With away mode on, VS Code (Copilot and Local) and the Cursor desktop app also *park* the finished turn:
+With away mode on, VS Code (both `vscode` and `copilot`) and the Cursor desktop app also *park* the finished turn:
 the thread shows **🅿️ Parked** and the agent's turn is held open, so your reply continues the same turn
 instead of starting a new one. This is what lets you answer a session you started **at the desk**,
 which the relay cannot start turns for. `/back` in the thread releases a parked turn without a reply,
@@ -231,7 +231,7 @@ and to decide for itself rather than block on small questions.
 
 ## Picking work up at the desk
 
-- **VS Code**: phone sessions are ordinary VS Code chats. VS Code Local sessions open as a new chat in
+- **VS Code**: phone sessions are ordinary VS Code chats. `vscode` sessions open as a new chat in
   the window for that workspace; VS Code Copilot sessions run in VS Code's Agent Host, so look for them
   in VS Code's list of chat sessions.
 - **Cursor CLI**: the session card shows the session id. Continue in a terminal with

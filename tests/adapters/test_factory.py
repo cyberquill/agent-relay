@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from agent_relay.adapters.factory import build_adapters
-from agent_relay.adapters.vscode_local.hub import BridgeHub
+from agent_relay.adapters.vscode.hub import BridgeHub
 from agent_relay.core.registry import Registry
 from agent_relay.models.config import AdaptersConfig, CdpConfig, RelayConfig
 from agent_relay.models.events import Harness
@@ -15,7 +15,7 @@ def _config(cdp: bool) -> RelayConfig:
 
 async def test_default_set_has_no_cdp(registry: Registry) -> None:
     built = build_adapters(_config(cdp=False), registry, BridgeHub())
-    assert [a.harness for a in built] == [Harness.VSCODE_COPILOT, Harness.VSCODE_LOCAL, Harness.CURSOR_CLI]
+    assert [a.harness for a in built] == [Harness.VSCODE_COPILOT, Harness.VSCODE, Harness.CURSOR_CLI]
     for adapter in built:
         await adapter.aclose()
 

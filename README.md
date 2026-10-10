@@ -1,6 +1,6 @@
 # agent-relay
 
-Drive VS Code Copilot (Local and Copilot harnesses), Cursor and OpenCode on this Mac from an Android
+Drive VS Code (its own agent and the Copilot harness), Cursor and OpenCode on this Mac from an Android
 phone over a Webex 1:1 space. Sessions run in the same harness the desktop uses.
 
 New here? Start with the [user guide](docs/user-guide.md): what to prepare on the Mac, and how to use it
