@@ -1,0 +1,27 @@
+LICENSE
+  s_3051c8524e77ce::t_ffb66be8ebebd3 1-21
+plugins/opencode/package.json
+  s_3051c8524e77ce::t_26326ede33fe80 5
+pyproject.toml
+  s_3051c8524e77ce::t_900be4d917df0b 6-7
+README.md
+  s_3051c8524e77ce::t_7c4633b04dac28 54-57
+extensions/relay-bridge/package.json
+  s_3051c8524e77ce::t_f1943a0346fd49 8
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b8087e00ad501a9f8e38583ddca714e401ac0905",
+  "prompts": {},
+  "sessions": {
+    "s_3051c8524e77ce": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "31848229-86e7-4567-8b2c-9407a22c1e38",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Brijgopal Bharadwaj <brijgopalbharadwaj1999@gmail.com>"
+    }
+  }
+}
