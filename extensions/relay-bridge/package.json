@@ -5,7 +5,7 @@
   "publisher": "agent-relay",
   "version": "0.1.0",
   "private": true,
-  "license": "UNLICENSED",
+  "license": "MIT",
   "engines": {
     "vscode": "^1.110.0"
   },

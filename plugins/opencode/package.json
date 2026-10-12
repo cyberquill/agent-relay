@@ -2,6 +2,7 @@
   "name": "agent-relay-opencode-plugin",
   "version": "0.1.0",
   "private": true,
+  "license": "MIT",
   "description": "OpenCode plugin that relays tool approvals to agent-relay while away mode is on",
   "type": "module",
   "scripts": {

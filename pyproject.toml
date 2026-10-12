@@ -3,6 +3,8 @@ name = "agent-relay"
 version = "0.1.0"
 description = "Control VS Code Copilot, Cursor and OpenCode on this Mac from a phone over Webex"
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.13, <3.14"
 dependencies = [
     "pydantic~=2.11",

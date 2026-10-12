@@ -51,3 +51,7 @@ Live tests run only with `RELAY_LIVE=1`; see [`docs/operations.md`](docs/operati
 - [`docs/security.md`](docs/security.md): threat model and controls
 - [`docs/deviations.md`](docs/deviations.md): where the build departs from the plan, and why
 - [`docs/acceptance.md`](docs/acceptance.md): each acceptance criterion and the tests that prove it
+
+## License
+
+[MIT](LICENSE)
