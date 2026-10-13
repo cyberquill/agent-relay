@@ -2,7 +2,8 @@
 
 A submit first spends the card's nonce. Failures show the user a reply; a failure that did nothing
 gives the nonce back so the same card can be tapped again. A card kind registers its handler with
-`register_action`, usually next to the command that sends the card.
+`register_action`, usually next to the command that sends the card. A reusable kind (a dashboard)
+spends nothing: its nonce works until it is `card_state.REUSABLE_TTL` old.
 """
 
 from __future__ import annotations
@@ -35,14 +36,20 @@ DECISIONS: dict[str, Decision] = {
 _ACTIONS: dict[str, ActionHandler] = {}
 # Kinds whose handler may have acted before failing, so a retry could act twice.
 _NOT_RETRYABLE: set[str] = set()
+# Kinds whose card stays usable after a success, until its nonce expires.
+_REUSABLE: set[str] = set()
 
 
-def register_action(kind: str, handler: ActionHandler, *, retryable: bool = True) -> None:
+def register_action(
+    kind: str, handler: ActionHandler, *, retryable: bool = True, reusable: bool = False
+) -> None:
     if kind in _ACTIONS:
         raise ValueError(f"card action already registered: {kind}")
     _ACTIONS[kind] = handler
     if not retryable:
         _NOT_RETRYABLE.add(kind)
+    if reusable:
+        _REUSABLE.add(kind)
 
 
 def action_kinds() -> frozenset[str]:
@@ -121,17 +128,23 @@ async def submit(service: RelayService, handlers: Handlers, inputs: dict[str, Js
     registry = service.registry
     where = await _where(registry, inputs.get("request_id"))
     nonce = inputs.get("nonce")
-    issued = await card_state.consume_nonce(registry, nonce)
+    reusable = kind in _REUSABLE
+    issued = (
+        await card_state.check_nonce(registry, nonce)
+        if reusable
+        else await card_state.consume_nonce(registry, nonce)
+    )
     if issued is None:
         await handlers.reply(where, card_state.EXPIRED)
         return "expired"
     try:
         return await _ACTIONS[kind](service, handlers, inputs)
     except RelayError as exc:
-        await card_state.restore_nonce(registry, nonce, issued)
+        if not reusable:
+            await card_state.restore_nonce(registry, nonce, issued)
         await handlers.reply(where, f"⚠️ {exc}")
         return "failed"
     except Exception:
-        if kind not in _NOT_RETRYABLE:
+        if not reusable and kind not in _NOT_RETRYABLE:
             await card_state.restore_nonce(registry, nonce, issued)
         raise

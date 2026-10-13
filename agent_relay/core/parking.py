@@ -32,6 +32,7 @@ RENEW_TEXT = (
 )
 PHONE_PREFIX = "Message from the user, sent from their phone:\n\n"
 LIMIT_TEXT = "Parking limit reached for this session. Reply here to wake it."
+AWAY_OFF_REASON = "away mode off"
 BLOCKS_KEY = "stop_blocks"
 DEADLINE_KEY = "park_deadline"
 
@@ -149,7 +150,7 @@ class ParkManager:
                 return ParkResult("released", reason)
             if not await away.is_away(self._registry, session.workspace):
                 await self._set(session, SessionStatus.IDLE, 0, None)
-                return ParkResult("released", "away mode off")
+                return ParkResult("released", AWAY_OFF_REASON)
             queued = await self._registry.pop_queued(key, ("prompt", "steer"))
             if queued:
                 await self._set(session, SessionStatus.RUNNING, blocks + 1, None)

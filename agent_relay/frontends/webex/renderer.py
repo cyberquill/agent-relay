@@ -4,7 +4,8 @@
 - `text.delta` is buffered, flushed at a paragraph boundary once ≥ flush_bytes, or after
   flush_idle_s of quiet; no message exceeds max_message_bytes.
 - Tool events feed one progress message per turn, edited in place at most once per
-  progress_edit_interval_s and one edit short of Webex's cap; a spent message is replaced by a fresh one.
+  progress_edit_interval_s and one edit short of Webex's cap until the closing edit; a spent message
+  is replaced by a fresh one.
 - A turn ends with a completion card. Final answers over the limit become `answer.md`.
 - Pacing: at most one message per pace_s per thread.
 """
@@ -44,15 +45,19 @@ from agent_relay.models.events import (
     ToolStarted,
     TurnCompleted,
 )
-from agent_relay.models.sessions import SessionRecord
+from agent_relay.models.sessions import SessionRecord, SessionStatus
 
 log = get_logger(__name__)
 
 ROOM_KEY = "webex.room_id"
 TOOL_DETAIL_CHARS = 300
 PROGRESS_LINES = 10
-# One edit stays spare under Webex's cap so the turn's last state can still be shown.
+# One edit stays spare under Webex's cap for the closing "done" edit.
 PROGRESS_EDITS = MAX_EDITS - 1
+ROOT_POLL_S = 5.0
+ROOT_CLOSING_RESERVE = 2
+# Events after which the root status line is looked at again, besides a turn's first event.
+ROOT_MILESTONES = (TurnCompleted, SessionParked, SessionReleased)
 APPROVAL_OUTCOME = {
     "allow": "✅ Allowed",
     "allow_session": "✅ Allowed for this session",
@@ -80,6 +85,17 @@ def chunk_text(text: str, max_bytes: int) -> list[str]:
     if rest.strip():
         chunks.append(rest)
     return [c for c in chunks if c.strip()]
+
+
+def _worth_root_edit(status: SessionStatus, remaining: int) -> bool:
+    """Whether the root may spend one of its `remaining` edits showing `status`."""
+    if remaining <= 0:
+        return False
+    if remaining <= ROOT_CLOSING_RESERVE:  # keep room for the edit that shows the turn ended
+        return status in (SessionStatus.IDLE, SessionStatus.ENDED) or (
+            remaining == ROOT_CLOSING_RESERVE and status is not SessionStatus.RUNNING
+        )
+    return True
 
 
 class Pacer:
@@ -166,15 +182,18 @@ class _Thread:
     last_root: str = ""
     # The turn in progress.
     turn_started: float | None = None
+    working: bool = False
     tool_count: int = 0
     progress_lines: list[str] = field(default_factory=list)
     progress_id: str | None = None
     progress_edits: int = 0
     progress_at: float = 0.0
     progress_dirty: bool = False
+    status_checked: float = float("-inf")
 
     def reset_turn(self) -> None:
         self.turn_started = None
+        self.working = False
         self.tool_count = 0
         self.progress_lines = []
         self.progress_id = None
@@ -241,11 +260,14 @@ class WebexRenderer:
         """Edit the root status line, within the edit budget. Unchanged lines cost nothing.
 
         The queue count rides along when the line is edited anyway; a queue change alone never edits it.
+        Edits are kept for milestones: `running` is skipped when few remain, and the last one is only
+        spent on `idle` or `ended`.
         """
         root_id = await self.thread_for(session)
         thread = self._threads[session.session_key]
         base = cards.root_markdown(session)
-        if base == thread.last_root or thread.root_edits >= self._config.root_edit_budget:
+        remaining = self._config.root_edit_budget - thread.root_edits
+        if base == thread.last_root or not _worth_root_edit(session.status, remaining):
             return
         waiting = len(await self._registry.list_queued(session.session_key))
         mode = mode_of(session, self._default_queue_mode)
@@ -294,6 +316,8 @@ class WebexRenderer:
         thread.last_activity = self._clock()
         if thread.turn_started is None and isinstance(event, SessionStarted | TextDelta | ToolStarted):
             thread.turn_started = thread.last_activity
+        first_work = isinstance(event, TextDelta | ToolStarted) and not thread.working
+        thread.working = thread.working or first_work
         match event:
             case SessionStarted():
                 await self.refresh_root(session)
@@ -358,6 +382,12 @@ class WebexRenderer:
                     await self._close_card(
                         request_id, f"💬 Answered: {answer}" if answer else "⏭️ Skipped", None
                     )
+        if first_work or isinstance(event, ROOT_MILESTONES):
+            await self.refresh_root(await self._current(session))
+
+    async def _current(self, session: SessionRecord) -> SessionRecord:
+        """The session as stored now; its status may have moved while the event was handled."""
+        return await self._registry.get_session(session.session_key) or session
 
     async def _flush(self, session: SessionRecord, thread: _Thread, final: bool) -> None:
         cfg = self._config
@@ -409,8 +439,9 @@ class WebexRenderer:
     async def _progress(self, session: SessionRecord, thread: _Thread, done: bool = False) -> None:
         """Show the turn's tool calls in its one progress message.
 
-        Edits are held to progress_edit_interval_s, except the closing one (`done`). When the message's
-        edits are spent a new message takes over rather than going quiet.
+        Edits are held to progress_edit_interval_s, except the closing one (`done`), which may use the
+        edit kept spare under Webex's cap. When the message's edits are spent a new message takes over
+        rather than going quiet.
         """
         message_id = thread.progress_id
         if not thread.progress_dirty and not (done and message_id is not None):
@@ -423,15 +454,14 @@ class WebexRenderer:
         ):
             return
         text = self._progress_text(thread, now, done)
-        if message_id is not None and thread.progress_edits < PROGRESS_EDITS:
+        limit = MAX_EDITS if done else PROGRESS_EDITS
+        if message_id is not None and thread.progress_edits < limit:
             if await self.outbox.edit(message_id, text):
                 thread.progress_edits += 1
                 thread.progress_at = self._clock()
                 thread.progress_dirty = False
                 return
-            thread.progress_edits = PROGRESS_EDITS
-        if done and not thread.progress_dirty:
-            return
+            thread.progress_edits = MAX_EDITS
         posted = await self.post_in_thread(session, text)
         thread.progress_id = posted.id
         thread.progress_edits = 0
@@ -479,17 +509,22 @@ class WebexRenderer:
         await self.outbox.edit(request.webex_message_id, f"{outcome}{suffix}")
 
     async def tick(self) -> None:
-        """Show pending tool calls once their interval is up, and flush text that has gone quiet for
-        flush_idle_s. Called about once a second."""
+        """Show pending tool calls once their interval is up, flush text that has gone quiet for
+        flush_idle_s, and notice status changes no event announced (a stop, an app ending a session).
+        Called about once a second."""
         now = self._clock()
         for key, thread in list(self._threads.items()):
             has_text = bool(thread.text.strip())
-            if not (has_text or thread.progress_dirty):
+            polled = now - thread.status_checked >= ROOT_POLL_S
+            if not (has_text or thread.progress_dirty or polled):
                 continue
             session = await self._registry.get_session(key)
             if session is None:
                 continue
             async with self._lock(key):
+                if polled:
+                    thread.status_checked = now
+                    await self.refresh_root(session)
                 await self._progress(session, thread)
                 if has_text and now - thread.last_activity >= self._config.flush_idle_s:
                     await self._flush(session, thread, final=True)

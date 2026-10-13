@@ -13,6 +13,7 @@ from datetime import datetime
 
 from pydantic import JsonValue
 
+from agent_relay import paths
 from agent_relay.core import away
 from agent_relay.core.approvals import (
     CLOSED_REASONS,
@@ -23,7 +24,7 @@ from agent_relay.core.approvals import (
 )
 from agent_relay.core.claims import UNCLAIMED_PREFIX, aliased, link_alias, take_claim
 from agent_relay.core.lifecycle import Lifecycle
-from agent_relay.core.parking import ParkManager, phone_text
+from agent_relay.core.parking import AWAY_OFF_REASON, ParkManager, phone_text
 from agent_relay.core.registry import RECENT_APPROVAL_PREFIX, RECENT_APPROVAL_TTL, Registry, stamped_at
 from agent_relay.core.router import Router
 from agent_relay.hook import outputs, transcript
@@ -127,6 +128,8 @@ class HookService:
         if not phone_session and not await away.is_away(self._registry, workspace):
             if session is not None and hook.kind is HookKind.PROMPT_SUBMIT:
                 await self._parking.reset_blocks(session.session_key)
+            if session is not None and hook.kind is HookKind.STOP and session.extra.get(HOOKED) is True:
+                return await self._deliver_waiting(session, hook)
             return {}
         if session is None:
             if hook.kind in (HookKind.SESSION_END, HookKind.SUBAGENT_STOP):
@@ -329,7 +332,7 @@ class HookService:
         steerable = hook.kind in (HookKind.POST_TOOL, HookKind.TOOL_FAILURE)
         if not steerable:
             return {}
-        queued = await self._registry.pop_queued(session.session_key, ("steer", "prompt"))
+        queued = await self._registry.pop_queued(session.session_key, ("steer",))
         if not queued:
             return {}
         return _reply(outputs.add_context(hook, phone_text([q.text for q in queued])))
@@ -367,4 +370,17 @@ class HookService:
         await self._registry.set_session_extra(session.session_key, RENEWING, result.kind == "renewed")
         if result.blocks:
             return _reply(outputs.continue_with(hook, result.text))
+        if result.kind == "skipped" or (result.kind == "released" and result.text == AWAY_OFF_REASON):
+            return await self._deliver_waiting(session, hook)
         return {}
+
+    async def _deliver_waiting(self, session: SessionRecord, hook: HookInput) -> Reply:
+        """Not parking, so queued phone messages go out as the stop hook's continuation. The pop is
+        atomic: a message the parking loop took is never taken again here. Nothing goes out after a panic."""
+        if paths.pause_flag().exists():
+            return {}
+        queued = await self._registry.pop_queued(session.session_key, ("prompt", "steer"))
+        if not queued:
+            return {}
+        await self._lifecycle.observe(session.session_key, SessionStatus.RUNNING, "queued message delivered")
+        return _reply(outputs.continue_with(hook, phone_text([q.text for q in queued])))

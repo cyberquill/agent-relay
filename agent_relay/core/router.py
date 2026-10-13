@@ -21,11 +21,18 @@ class EventSink(Protocol):
     async def handle(self, event: Event) -> None: ...
 
 
+class EventGate(Protocol):
+    async def intercept(self, event: Event) -> bool:
+        """True when the event is settled here and no sink should see it."""
+        ...
+
+
 class Router:
     def __init__(
         self, idle_worker_s: float = 300.0, restart_backoff: tuple[float, float] = (1.0, 60.0)
     ) -> None:
         self._sinks: list[EventSink] = []
+        self._gates: list[EventGate] = []
         self._queues: dict[str, asyncio.Queue[Event]] = {}
         self._workers: dict[str, asyncio.Task[None]] = {}
         self._adapters: dict[Harness, Adapter] = {}
@@ -37,6 +44,9 @@ class Router:
 
     def subscribe(self, sink: EventSink) -> None:
         self._sinks.append(sink)
+
+    def add_gate(self, gate: EventGate) -> None:
+        self._gates.append(gate)
 
     async def publish(self, event: Event) -> None:
         queue = self._queues.get(event.session_key)
@@ -60,12 +70,22 @@ class Router:
                     self._workers.pop(session_key, None)
                     return
                 continue
-            for sink in list(self._sinks):
-                try:
-                    await sink.handle(event)
-                except Exception:
-                    log.exception(f"sink {type(sink).__name__} failed on {event.type} for {session_key}")
+            if not await self._gated(event, session_key):
+                for sink in list(self._sinks):
+                    try:
+                        await sink.handle(event)
+                    except Exception:
+                        log.exception(f"sink {type(sink).__name__} failed on {event.type} for {session_key}")
             queue.task_done()
+
+    async def _gated(self, event: Event, session_key: str) -> bool:
+        for gate in list(self._gates):
+            try:
+                if await gate.intercept(event):
+                    return True
+            except Exception:
+                log.exception(f"gate {type(gate).__name__} failed on {event.type} for {session_key}")
+        return False
 
     async def join(self) -> None:
         """Wait until every queued event has been delivered (used by tests and shutdown)."""

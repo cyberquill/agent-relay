@@ -102,11 +102,25 @@ def test_the_receipt_names_how_each_file_travelled() -> None:
     photo = Attachment(name="photo.jpg", mime="image/jpeg", size=1, local_path="/x/photo.jpg", sha256="0")
     log = Attachment(name="log.txt", mime="text/plain", size=1, local_path="/x/log.txt", sha256="0")
     skipped = ("big.zip (over 20 MB)",)
-    assert receipt_line(Received(attachments=(photo, log), skipped=skipped), True) == (
+    both = {photo.local_path, log.local_path}
+    assert receipt_line(Received(attachments=(photo, log), skipped=skipped), both) == (
         "📎 photo.jpg (attached), log.txt (attached); skipped big.zip (over 20 MB)"
     )
-    assert receipt_line(Received(attachments=(log,)), False) == "📎 log.txt (as a path)"
-    assert receipt_line(Received(skipped=skipped), True) == "📎 Skipped big.zip (over 20 MB)"
+    assert receipt_line(Received(attachments=(log,)), ()) == "📎 log.txt (as a path)"
+    assert receipt_line(Received(skipped=skipped), both) == "📎 Skipped big.zip (over 20 MB)"
+
+
+def test_the_receipt_is_per_file_when_only_some_were_attached() -> None:
+    photo = Attachment(name="a.png", mime="image/png", size=1, local_path="/x/a.png", sha256="0")
+    log = Attachment(name="log.txt", mime="text/plain", size=1, local_path="/x/log.txt", sha256="0")
+    received = Received(attachments=(photo, log), skipped=("big.zip (over 20 MB)",))
+    assert receipt_line(received, {photo.local_path}) == (
+        "📎 a.png (attached), log.txt (as a path); skipped big.zip (over 20 MB)"
+    )
+    same_name = Attachment(name="a.png", mime="image/png", size=1, local_path="/y/a.png", sha256="1")
+    assert receipt_line(Received(attachments=(photo, same_name)), {same_name.local_path}) == (
+        "📎 a.png (as a path), a.png (attached)"
+    )
 
 
 # saving

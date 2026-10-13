@@ -71,7 +71,7 @@ class ApprovalRequested(_Base):
     detail: str = ""
 
 
-type ResolvedBy = Literal["phone", "deadline", "panic", "desk", "ended", "stopped", "abandoned"]
+type ResolvedBy = Literal["phone", "grant", "deadline", "panic", "desk", "ended", "stopped", "abandoned"]
 
 
 class ApprovalResolved(_Base):

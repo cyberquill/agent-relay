@@ -67,8 +67,6 @@ def test_builders_produce_valid_v13_cards() -> None:
     _walk(cards.approval("r1", "label", "rm -rf /tmp/x", "10m", nonce="n"))
     _walk(cards.question("q1", "label", "Which?", ("a", "b"), nonce="n"))
     _walk(cards.question("q2", "label", "Free text?", (), nonce="n"))
-    _walk(cards.choose("app", "Which app?", [("opencode", "OpenCode")], {"ws": "proj"}, nonce="n"))
-    _walk(cards.prompt({"app": "opencode"}, nonce="n"))
     apps = [cards.AppOption("opencode", "OpenCode", "🟩", (("m1", "M1"),), "m1")]
     ws = [("proj", "proj")]
     _walk(cards.new_session(ws, "proj", None, apps, nonce="n"))
@@ -78,21 +76,6 @@ def test_builders_produce_valid_v13_cards() -> None:
     _walk(cards.model_switch("s", "m1", [("m1", "M1")], "m1", nonce="n"))
     _walk(cards.away_scope([(cards.ALL_WORKSPACES, "All"), ("proj", "proj")], nonce="n"))
     _walk(cards.panic_confirm(nonce="n"))
-
-
-def test_choose_carries_previous_answers() -> None:
-    card = cards.choose("ws", "Which?", [("proj", "proj")], {"app": "opencode"}, nonce="n1")
-    assert submit_data(card, "Next") == {"relay": "new", "step": "ws", "nonce": "n1", "app": "opencode"}
-
-
-def test_a_long_choice_list_is_capped_and_says_so() -> None:
-    choices = [(f"m{i}", f"Model {i}") for i in range(60)]
-    card = cards.choose("model", "Which model?", choices, {}, nonce="n")
-    _walk(card)
-    body = card["body"]
-    assert isinstance(body, list)
-    assert len(_choices(body[1])) == cards.MAX_CHOICES
-    assert "Showing 25 of 60" in cards.card_fallback({"body": [body[2]]})
 
 
 def test_the_approval_detail_is_monospace() -> None:

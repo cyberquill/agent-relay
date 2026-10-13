@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 from pydantic import JsonValue
 
+from agent_relay import paths
 from agent_relay.adapters.base import Decision
 from agent_relay.core import away
 from agent_relay.core.claims import make_claim
@@ -779,3 +780,139 @@ async def test_hooked_marker_and_copilot_call_decisions(core: tuple[Core, Record
     (session,) = await built.registry.list_sessions()
     assert session.extra.get(HOOKED) is True
     assert await built.registry.kv_get(APPROVED_CALL_KEY.format(call_id="t1")) == "allow"
+
+
+STOP_CLI: dict[str, JsonValue] = {"sessionId": "C2", "cwd": "/w/proj", "stopReason": "end_turn"}
+STOP_AHP: dict[str, JsonValue] = {**STOP_LOCAL, "session_id": "A1"}
+STOP_TARGETS = [
+    ("copilot", "Stop", STOP_LOCAL, Harness.VSCODE, "L1"),
+    ("copilot", "Stop", STOP_AHP, Harness.VSCODE_COPILOT, "A1"),
+    ("copilot", "agentStop", STOP_CLI, Harness.COPILOT_CLI, "C2"),
+    ("cursor", "stop", STOP_CURSOR, Harness.CURSOR, "K1"),
+]
+
+
+async def _running(built: Core, harness: Harness, sid: str, origin: Origin, hooked: bool) -> str:
+    record = SessionRecord(
+        session_key=f"{harness.value}:{sid}",
+        harness=harness,
+        harness_id=sid,
+        workspace="/w/proj",
+        origin=origin,
+        status=SessionStatus.RUNNING,
+        extra={HOOKED: True} if hooked else {},
+    )
+    await built.registry.create_session(record)
+    return record.session_key
+
+
+def _continuation_text(reply: dict[str, JsonValue]) -> str:
+    return str(reply["stdout"])
+
+
+@pytest.mark.parametrize(("family", "event", "payload", "harness", "sid"), STOP_TARGETS)
+async def test_a_phone_session_with_away_off_gets_its_queued_message_when_its_turn_ends(
+    core: tuple[Core, Recorder, list[str]],
+    family: str,
+    event: str,
+    payload: dict[str, JsonValue],
+    harness: Harness,
+    sid: str,
+) -> None:
+    built, rec, _ = core
+    key = await _running(built, harness, sid, Origin.PHONE, hooked=True)
+    assert await built.service.prompt(key, "also add tests") == "Queued (1 waiting)"
+    reply = await asyncio.wait_for(hook(built, family, event, payload), 2)
+    assert "also add tests" in _continuation_text(reply)
+    assert await built.service.queued(key) == []
+    assert (await _session(built, key)).status is SessionStatus.RUNNING
+    assert not rec.of(SessionParked)
+    assert await asyncio.wait_for(hook(built, family, event, payload), 2) == {}
+
+
+async def test_a_hooked_desk_session_gets_its_queued_message_after_away_goes_off(
+    core: tuple[Core, Recorder, list[str]],
+) -> None:
+    built, rec, _ = core
+    key = await _running(built, Harness.VSCODE, "L1", Origin.DESK, hooked=True)
+    await built.service.prompt(key, "ship it")
+    reply = await hook(built, "copilot", "Stop", STOP_LOCAL)
+    assert "ship it" in _continuation_text(reply)
+    assert await built.service.queued(key) == []
+    assert rec.events == []
+
+
+async def test_a_desk_session_the_relay_never_hooked_stays_untouched_with_away_off(
+    core: tuple[Core, Recorder, list[str]],
+) -> None:
+    built, rec, _ = core
+    key = await _running(built, Harness.VSCODE, "L1", Origin.DESK, hooked=False)
+    await built.registry.enqueue(key, "prompt", "hello")
+    assert await hook(built, "copilot", "Stop", STOP_LOCAL) == {}
+    assert [q.text for q in await built.service.queued(key)] == ["hello"]
+    assert rec.events == []
+
+
+async def test_queued_messages_go_out_once_with_away_on(core: tuple[Core, Recorder, list[str]]) -> None:
+    built, rec, _ = core
+    await away.set_away(built.registry, True)
+    key = await _running(built, Harness.VSCODE, "L1", Origin.PHONE, hooked=True)
+    await built.service.prompt(key, "first")
+    await built.service.prompt(key, "second")
+    reply = await asyncio.wait_for(hook(built, "copilot", "Stop", STOP_LOCAL), 2)
+    text = _continuation_text(reply)
+    assert "first" in text and "second" in text
+    assert await built.service.queued(key) == []
+    assert len(rec.of(TurnCompleted)) == 1
+
+
+async def test_a_message_queued_while_another_stop_hook_is_continuing_is_still_delivered(
+    core: tuple[Core, Recorder, list[str]],
+) -> None:
+    built, _, _ = core
+    await away.set_away(built.registry, True)
+    key = await _running(built, Harness.VSCODE, "L1", Origin.PHONE, hooked=True)
+    await built.registry.enqueue(key, "prompt", "queued while the other hook runs")
+    reply = await asyncio.wait_for(
+        hook(built, "copilot", "Stop", {**STOP_LOCAL, "stop_hook_active": True}), 2
+    )
+    assert "queued while the other hook runs" in _continuation_text(reply)
+    assert await built.service.queued(key) == []
+
+
+async def test_nothing_is_delivered_at_a_stop_after_a_panic(core: tuple[Core, Recorder, list[str]]) -> None:
+    built, _, _ = core
+    key = await _running(built, Harness.VSCODE, "L1", Origin.PHONE, hooked=True)
+    await built.registry.enqueue(key, "prompt", "too late")
+    paths.pause_flag().parent.mkdir(parents=True, exist_ok=True)
+    paths.pause_flag().write_text("now", encoding="utf-8")
+    assert await hook(built, "copilot", "Stop", STOP_LOCAL) == {}
+    assert [q.text for q in await built.service.queued(key)] == ["too late"]
+
+
+@pytest.mark.parametrize("away_on", [False, True])
+async def test_queue_mode_holds_a_message_for_the_turn_end_not_the_next_tool_call(
+    core: tuple[Core, Recorder, list[str]], away_on: bool
+) -> None:
+    built, _, _ = core
+    await away.set_away(built.registry, away_on)
+    key = await _running(built, Harness.VSCODE, "L1", Origin.PHONE, hooked=True)
+    assert await built.service.queue_mode(key) == "queue"
+    await built.service.prompt(key, "after this turn")
+    post = {**LOCAL_PRE, "tool_name": "read_file", "tool_response": "ok"}
+    assert await hook(built, "copilot", "PostToolUse", post) == {}
+    assert [q.kind for q in await built.service.queued(key)] == ["prompt"]
+
+
+async def test_a_steer_item_rides_the_tool_call_while_a_queued_prompt_waits(
+    core: tuple[Core, Recorder, list[str]],
+) -> None:
+    built, _, _ = core
+    key = await _running(built, Harness.VSCODE, "L1", Origin.PHONE, hooked=True)
+    await built.registry.enqueue(key, "prompt", "later")
+    await built.registry.enqueue(key, "steer", "now")
+    post = {**LOCAL_PRE, "tool_name": "read_file", "tool_response": "ok"}
+    reply = await hook(built, "copilot", "PostToolUse", post)
+    text = _continuation_text(reply)
+    assert "now" in text and "later" not in text
+    assert [q.text for q in await built.service.queued(key)] == ["later"]

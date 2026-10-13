@@ -15,7 +15,7 @@ import os
 import re
 import secrets
 import shutil
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Collection
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path, PurePosixPath
@@ -108,10 +108,11 @@ def settled_mime(declared: str | None, name: str) -> str:
     return mimetypes.guess_type(name)[0] or OCTET_STREAM
 
 
-def receipt_line(received: Received, native: bool) -> str:
-    """After delivery: which files the app got as attachments, which as a path, which were left out."""
-    how = "attached" if native else "as a path"
-    parts = [f"{a.name} ({how})" for a in received.attachments]
+def receipt_line(received: Received, attached: Collection[str] = ()) -> str:
+    """Per file: attached if its `local_path` is in `attached`, else as a path; then what was skipped."""
+    parts = [
+        f"{a.name} ({'attached' if a.local_path in attached else 'as a path'})" for a in received.attachments
+    ]
     line = ", ".join(parts)
     if received.skipped:
         skipped = f"skipped {', '.join(received.skipped)}"

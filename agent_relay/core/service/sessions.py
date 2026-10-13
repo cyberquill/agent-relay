@@ -75,6 +75,8 @@ async def _git_diff(workspace: str, args: Sequence[str], limit: int, timeout: fl
         "git",
         "-c",
         "core.pager=cat",
+        "-c",
+        "core.fsmonitor=false",
         "-C",
         workspace,
         "diff",

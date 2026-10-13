@@ -21,7 +21,7 @@ from agent_relay.core.service.approvals import (
 )
 from agent_relay.daemon import Core
 from agent_relay.models.config import RelayConfig
-from agent_relay.models.events import ApprovalRequested, ApprovalResolved, Harness
+from agent_relay.models.events import ApprovalRequested, ApprovalResolved, Event, Harness
 from agent_relay.models.sessions import PendingRequest, SessionRecord, SessionStatus
 from tests.fakes.adapters import EmittingAdapter
 
@@ -249,9 +249,52 @@ async def test_a_grant_that_cannot_be_delivered_leaves_the_request_for_the_phone
     core = Core(RelayConfig(), registry)  # no adapter connected
     await registry.create_session(_session("opencode:s1", "/w/proj"))
     await record_workspace_grant(registry, "/w/proj", "bash", 3600)
+    seen: list[Event] = []
+
+    class Sink:
+        async def handle(self, event: Event) -> None:
+            seen.append(event)
+
+    core.router.subscribe(Sink())
     await _ask(core, "p1")
     assert [p.request_id for p in await registry.open_pending()] == ["p1"]
+    assert [e.type for e in seen] == ["approval.requested"]
     await core.router.stop()
+
+
+async def test_a_granted_request_never_produces_a_card_event(setup: tuple[Core, EmittingAdapter]) -> None:
+    core, adapter = setup
+    seen: list[Event] = []
+
+    class Sink:
+        async def handle(self, event: Event) -> None:
+            seen.append(event)
+
+    core.router.subscribe(Sink())
+    await record_workspace_grant(core.registry, "/w/proj", "bash", 3600)
+    await _ask(core, "p1")
+    assert adapter.approvals == [("p1", "allow")]
+    assert not [e for e in seen if isinstance(e, ApprovalRequested)]
+    assert [(e.request_id, e.decision, e.by) for e in seen if isinstance(e, ApprovalResolved)] == [
+        ("p1", "allow", "grant")
+    ]
+    pending = await core.registry.get_pending("p1")
+    assert pending is not None and pending.status == "resolved"
+    assert pending.answer is not None and pending.answer["by"] == "grant"
+    assert pending.webex_message_id is None
+
+
+async def test_an_ungranted_request_still_reaches_the_sinks(setup: tuple[Core, EmittingAdapter]) -> None:
+    core, _ = setup
+    seen: list[Event] = []
+
+    class Sink:
+        async def handle(self, event: Event) -> None:
+            seen.append(event)
+
+    core.router.subscribe(Sink())
+    await _ask(core, "p1")
+    assert [e.type for e in seen] == ["approval.requested"]
 
 
 # deny reasons

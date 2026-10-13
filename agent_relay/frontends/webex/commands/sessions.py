@@ -183,7 +183,7 @@ async def _sessions_action(
     return "done"
 
 
-register_action("sessions", _sessions_action)
+register_action("sessions", _sessions_action, reusable=True)
 register_action("model", _model_action)
 
 

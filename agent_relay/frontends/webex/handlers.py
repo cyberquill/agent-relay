@@ -144,7 +144,11 @@ class Handlers:
         if harness and adapter and model not in NO_MODEL:
             if not adapter.capabilities.has(Capability.MODEL_SELECT):
                 raise InvalidInput(f"{label} does not offer model selection.")
-            if not any(model in (m.id, m.label) for m in await svc.models(harness.value)):
+            if not any(
+                model in (m.id, m.label)
+                for m in await svc.models(harness.value)
+                if not cards.is_hidden_model(m.id, m.label)
+            ):
                 raise InvalidInput(f"{label} has no model `{model}`. Try `/models {harness.value}`.")
         if len(prompt) > cards.MAX_PROMPT_CHARS:
             raise InvalidInput(f"That prompt is too long ({cards.MAX_PROMPT_CHARS} characters at most).")
@@ -166,10 +170,15 @@ class Handlers:
         await self._new_card(carry)
 
     async def _report_files(self, ctx: Context, harness: Harness, received: Received, sent: bool) -> None:
-        """Say which files the app got as attachments and which as a path (queued ones are always paths)."""
+        """Say, file by file, what the app got as an attachment and what as a path.
+
+        Only a direct send to an app that takes files is an attachment; a woken, queued or parked
+        delivery carries paths.
+        """
         adapter = self.service.router.adapter(harness)
         native = sent and adapter is not None and adapter.capabilities.has(Capability.ATTACH_FILES)
-        await self.reply(ctx, receipt_line(received, native))
+        attached = frozenset(a.local_path for a in received.attachments) if native else frozenset()
+        await self.reply(ctx, receipt_line(received, attached))
 
     async def _start_session(
         self, harness: Harness, ws: str, text: str, model: str | None, workspace: str
@@ -203,11 +212,16 @@ class Handlers:
         if target is None:
             raise InvalidInput(f"Unknown workspace `{ws}`. Try `/ws`.")
         harness = resolve_app(app)
-        if away_on and not await away.is_away(svc.registry, target.path):
-            await svc.set_away_for(True, target.path)
         session = await self._start_session(
             harness, ws, text, None if model in NO_MODEL else model, target.path
         )
+        if away_on and not await away.is_away(svc.registry, target.path):
+            try:
+                await svc.set_away_for(True, target.path)
+            except RelayError as exc:
+                await self.reply(
+                    Context(session), f"⚠️ The session started, but away mode is still off: {exc}"
+                )
         await svc.registry.kv_set(LAST_WORKSPACE_KEY, target.name)
         await self.renderer.thread_for(session)
 

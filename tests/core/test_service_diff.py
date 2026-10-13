@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import subprocess
 from collections.abc import AsyncIterator
 from pathlib import Path
@@ -66,6 +67,48 @@ async def test_diff_does_not_run_programs_named_in_the_repo_config(core: Core, r
     out = (await core.service.diff(KEY)).decode()
     assert not marker.exists()
     assert "+two" in out
+
+
+def _fsmonitor_script(repo: Path) -> Path:
+    marker = repo.parent / "fsmonitor-ran"
+    script = repo.parent / "fsmon.sh"
+    script.write_text(f"#!/bin/sh\ntouch {marker}\nprintf '\\0'\n", encoding="utf-8")
+    script.chmod(0o755)
+    git(repo, "config", "core.fsmonitor", str(script))
+    return marker
+
+
+async def test_diff_does_not_run_a_repo_configured_fsmonitor(core: Core, repo: Path) -> None:
+    marker = _fsmonitor_script(repo)
+    out = (await core.service.diff(KEY)).decode()
+    assert not marker.exists()
+    assert "+two" in out
+
+
+async def test_the_change_summary_does_not_run_a_repo_configured_fsmonitor(repo: Path) -> None:
+    marker = _fsmonitor_script(repo)
+    changes = await sessions_module.git_changes(str(repo))
+    assert not marker.exists()
+    assert changes is not None and changes.added == 1 and changes.removed == 1
+
+
+async def test_every_git_diff_runs_without_a_shell_pager_or_fsmonitor(
+    repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seen: list[tuple[object, ...]] = []
+    real = asyncio.create_subprocess_exec
+
+    async def spy(*argv: str, stdin: int, stdout: int, stderr: int) -> asyncio.subprocess.Process:
+        seen.append(argv)
+        return await real(*argv, stdin=stdin, stdout=stdout, stderr=stderr)
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", spy)
+    await sessions_module.git_changes(str(repo))
+    await sessions_module._git_diff(str(repo), ("HEAD", "--"), 1_000, 5)
+    assert len(seen) == 2
+    for argv in seen:
+        assert argv[:7] == ("git", "-c", "core.pager=cat", "-c", "core.fsmonitor=false", "-C", str(repo))
+        assert "--no-ext-diff" in argv and "--no-textconv" in argv
 
 
 async def test_diff_output_is_capped_with_a_marker(

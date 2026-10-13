@@ -297,7 +297,13 @@ async def build_frontend(
     api = WebexApi(client, config.webex.api_base)
     me = await api.me()
     outbox = Outbox(api, registry, config.webex.allowed_email)
-    renderer = WebexRenderer(outbox, registry, config.renderer, config.approvals.deadline_s)
+    renderer = WebexRenderer(
+        outbox,
+        registry,
+        config.renderer,
+        config.approvals.deadline_s,
+        default_queue_mode=config.queue.default_mode,
+    )
     inbox = Inbox(registry, config.attachments)
     handlers = Handlers(service, renderer, doctor=doctor, inbox=inbox)
     access = AccessControl(registry, config.webex.allowed_email, me.id)

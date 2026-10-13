@@ -11,12 +11,20 @@ def _dicts(value: JsonValue | None) -> list[dict[str, JsonValue]]:
     return [v for v in value if isinstance(v, dict)] if isinstance(value, list) else []
 
 
-def actions_of(card: dict[str, JsonValue]) -> Iterator[dict[str, JsonValue]]:
-    """Every action on a card: card-level, in body ActionSets, and inside Action.ShowCard cards."""
-    found = _dicts(card.get("actions"))
-    for block in _dicts(card.get("body")):
+def _action_sets(blocks: list[dict[str, JsonValue]]) -> list[dict[str, JsonValue]]:
+    found: list[dict[str, JsonValue]] = []
+    for block in blocks:
         if block.get("type") == "ActionSet":
             found += _dicts(block.get("actions"))
+        found += _action_sets(_dicts(block.get("items")))
+        for column in _dicts(block.get("columns")):
+            found += _action_sets(_dicts(column.get("items")))
+    return found
+
+
+def actions_of(card: dict[str, JsonValue]) -> Iterator[dict[str, JsonValue]]:
+    """Every action on a card: card-level, in ActionSets at any depth, and inside Action.ShowCard cards."""
+    found = _dicts(card.get("actions")) + _action_sets(_dicts(card.get("body")))
     for action in found:
         yield action
         nested = action.get("card")

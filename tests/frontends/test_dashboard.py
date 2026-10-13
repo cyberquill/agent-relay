@@ -145,10 +145,14 @@ async def test_a_missing_choice_and_an_unknown_op_are_refused(relay: Relay) -> N
     assert relay.adapter.cancelled == []
 
 
-async def test_the_dashboard_is_single_use(relay: Relay) -> None:
+async def test_the_dashboard_stays_usable_until_its_nonce_is_old(relay: Relay) -> None:
     await _two_sessions(relay)
     msg, card = await _dashboard(relay)
     await relay.tap(msg, card, "Status", session=ONE)
+    await relay.tap(msg, card, "Status", session=ONE)
+    assert "model: m1" in relay.bot_texts()[-1]
+    for key in await relay.registry.kv_prefix(card_state.NONCE_PREFIX):
+        await relay.registry.kv_set(key, "2000-01-01T00:00:00+00:00")
     await relay.tap(msg, card, "Stop", session=ONE)
     assert relay.adapter.cancelled == []
     assert relay.bot_texts()[-1] == card_state.EXPIRED

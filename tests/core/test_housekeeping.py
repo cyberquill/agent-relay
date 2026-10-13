@@ -4,8 +4,10 @@ from __future__ import annotations
 
 from datetime import timedelta
 
-from agent_relay.core.housekeeping import housekeep
+from agent_relay.core.housekeeping import DRAFT_PREFIX, DRAFT_SEEN_PREFIX, PANIC_ISSUED_PREFIX, housekeep
 from agent_relay.core.registry import CARD_NONCE_PREFIX, RECENT_APPROVAL_PREFIX, SEEN_PREFIX, Registry
+from agent_relay.frontends.webex import handlers
+from agent_relay.frontends.webex.commands import away as away_commands
 from agent_relay.models.events import utcnow
 
 
@@ -54,3 +56,39 @@ async def test_other_keys_and_old_markers_follow_their_own_rules(registry: Regis
     assert await housekeep(registry) == 1
     assert await registry.kv_get("webex.last_seen") == "msg"
     assert await registry.kv_get("approved_call:t1") == "allow"
+
+
+def test_the_prefixes_match_the_ones_the_webex_frontend_writes() -> None:
+    assert PANIC_ISSUED_PREFIX == away_commands.PANIC_ISSUED_PREFIX
+    assert DRAFT_PREFIX == handlers.DRAFT_PREFIX
+
+
+async def test_panic_confirmations_older_than_a_day_are_pruned(registry: Registry) -> None:
+    await registry.kv_set(f"{PANIC_ISSUED_PREFIX}old", _ago(days=2))
+    await registry.kv_set(f"{PANIC_ISSUED_PREFIX}fresh", _ago(hours=2))
+    await registry.kv_set(f"{PANIC_ISSUED_PREFIX}odd", "not a time")
+    assert await housekeep(registry) == 2
+    assert await registry.kv_get(f"{PANIC_ISSUED_PREFIX}old") is None
+    assert await registry.kv_get(f"{PANIC_ISSUED_PREFIX}odd") is None
+    assert await registry.kv_get(f"{PANIC_ISSUED_PREFIX}fresh") is not None
+
+
+async def test_a_new_draft_is_dropped_a_day_after_it_was_first_seen(registry: Registry) -> None:
+    start = utcnow()
+    await registry.kv_set(f"{DRAFT_PREFIX}n1", '{"app": "vscode"}')
+    assert await housekeep(registry, now=start) == 0
+    assert await housekeep(registry, now=start + timedelta(hours=23)) == 0
+    assert await registry.kv_get(f"{DRAFT_PREFIX}n1") is not None
+    assert await housekeep(registry, now=start + timedelta(hours=25)) == 1
+    assert await registry.kv_get(f"{DRAFT_PREFIX}n1") is None
+    assert await registry.kv_prefix(DRAFT_SEEN_PREFIX) == {}
+
+
+async def test_a_finished_draft_leaves_no_marker_behind(registry: Registry) -> None:
+    start = utcnow()
+    await registry.kv_set(f"{DRAFT_PREFIX}n1", "{}")
+    await housekeep(registry, now=start)
+    assert len(await registry.kv_prefix(DRAFT_SEEN_PREFIX)) == 1
+    await registry.kv_delete(f"{DRAFT_PREFIX}n1")
+    assert await housekeep(registry, now=start + timedelta(hours=1)) == 0
+    assert await registry.kv_prefix(DRAFT_SEEN_PREFIX) == {}

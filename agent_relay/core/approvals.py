@@ -94,6 +94,7 @@ class ApprovalBroker:
         self._signals = signals
         self._service = service
         self._config = config
+        router.add_gate(self)
 
     # policy
 
@@ -272,14 +273,30 @@ class ApprovalBroker:
 
     # adapter-held requests arrive as events
 
-    async def handle(self, event: Event) -> None:
-        if isinstance(event, ApprovalResolved | QuestionAnswered):
-            await self._settled_elsewhere(event)
-            return
-        if not isinstance(event, ApprovalRequested | QuestionAsked):
-            return
+    async def intercept(self, event: Event) -> bool:
+        """Router gate: an adapter-held approval the user already granted for this workspace is answered
+        here, so it never reaches a sink and the phone gets no card or push for it."""
+        if not isinstance(event, ApprovalRequested):
+            return False
         if await self._registry.get_pending(event.request_id) is not None:
-            return
+            return False
+        workspace = event.workspace
+        if workspace is None:
+            session = await self._registry.get_session(event.session_key)
+            workspace = session.workspace if session else None
+        if not await self.allowed_for_workspace(workspace, event.tool):
+            return False
+        await self._store_adapter_request(event)
+        try:
+            answered = await self._service.answer_approval(event.request_id, "allow", by="grant")
+        except DeliveryError as exc:
+            log.warning(f"{event.request_id}: workspace grant matched but delivery failed; asking: {exc}")
+            return False
+        if answered:
+            log.info(f"{event.request_id}: {event.tool} allowed by a workspace grant")
+        return answered
+
+    async def _store_adapter_request(self, event: ApprovalRequested | QuestionAsked) -> None:
         payload: dict[str, JsonValue] = {"source": "adapter", "native_id": event.request_id}
         if isinstance(event, ApprovalRequested):
             payload |= {"tool": event.tool, "detail": event.detail}
@@ -294,23 +311,16 @@ class ApprovalBroker:
                 deadline=datetime.now(UTC) + timedelta(seconds=self._config.deadline_s),
             )
         )
-        if isinstance(event, ApprovalRequested):
-            await self._auto_allow_granted(event)
 
-    async def _auto_allow_granted(self, event: ApprovalRequested) -> None:
-        """An adapter-held request the user already allowed for this workspace never waits for the phone."""
-        workspace = event.workspace
-        if workspace is None:
-            session = await self._registry.get_session(event.session_key)
-            workspace = session.workspace if session else None
-        if not await self.allowed_for_workspace(workspace, event.tool):
+    async def handle(self, event: Event) -> None:
+        if isinstance(event, ApprovalResolved | QuestionAnswered):
+            await self._settled_elsewhere(event)
             return
-        try:
-            await self._service.answer_approval(event.request_id, "allow")
-        except DeliveryError as exc:
-            log.warning(f"{event.request_id}: workspace grant matched but delivery failed; asking: {exc}")
+        if not isinstance(event, ApprovalRequested | QuestionAsked):
             return
-        log.info(f"{event.request_id}: {event.tool} allowed by a workspace grant")
+        if await self._registry.get_pending(event.request_id) is not None:
+            return
+        await self._store_adapter_request(event)
 
     async def _settled_elsewhere(self, event: ApprovalResolved | QuestionAnswered) -> None:
         """An adapter saw the request answered at the desk: close it without answering natively again.

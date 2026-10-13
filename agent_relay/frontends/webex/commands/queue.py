@@ -169,6 +169,6 @@ register(
         order=18,
     )
 )
-register_action("queue", _queue_action)
+register_action("queue", _queue_action, reusable=True)
 # Continue and Send may start a turn before failing, so a retry could send twice.
 register_action("completion", _completion_action, retryable=False)

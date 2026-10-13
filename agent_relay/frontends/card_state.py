@@ -1,13 +1,15 @@
-"""What a sent card leaves in the registry: a one-use nonce, and the choices a question offered.
+"""What a sent card leaves in the registry: a nonce, and the choices a question offered.
 
 Every submit carries the card's `nonce`. Sending a card stores `card.nonce:<nonce>` with the time;
 a submit pops it, so a second tap (double tap, another device) finds nothing and is refused.
+A reusable card (a dashboard) keeps its nonce until it is `REUSABLE_TTL` old.
 """
 
 from __future__ import annotations
 
 import json
 import secrets
+from datetime import UTC, datetime, timedelta
 
 from agent_relay.core.registry import Registry
 from agent_relay.core.service import RelayError
@@ -16,6 +18,7 @@ from agent_relay.models.events import utcnow
 NONCE_PREFIX = "card.nonce:"
 OFFER_PREFIX = "card.offer:"
 EXPIRED = "This card has expired or was already answered."
+REUSABLE_TTL = timedelta(minutes=15)
 
 
 class InvalidInput(RelayError):
@@ -33,6 +36,26 @@ async def consume_nonce(registry: Registry, nonce: object) -> str | None:
     if not isinstance(nonce, str) or not nonce:
         return None
     return await registry.kv_pop(f"{NONCE_PREFIX}{nonce}")
+
+
+async def check_nonce(registry: Registry, nonce: object, max_age: timedelta = REUSABLE_TTL) -> str | None:
+    """The stored time when the nonce is younger than `max_age`, leaving it valid. An older one is dropped."""
+    if not isinstance(nonce, str) or not nonce:
+        return None
+    key = f"{NONCE_PREFIX}{nonce}"
+    issued = await registry.kv_get(key)
+    if issued is None:
+        return None
+    try:
+        stamp = datetime.fromisoformat(issued)
+    except ValueError:
+        stamp = None
+    if stamp is not None and stamp.tzinfo is None:
+        stamp = stamp.replace(tzinfo=UTC)
+    if stamp is None or utcnow() - stamp > max_age:
+        await registry.kv_delete(key)
+        return None
+    return issued
 
 
 async def restore_nonce(registry: Registry, nonce: object, issued: str) -> None:

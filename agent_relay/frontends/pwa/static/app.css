@@ -24,7 +24,18 @@ body { margin: 0; font: 15px/1.4 -apple-system, system-ui, sans-serif; backgroun
 .card .bold { font-weight: 600; }
 .card .mono { font-family: ui-monospace, Menlo, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
 .card .actions { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .5rem; }
-.card select, .card textarea { width: 100%; margin-top: .4rem; }
+.card .field { margin-top: .4rem; }
+.card .note { font-size: .9em; font-style: italic; }
+.card .nowrap { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.card .columns { display: flex; gap: .5rem; align-items: center; margin-top: .3rem; }
+.card .column { flex: 1 1 0; min-width: 0; }
+.card .column.auto { flex: 0 0 auto; }
+.card .facts { display: grid; grid-template-columns: max-content 1fr; gap: .15rem .75rem; margin-top: .3rem; }
+.card .choices { display: flex; flex-direction: column; gap: .2rem; }
+.card label.choice { display: flex; align-items: center; gap: .4rem; margin-top: .3rem; cursor: pointer; }
+.card .showcards { margin-top: .4rem; }
+.card .showcard { border-left: 2px solid var(--accent); padding-left: .6rem; margin-top: .4rem; }
+.card select, .card textarea, .card input[type="text"] { width: 100%; margin-top: .4rem; font: inherit; }
 .card button.positive { border-color: #16a34a; }
 .card button.destructive { border-color: #dc2626; }
 pre.file { max-height: 20rem; overflow: auto; font-size: .85em; }
