@@ -1,0 +1,281 @@
+tests/frontends/test_links.py
+  s_7b806b1b8235c3::t_38a4aeedd2f22e 1-82
+  s_7b806b1b8235c3::t_d7e99ef3dd6104 83-89
+agent_relay/adapters/vscode/adapter.py
+  s_7b806b1b8235c3::t_7834461038ce24 45,63-64,224-227,230
+  s_7b806b1b8235c3::t_ac2a991af28761 4-5
+agent_relay/frontends/pwa/server.py
+  s_7b806b1b8235c3::t_405f8a371f4468 85
+agent_relay/frontends/webex/cards/__init__.py
+  s_7b806b1b8235c3::t_27a1d688a6bcd7 1-2,8-20,26-29,37-39
+agent_relay/core/hooks.py
+  s_7b806b1b8235c3::t_6be608984558e6 11-12,21,42,83,90,290,295-296,298,308-315
+  s_7b806b1b8235c3::t_4104611e1f3d53 316
+agent_relay/ops/launchd.py
+  s_7b806b1b8235c3::t_6669ee5baa5e90 95-102,112
+agent_relay/core/service/approvals.py
+  s_7b806b1b8235c3::t_89abfd9154e461 38,72-80,84-87,95,98,106,108
+  s_7b806b1b8235c3::t_6636b35fc281ec 9,13,17-28,35-37,46,57
+agent_relay/daemon.py
+  s_7b806b1b8235c3::t_3934331db710a8 43,91-92,324
+agent_relay/core/service/common.py
+  s_7b806b1b8235c3::t_1664bd042f215f 38,46-47
+  s_7b806b1b8235c3::t_7860eb3aeaacae 48-49
+agent_relay/core/approvals.py
+  s_7b806b1b8235c3::t_e30900e084fe8e 38
+  s_7b806b1b8235c3::t_6943d652b87b86 21,293-297,303-309,313-327
+agent_relay/frontends/webex/cards/common.py
+  s_7b806b1b8235c3::t_76ae6da5efc43a 40-45
+  s_7b806b1b8235c3::t_a50693df359d01 37-39
+  s_7b806b1b8235c3::t_bb6abf92c5a38f 46-48
+  s_7b806b1b8235c3::t_1410359bb47b72 1,5-7,10-11,15-20,27-29,35-36,49-63,91-121
+agent_relay/frontends/webex/api.py
+  s_7b806b1b8235c3::t_801b68a8bf34ad 16,26,121-123,125,134,198-199,202-204,224-225
+  s_7b806b1b8235c3::t_ab01c7602b6ccb 200-201
+tests/test_daemon.py
+  s_7b806b1b8235c3::t_063db351698856 15-16
+  s_7b806b1b8235c3::t_97edb4f6068ea6 40-54
+agent_relay/core/housekeeping.py
+  s_7b806b1b8235c3::t_b0c0c58d7fd11a 8-13,20,24-26,28-38
+  s_7b806b1b8235c3::t_f89a48f3476e1c 39-42
+agent_relay/frontends/pwa/static/app.css
+  s_7b806b1b8235c3::t_7498be27c33c60 25
+agent_relay/adapters/cursor_cdp/adapter.py
+  s_7b806b1b8235c3::t_861e7b91b6b631 10,42-43,59,74,82,180-181,189-213,216-217,316-317
+agent_relay/core/registry.py
+  s_7b806b1b8235c3::t_84d61736501892 84-87
+  s_7b806b1b8235c3::t_f75d695f06e402 456
+  s_7b806b1b8235c3::t_c61ecc5ae1a025 15,168-182,455,457-459,575-597
+  s_7b806b1b8235c3::t_50bc66b4777c5f 598
+tests/frontends/conftest.py
+  s_7b806b1b8235c3::t_5f1f8c89e2a471 106-108
+  s_7b806b1b8235c3::t_433fdb51b1adba 13,25-36,71-79
+tests/test_settings.py
+  s_7b806b1b8235c3::t_e744905629b19a 56
+  s_7b806b1b8235c3::t_28ce861a61543f 39-55,57-71
+  s_7b806b1b8235c3::t_438e9bfb16425c 5,11,15,18
+agent_relay/frontends/pwa/static/app.js
+  s_7b806b1b8235c3::t_ff1c82267adbeb 125-130,136-137,151,162,168
+tests/test_cli_ops.py
+  s_7b806b1b8235c3::t_c276b77c2a3041 9,189,250,252-254
+  s_7b806b1b8235c3::t_a3fd50e6e30fd1 188,190-249,251,255-272
+extensions/relay-bridge/test/bridge.test.ts
+  s_7b806b1b8235c3::t_d59abd5170fa09 106-112,118,120
+tests/core/test_housekeeping.py
+  s_7b806b1b8235c3::t_8ba527f0d4b3c5 1-54
+  s_7b806b1b8235c3::t_0505cf2f63bca8 55-56
+agent_relay/frontends/webex/commands/sessions.py
+  s_7b806b1b8235c3::t_7fbfcf5ade534a 9
+  s_7b806b1b8235c3::t_51323b6cfdc3d8 18-31,36-40
+tests/frontends/test_ws_client.py
+  s_7b806b1b8235c3::t_142a67def5640e 96-121
+  s_7b806b1b8235c3::t_46c0fb92f91ca1 289
+agent_relay/hook/installers/cursor.py
+  s_7b806b1b8235c3::t_baf4fbc52b13e7 78-84
+agent_relay/ops/install.py
+  s_7b806b1b8235c3::t_27e40118ad55c6 4-6,25,29,38-39,109-114,182,208,210,217-260,263-267,291-294,296
+tests/adapters/test_vscode.py
+  s_7b806b1b8235c3::t_3bc2ba02e7e61d 22
+  s_7b806b1b8235c3::t_ac2a991af28761 453
+  s_7b806b1b8235c3::t_8a8bfe4cd7dff7 456
+  s_7b806b1b8235c3::t_561ff7267b5023 354,360-365,368,371-383,450,454-455,457
+agent_relay/core/service/__init__.py
+  s_7b806b1b8235c3::t_1664bd042f215f 42
+  s_7b806b1b8235c3::t_2694b86e274e0e 21
+agent_relay/frontends/webex/renderer.py
+  s_7b806b1b8235c3::t_ca73d45bab20c3 47
+  s_7b806b1b8235c3::t_57dce294975dba 20,23,172,272-273,290,292-293,295-297,299-304,311,322,338,349
+  s_7b806b1b8235c3::t_9a88691f805e58 24
+agent_relay/doctor/local.py
+  s_7b806b1b8235c3::t_af00e8d3d0f9da 27-33
+  s_7b806b1b8235c3::t_c21f932ea820f2 234-246
+tests/core/test_service_diff.py
+  s_7b806b1b8235c3::t_436e66f537a2dd 1-92
+  s_7b806b1b8235c3::t_ccbcb60403823e 93-94
+agent_relay/log.py
+  s_7b806b1b8235c3::t_980bb1e7026961 42
+  s_7b806b1b8235c3::t_08e37d5a44a652 22-28
+tests/test_log.py
+  s_7b806b1b8235c3::t_848bba6028e755 1-54,58-66
+  s_7b806b1b8235c3::t_a69342a4f1f5c5 55-57
+tests/hook/test_installers.py
+  s_7b806b1b8235c3::t_5a7ca1dd71f188 8
+  s_7b806b1b8235c3::t_d858e449c72d5f 95
+  s_dce0075cbe9287::t_53130158521b4c 93-94,96-125
+agent_relay/frontends/webex/cards/question.py
+  s_7b806b1b8235c3::t_f2f20988b1492a 7-14,18
+  s_7b806b1b8235c3::t_ae28b6ae9e6344 26-28
+agent_relay/adapters/cursor_cdp/driver.py
+  s_7b806b1b8235c3::t_09206fd5c8c580 92-95,173-177
+  s_7b806b1b8235c3::t_b32b547295d596 178
+tests/ops/test_install.py
+  s_7b806b1b8235c3::t_7ac7756c3e54cf 211-263,265-288
+  s_7b806b1b8235c3::t_fffed5528a49d4 264
+  s_7b806b1b8235c3::t_e3a8b7bf89d65a 33-34,36,40-47,53-57,289-290
+agent_relay/core/service/sessions.py
+  s_7b806b1b8235c3::t_5ea130ba0ff8ea 30-44
+  s_7b806b1b8235c3::t_753c77acfa5f01 202-203,207-208,210-211,216-222,225,229-230
+agent_relay/frontends/webex/cards/approval.py
+  s_7b806b1b8235c3::t_21b96d098ae708 10-12,14,19-20
+  s_7b806b1b8235c3::t_cc3d7607263a97 13
+plugins/opencode/agent-relay.ts
+  s_7b806b1b8235c3::t_6577b289c9708b 55
+  s_7b806b1b8235c3::t_9b00c8dd678e31 2-3,11,29,40-41,43,58-59,68
+agent_relay/fileops.py
+  s_7b806b1b8235c3::t_baf4fbc52b13e7 1,5-6
+  s_7b806b1b8235c3::t_c40a3a927ca6b9 12,16-17,27-29,91,106,122-153,157-160,167-168,171-172,176-179,201-202,218,227-281,287,289-290,293-303,306-315,317,321
+tests/frontends/test_cards.py
+  s_7b806b1b8235c3::t_59ab6765f56c79 356
+  s_7b806b1b8235c3::t_64a044226eb44d 2-3,9,12-14,26,32-36,46-47,52,56-60,64-73,75,78-86,88-91,93-99,101-104,113,119-120,123,126-146,150,154-157,161-200,202,204-209,211-235,239,243-248,252-280,282-287,289-292,294-301,303,312,318-347,349-355,358-361,363
+  s_7b806b1b8235c3::t_2f8f297f00f529 74
+  s_7b806b1b8235c3::t_c7e333b927bb5d 87
+  s_7b806b1b8235c3::t_1bbbd17f341d78 92
+  s_7b806b1b8235c3::t_739c557692090c 100
+  s_7b806b1b8235c3::t_d8694205fb66e7 201
+  s_7b806b1b8235c3::t_b9ffd6335c577f 281
+  s_7b806b1b8235c3::t_102bec0f2900d0 288
+  s_7b806b1b8235c3::t_4aa7654e3f221f 293
+  s_7b806b1b8235c3::t_3a3b18b7cf4d52 348
+  s_7b806b1b8235c3::t_d4b1b04d3eae4b 357
+  s_7b806b1b8235c3::t_4a4343d9f4db10 362
+  s_7b806b1b8235c3::t_c366320e1ce9e9 16,23
+agent_relay/frontends/actions.py
+  s_7b806b1b8235c3::t_79f2122a0fbc26 1-5,14-19,21,24-25,27-34,36-37,40-47,50-53,57,60-66,71-94
+agent_relay/cli/install.py
+  s_7b806b1b8235c3::t_d78759238b9e7e 56
+  s_7b806b1b8235c3::t_aa252ed54bbc54 25
+agent_relay/frontends/request_cards.py
+  s_7b806b1b8235c3::t_9895f3e795bf39 1
+  s_7b806b1b8235c3::t_a34a41059fcd87 2-60
+agent_relay/frontends/webex/handlers.py
+  s_7b806b1b8235c3::t_5bd65c6d0e6c18 11-12,19,24
+  s_7b806b1b8235c3::t_bda8fc14abed94 109-137,141,149-150,152,162-163,165,178-179,181,185-186,188,200
+tests/core/test_approvals_delivery.py
+  s_7b806b1b8235c3::t_a925a35c1bf1f4 1-144
+agent_relay/frontends/pwa/hub.py
+  s_7b806b1b8235c3::t_0bada04f28db7d 17-18,22
+  s_dce0075cbe9287::t_0ffd49bf5412a9 43-45,48-49,76-97
+agent_relay/frontends/webex/ws_client.py
+  s_7b806b1b8235c3::t_d8855d50deca9d 259-266
+  s_7b806b1b8235c3::t_bfd198e704e4eb 108,115
+tests/core/test_hooks.py
+  s_7b806b1b8235c3::t_9540592b87fd64 476,478
+  s_7b806b1b8235c3::t_3e29aa6c049ca4 275-301,303-336
+  s_7b806b1b8235c3::t_3e72e23b650694 8,19,32
+  s_7b806b1b8235c3::t_02ec12b6809ec9 302
+agent_relay/frontends/card_state.py
+  s_7b806b1b8235c3::t_fbb1d3d99bd607 13,19-22
+  s_7b806b1b8235c3::t_293493b8917f1b 1-12,14-18,23-57
+tests/adapters/test_cursor_cli.py
+  s_7b806b1b8235c3::t_a0a0809fe257d1 9,443-445,449,453
+  s_7b806b1b8235c3::t_31dacb2149d103 17,114,127,406-438,441-442,450-452,454-455,457-478
+  s_7b806b1b8235c3::t_8fa1f1c309e581 19
+  s_7b806b1b8235c3::t_3fc8e1417fe972 111-113
+  s_7b806b1b8235c3::t_e7a2ab227ce891 439-440
+  s_7b806b1b8235c3::t_be3d7317a365c4 446-448
+  s_7b806b1b8235c3::t_3bc71e831f3c0a 456
+tests/fakes/ahp.py
+  s_7b806b1b8235c3::t_fdde3a6e8c3087 183
+  s_7b806b1b8235c3::t_399e5f14beab0a 54-55,58,137-138,158-167
+agent_relay/adapters/ahp/adapter.py
+  s_7b806b1b8235c3::t_11c8f22801d2a4 547
+  s_7b806b1b8235c3::t_5a6661defa8fae 203-234
+  s_7b806b1b8235c3::t_a72ca9be8f7c85 252,254-278,282-284,288,296-297,299-315,342
+  s_7b806b1b8235c3::t_cb737261756e4a 70,163,172-175,341
+tests/adapters/test_cursor_cdp.py
+  s_7b806b1b8235c3::t_7dfb717e0c39cf 13-19,25,85-88,95-99
+  s_7b806b1b8235c3::t_963eb638317bf4 210-233
+agent_relay/cli/daemon.py
+  s_7b806b1b8235c3::t_d78759238b9e7e 69
+  s_7b806b1b8235c3::t_d230aa435092db 39-54,62-65,70-85,89,94
+plugins/opencode/test/agent-relay.test.ts
+  s_7b806b1b8235c3::t_6577b289c9708b 89-131
+agent_relay/frontends/webex/links.py
+  s_7b806b1b8235c3::t_526c48f8cde802 35
+  s_7b806b1b8235c3::t_0226dfe000fb44 1-34,36-46
+tests/frontends/test_flows.py
+  s_7b806b1b8235c3::t_6f83a7c768cd3f 23,26,29,32
+tests/frontends/test_dispatch.py
+  s_7b806b1b8235c3::t_b2c70aeccf4f77 1-11,13-14,16-161,163-165,167-177,179-183,190-191,193-200,202-203,205-208,210-217,219-235,237-240,242-245
+  s_7b806b1b8235c3::t_76ae6da5efc43a 12
+  s_7b806b1b8235c3::t_ceeea0ba2e806b 15
+  s_7b806b1b8235c3::t_ec0a708a42fe0f 162
+  s_7b806b1b8235c3::t_0a7174bb4282e3 166
+  s_7b806b1b8235c3::t_5b2afb6d827c1f 178
+  s_7b806b1b8235c3::t_cf135f0e37a7ca 184-189
+  s_7b806b1b8235c3::t_45050812a0ed40 192
+  s_7b806b1b8235c3::t_e98ea9d31d40cc 201
+  s_7b806b1b8235c3::t_98ed6aa06a98c7 204
+  s_7b806b1b8235c3::t_b43e529a1bdb9a 209
+  s_7b806b1b8235c3::t_c1bc70af3778f3 218
+  s_7b806b1b8235c3::t_ff78d976a95e54 236
+  s_7b806b1b8235c3::t_46b0247947f70e 241
+tests/fixtures/cursor_cdp/composer.html
+  s_7b806b1b8235c3::t_0526f4a0a7c7de 78
+tests/test_fileops.py
+  s_7b806b1b8235c3::t_d858e449c72d5f 1,110,114
+  s_7b806b1b8235c3::t_49e17239903557 2-109,111-113,115-207
+tests/hook/test_shims.py
+  s_7b806b1b8235c3::t_cd1acf966c62b1 12
+  s_7b806b1b8235c3::t_e3886f3d65ef0b 68
+  s_7b806b1b8235c3::t_6ecc100313f712 65-67
+  s_7b806b1b8235c3::t_03a0ccb132f951 52-55,57-64
+tests/frontends/test_pwa.py
+  s_7b806b1b8235c3::t_07a6a251f6f72f 261-262
+  s_7b806b1b8235c3::t_2f35d668b4e55c 258-260
+  s_7b806b1b8235c3::t_8847963b6d58dd 263-265
+  s_7b806b1b8235c3::t_d48d5f89073ce4 10,15,18,23,25,32-33,35,173-257,266-290
+agent_relay/frontends/webex/cards/prompt.py
+  s_7b806b1b8235c3::t_1b31ecc6ac1134 7,10,12-13
+agent_relay/frontends/webex/cards/choose.py
+  s_7b806b1b8235c3::t_a004c62ee7d211 7,11,13-24
+tests/doctor/test_local.py
+  s_7b806b1b8235c3::t_dab771a189bc54 12
+  s_7b806b1b8235c3::t_9517ead95970dc 176-187
+agent_relay/frontends/webex/bot.py
+  s_7b806b1b8235c3::t_0e2f5503b26921 13,15,27-31,44,53,55-57,69-73,77-137,141-148,150-160,168-177,184,193-194,199-204,213-222,292-298
+tests/frontends/test_commands.py
+  s_7b806b1b8235c3::t_08bbe6f90659ca 74-79
+tests/core/test_registry.py
+  s_7b806b1b8235c3::t_76f722831c07cf 217-252
+agent_relay/core/parking.py
+  s_7b806b1b8235c3::t_ad663afa6cddb9 103
+agent_relay/settings.py
+  s_7b806b1b8235c3::t_c7bd0c6e4ff23b 20
+  s_7b806b1b8235c3::t_0a2c137d0c964f 56-57
+  s_7b806b1b8235c3::t_c7ebaaf31eba22 44-55,58-68,71-73,78-85,87
+agent_relay/adapters/cursor_cli/adapter.py
+  s_7b806b1b8235c3::t_60b8c49cbc95a8 12,72-73,105,137,143,146-147,252-253,256-264,266-278,281,284,306,310-318,320-332,371,432,540-544
+  s_7b806b1b8235c3::t_a0a0809fe257d1 265,319
+tests/fakes/webex.py
+  s_7b806b1b8235c3::t_6177b1d191f699 21
+  s_7b806b1b8235c3::t_e12b1d8eb6b8b8 251-252,260-264
+agent_relay/hook/shims.py
+  s_7b806b1b8235c3::t_57f1e19a2a0841 271-282,284,301
+tests/adapters/test_ahp.py
+  s_7b806b1b8235c3::t_94b5a0ef2315a4 464-569
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "94ffb44cf87bf26270ea70b8f49e5e73fb55abb3",
+  "prompts": {},
+  "sessions": {
+    "s_7b806b1b8235c3": {
+      "agent_id": {
+        "tool": "github-copilot",
+        "id": "baffa963-569f-4158-ae6a-f869c671ef19",
+        "model": "copilot/claude-opus-5.5"
+      },
+      "human_author": "Brijgopal Bharadwaj <brijgopalbharadwaj1999@gmail.com>"
+    },
+    "s_dce0075cbe9287": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "d7e393cb-fb68-4722-84b1-dc195488bf4c",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Brijgopal Bharadwaj <brijgopalbharadwaj1999@gmail.com>"
+    }
+  }
+}
