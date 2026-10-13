@@ -1,0 +1,46 @@
+docs/user-guide.md
+  h_ed7d05665a8f05 44-45,140-141,155,159-164,169-170,172-177,179-180,182,184-194,198-199,201-206,211-223,241-243,264,269-270,272,274,276,278,284-292,294-305,326-334,353,355-366,380-419,442-444,466-467,481-482
+  s_b1183e53048170::t_48bf91c5504144 195-197
+  s_b1183e53048170::t_0dde665a24d1b1 178,244-263
+  s_b1183e53048170::t_43ad20da1d3eac 142-143,156,181,183,293,354,420
+tests/test_acceptance.py
+  s_b1183e53048170::t_5207b874efc8ae 64-83
+docs/security.md
+  h_ed7d05665a8f05 33-35,37-38,68-75,87-123,145-151
+TODO.md
+  s_b1183e53048170::t_663667aa03c988 3-8,10-32
+docs/operations.md
+  h_ed7d05665a8f05 14-15,18-20,22-25,35-36,62-115,117-124,143-146,155-156,163-164,302,309
+  s_b1183e53048170::t_9d16c1913b2edd 304
+  s_b1183e53048170::t_66f0a2fda6c92d 21,116
+docs/deviations.md
+  s_b1183e53048170::t_3ec9bad8155ced 79-81,83-84,86,88,90-91,93-95,97-108,111-114,116-117
+  s_b1183e53048170::t_015c9502e656b5 82
+  h_ed7d05665a8f05 15,27-28,30,34,44-46,48,59,61,70-71,73,78,87,89,92,96,109,115,118
+  s_b1183e53048170::t_1dbcb2b434aaf6 110
+  s_b1183e53048170::t_60808f2a4fa3c7 85
+docs/acceptance.md
+  s_b1183e53048170::t_09d5495afabc6e 64-74,76-89
+  s_b1183e53048170::t_07cd3f8aad2cfa 75
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "581626c8dc905f9527412306af27a542046fea18",
+  "prompts": {},
+  "humans": {
+    "h_ed7d05665a8f05": {
+      "author": "Brijgopal Bharadwaj <brijgopalbharadwaj1999@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_b1183e53048170": {
+      "agent_id": {
+        "tool": "github-copilot",
+        "id": "8155873d-04b7-4e4b-870f-7757cd3dbda7",
+        "model": "copilot/claude-opus-5.5"
+      },
+      "human_author": "Brijgopal Bharadwaj <brijgopalbharadwaj1999@gmail.com>"
+    }
+  }
+}
