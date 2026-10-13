@@ -1,11 +1,13 @@
-"""Card submissions (approve, answer, `/new` steps), shared by the Webex and PWA front ends.
+"""Card submissions, shared by the Webex and PWA front ends.
 
 A submit first spends the card's nonce. Failures show the user a reply; a failure that did nothing
-gives the nonce back so the same card can be tapped again.
+gives the nonce back so the same card can be tapped again. A card kind registers its handler with
+`register_action`, usually next to the command that sends the card.
 """
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from typing import Literal
 
 from pydantic import JsonValue
@@ -14,14 +16,32 @@ from agent_relay.adapters.base import Decision
 from agent_relay.core.registry import Registry
 from agent_relay.core.service import RelayError, RelayService
 from agent_relay.frontends import card_state
+from agent_relay.frontends import registry as command_table
 from agent_relay.frontends.card_state import InvalidInput
 from agent_relay.frontends.webex.cards.common import MAX_ANSWER_CHARS
 from agent_relay.frontends.webex.handlers import Context, Handlers
 
 type Outcome = Literal["done", "already_answered", "ignored", "expired", "failed"]
+type ActionHandler = Callable[[RelayService, Handlers, dict[str, JsonValue]], Awaitable[Outcome]]
 
 DECISIONS: dict[str, Decision] = {"allow": "allow", "allow_session": "allow_session", "deny": "deny"}
-KINDS = ("approval", "question", "new")
+
+_ACTIONS: dict[str, ActionHandler] = {}
+# Kinds whose handler may have acted before failing, so a retry could act twice.
+_NOT_RETRYABLE: set[str] = set()
+
+
+def register_action(kind: str, handler: ActionHandler, *, retryable: bool = True) -> None:
+    if kind in _ACTIONS:
+        raise ValueError(f"card action already registered: {kind}")
+    _ACTIONS[kind] = handler
+    if not retryable:
+        _NOT_RETRYABLE.add(kind)
+
+
+def action_kinds() -> frozenset[str]:
+    command_table.ensure_loaded()
+    return frozenset(_ACTIONS)
 
 
 async def _where(registry: Registry, request_id: object) -> Context:
@@ -47,32 +67,43 @@ async def _answer(registry: Registry, request_id: str, inputs: dict[str, JsonVal
     return custom if custom.strip() else choice or None
 
 
-async def _act(
-    service: RelayService, handlers: Handlers, kind: object, inputs: dict[str, JsonValue]
-) -> Outcome:
+async def _approval(service: RelayService, handlers: Handlers, inputs: dict[str, JsonValue]) -> Outcome:
     request_id = inputs.get("request_id")
-    if kind == "approval" and isinstance(request_id, str):
-        decision = DECISIONS.get(str(inputs.get("decision")))
-        if decision is None:
-            raise InvalidInput("That is not a decision this card offers.")
-        return "done" if await service.answer_approval(request_id, decision) else "already_answered"
-    if kind == "question" and isinstance(request_id, str):
-        if inputs.get("op") not in ("answer", "skip"):
-            raise InvalidInput("That is not an action this card offers.")
-        request = await service.registry.get_pending(request_id)
-        if request is None or request.kind != "question" or request.status != "open":
-            return "already_answered"
-        answer = await _answer(service.registry, request_id, inputs)
-        return "done" if await service.answer_question(request_id, answer) else "already_answered"
-    if kind == "new":
-        await handlers.new_step(inputs)
-        return "done"
-    return "ignored"
+    if not isinstance(request_id, str):
+        return "ignored"
+    decision = DECISIONS.get(str(inputs.get("decision")))
+    if decision is None:
+        raise InvalidInput("That is not a decision this card offers.")
+    return "done" if await service.answer_approval(request_id, decision) else "already_answered"
+
+
+async def _question(service: RelayService, handlers: Handlers, inputs: dict[str, JsonValue]) -> Outcome:
+    request_id = inputs.get("request_id")
+    if not isinstance(request_id, str):
+        return "ignored"
+    if inputs.get("op") not in ("answer", "skip"):
+        raise InvalidInput("That is not an action this card offers.")
+    request = await service.registry.get_pending(request_id)
+    if request is None or request.kind != "question" or request.status != "open":
+        return "already_answered"
+    answer = await _answer(service.registry, request_id, inputs)
+    return "done" if await service.answer_question(request_id, answer) else "already_answered"
+
+
+async def _new(service: RelayService, handlers: Handlers, inputs: dict[str, JsonValue]) -> Outcome:
+    await handlers.new_step(inputs)
+    return "done"
+
+
+register_action("approval", _approval)
+register_action("question", _question)
+# A `/new` may have started a session before it failed.
+register_action("new", _new, retryable=False)
 
 
 async def submit(service: RelayService, handlers: Handlers, inputs: dict[str, JsonValue]) -> Outcome:
     kind = inputs.get("relay")
-    if kind not in KINDS:
+    if not isinstance(kind, str) or kind not in action_kinds():
         return "ignored"
     registry = service.registry
     where = await _where(registry, inputs.get("request_id"))
@@ -82,13 +113,12 @@ async def submit(service: RelayService, handlers: Handlers, inputs: dict[str, Js
         await handlers.reply(where, card_state.EXPIRED)
         return "expired"
     try:
-        return await _act(service, handlers, kind, inputs)
+        return await _ACTIONS[kind](service, handlers, inputs)
     except RelayError as exc:
         await card_state.restore_nonce(registry, nonce, issued)
         await handlers.reply(where, f"⚠️ {exc}")
         return "failed"
     except Exception:
-        # A `/new` may have started a session before it failed, so only idempotent answers can be retried.
-        if kind != "new":
+        if kind not in _NOT_RETRYABLE:
             await card_state.restore_nonce(registry, nonce, issued)
         raise
