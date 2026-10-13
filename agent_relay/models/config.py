@@ -16,6 +16,8 @@ class WebexConfig(_Section):
     bot_name: str = "agent-relay"
     api_base: str = "https://webexapis.com/v1"
     u2c_url: str = "https://u2c.wbx2.com/u2c/api/v1/catalog"
+    # "two" splits `/new` into app + workspace + prompt, then model, if a phone mishandles ShowCard.
+    new_card_layout: Literal["one", "two"] = "one"
 
 
 READ_ONLY_TOOLS: tuple[str, ...] = (
