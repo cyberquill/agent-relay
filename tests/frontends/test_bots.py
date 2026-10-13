@@ -32,7 +32,7 @@ from agent_relay.settings import save_workspaces
 from tests.fakes.adapters import EmittingAdapter
 from tests.fakes.webex import FakeWebex
 from tests.frontends.card_tools import choice_values, input_by_id, inputs_of, show_cards
-from tests.frontends.conftest import FakeClock
+from tests.frontends.conftest import FakeClock, submit_data
 
 
 def _input_ids(card: dict[str, JsonValue]) -> set[str]:
@@ -110,6 +110,14 @@ class TwoBots:
         space = self.spaces[bot]
         message_id = space.webex.user_says(text, parent_id=parent_id)
         await space.frontend.handle_message(await space.frontend.api.get_message(message_id))
+        await self.router.join()
+
+    async def press(
+        self, bot: BotName, message_id: str, card: dict[str, JsonValue], title: str, **extra: JsonValue
+    ) -> None:
+        space = self.spaces[bot]
+        action_id = space.webex.user_clicks(message_id, {**submit_data(card, title), **extra})
+        await space.frontend.handle_action(await space.frontend.api.get_attachment_action(action_id))
         await self.router.join()
 
 
@@ -238,6 +246,21 @@ async def test_sessions_in_an_app_space_lists_only_that_app(two: TwoBots) -> Non
     await two.say(CONTROL, "/sessions")
     _, card = two.spaces[CONTROL].webex.last_card()
     assert set(choice_values(input_by_id(card, "session"))) == {"vscode_copilot:fake1", "opencode:fake1"}
+
+
+async def test_a_dashboard_tap_for_a_session_in_another_space_says_where_the_answer_went(
+    two: TwoBots,
+) -> None:
+    await two.say(CONTROL, '/new vscode_copilot proj m1 "one"')
+    await two.say(CONTROL, '/new opencode proj m1 "two"')
+    await two.say(CONTROL, "/sessions")
+    message, card = two.spaces[CONTROL].webex.last_card()
+    await two.press(CONTROL, message.id, card, "Status", session="vscode_copilot:fake1")
+    thread = (await two.service.session("vscode_copilot:fake1")).webex_thread_id
+    assert two.spaces["vscode"].webex.bot_messages()[-1].parent_id == thread
+    assert two.spaces[CONTROL].texts()[-1] == "🧵 Answered in the VS Code space."
+    await two.press(CONTROL, message.id, card, "Status", session="opencode:fake1")
+    assert two.spaces[CONTROL].webex.bot_messages()[-1].parent_id is not None
 
 
 async def test_new_in_an_app_space_refuses_another_apps_session(two: TwoBots) -> None:

@@ -216,16 +216,16 @@ class Handlers:
         await self.threads.thread_for(session)
         if received is not None:
             await self._report_files(Context(session), harness, received, True)
-        await self._say_where(session)
+        await self.say_where(session, "Started")
         return session
 
-    async def _say_where(self, session: SessionRecord) -> None:
-        """A session started from the control space lives in its app's space; say so where it was asked."""
+    async def say_where(self, session: SessionRecord, what: str) -> None:
+        """When `session`'s thread is in another bot's space, say so in this one, or the tap looks lost."""
         if self._sessions is None:
             return
         owner = self._sessions.owner(session)
         if owner != self.scope.bot:
-            await self.reply(Context(None), f"🧵 Started in the {BOT_LABELS[owner]} space.")
+            await self.reply(Context(None), f"🧵 {what} in the {BOT_LABELS[owner]} space.")
 
     async def _start(self, app: str, ws: str, model: str, prompt: str, *, away_on: bool = False) -> None:
         svc = self.service
