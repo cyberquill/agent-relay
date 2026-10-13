@@ -1,0 +1,32 @@
+agent_relay/daemon.py
+  s_7b806b1b8235c3::t_55e138bc15aac1 97
+agent_relay/core/service/__init__.py
+  s_7b806b1b8235c3::t_55e138bc15aac1 67
+agent_relay/core/lifecycle.py
+  s_7b806b1b8235c3::t_55e138bc15aac1 9-10,13,18-24,52-58,62,77,128-135
+  s_7b806b1b8235c3::t_f98bccba8e9102 136
+agent_relay/models/config.py
+  s_7b806b1b8235c3::t_b4a82322e5ed43 5-6,47-48,87-91,112-142,151,155-158
+agent_relay/adapters/factory.py
+  s_7b806b1b8235c3::t_b4a82322e5ed43 26,30
+agent_relay/adapters/base.py
+  s_7b806b1b8235c3::t_b4a82322e5ed43 125-128
+tests/core/test_lifecycle.py
+  s_7b806b1b8235c3::t_bcfc77cc1bb6a6 66-92
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "90cf39beed7cac836f659af54b782422725c237e",
+  "prompts": {},
+  "sessions": {
+    "s_7b806b1b8235c3": {
+      "agent_id": {
+        "tool": "github-copilot",
+        "id": "baffa963-569f-4158-ae6a-f869c671ef19",
+        "model": "copilot/claude-opus-5.5"
+      },
+      "human_author": "Brijgopal Bharadwaj <brijgopalbharadwaj1999@gmail.com>"
+    }
+  }
+}
