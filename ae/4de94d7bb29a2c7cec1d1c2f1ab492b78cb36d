@@ -1,0 +1,107 @@
+agent_relay/frontends/webex/commands/queue.py
+  h_ed7d05665a8f05 172
+agent_relay/frontends/webex/handlers.py
+  h_ed7d05665a8f05 150,173-177,180-181,218-224
+  h_ed7d05665a8f05 147-149,151
+agent_relay/core/service/sessions.py
+  h_ed7d05665a8f05 78-79
+agent_relay/frontends/pwa/static/app.css
+  s_7b806b1b8235c3::t_731707d89df94f 27-38
+agent_relay/core/inbox.py
+  h_ed7d05665a8f05 18,112
+  s_7b806b1b8235c3::t_67d0bf10902c18 111,113-115
+tests/core/test_approvals_grants.py
+  h_ed7d05665a8f05 24
+  s_7b806b1b8235c3::t_18381041f80bd5 252-258,261,265-297
+  s_7b806b1b8235c3::t_23dbef38d1b914 298-299
+tests/frontends/test_queue_card.py
+  h_ed7d05665a8f05 1,7-110
+tests/frontends/test_dashboard.py
+  s_7b806b1b8235c3::t_f8a851474adc2a 148,152-153,155
+  s_7b806b1b8235c3::t_06b22392b26931 154
+tests/frontends/test_pwa_cards.py
+  s_7b806b1b8235c3::t_ea66de2e9543e5 9,18-19,22,25,45-55,79-81,231-232
+  s_7b806b1b8235c3::t_94f55bebd68a00 155
+  h_ed7d05665a8f05 153
+  s_7b806b1b8235c3::t_55b823e96fd16e 1-8,10-17,20-21,23-24,26-44,56-78,82-89,91-152,154,156-182,184-193,195-230,233-263,265-287
+  s_7b806b1b8235c3::t_6168f614c20a4b 90
+  s_7b806b1b8235c3::t_8944c861e7df7b 183
+  s_7b806b1b8235c3::t_a98769fd799d65 194
+  s_7b806b1b8235c3::t_10bb5817afdf8c 264
+agent_relay/frontends/actions.py
+  h_ed7d05665a8f05 5-6,39-40,44,51-52,131-135,143,148
+  h_ed7d05665a8f05 43,45,136,144
+agent_relay/frontends/webex/renderer.py
+  h_ed7d05665a8f05 7-8,48,55,57,59-60,90-93,98-100,185,192,196,319-320,385,512-514,518-519,525-527
+  s_7b806b1b8235c3::t_260e79d082e4d0 263-264,269-270
+  s_7b806b1b8235c3::t_b0fbb2c4dd7042 386-390
+  s_7b806b1b8235c3::t_8783c1eed3f688 94-97
+  s_7b806b1b8235c3::t_3cd7a61b2a96e4 442-444
+  h_ed7d05665a8f05 58,457-458,464
+tests/frontends/test_completion_card.py
+  h_ed7d05665a8f05 1-133
+  s_7b806b1b8235c3::t_fd6930012f16f0 134-139
+tests/frontends/test_renderer_status.py
+  h_ed7d05665a8f05 2-193
+  s_7b806b1b8235c3::t_03bc2405f856ed 1
+agent_relay/core/housekeeping.py
+  h_ed7d05665a8f05 6,14,24,26-30,33-50,56-58,61,70-71,78-79,84
+  h_ed7d05665a8f05 31-32,54-55
+agent_relay/models/events.py
+  s_7b806b1b8235c3::t_7e2cf475d13d90 74
+agent_relay/core/router.py
+  h_ed7d05665a8f05 24-29,35,48-50,73,81-88
+  h_ed7d05665a8f05 74-78,89
+agent_relay/frontends/webex/bot.py
+  h_ed7d05665a8f05 304-305
+  h_ed7d05665a8f05 300-303,306
+tests/core/test_inbox.py
+  h_ed7d05665a8f05 105-106,109-123
+tests/frontends/card_tools.py
+  s_7b806b1b8235c3::t_eacabe06ae9312 26
+  s_7b806b1b8235c3::t_56b2e72c13621c 14-16,19-25,27
+tests/core/test_hooks.py
+  h_ed7d05665a8f05 14,783-918
+agent_relay/core/hooks.py
+  h_ed7d05665a8f05 16,27,131-132,373-374,376-386
+  h_ed7d05665a8f05 335
+agent_relay/core/approvals.py
+  h_ed7d05665a8f05 97,276-280,282-299,315-317,319-321,323
+agent_relay/core/parking.py
+  h_ed7d05665a8f05 35,153
+tests/core/test_housekeeping.py
+  h_ed7d05665a8f05 7,9-10,59-94
+agent_relay/frontends/webex/commands/sessions.py
+  h_ed7d05665a8f05 186
+agent_relay/frontends/pwa/static/app.js
+  s_7b806b1b8235c3::t_f4c23d50a16a7e 131-139,142-162,164,166-191,193-207,211-232,237-283,287-400
+  s_7b806b1b8235c3::t_f77be63e44b2cd 233-236
+  s_7b806b1b8235c3::t_441479930a6126 284-286
+  s_7b806b1b8235c3::t_353e75a344dcab 401
+agent_relay/frontends/card_state.py
+  h_ed7d05665a8f05 1,5,12,21,41-58
+  h_ed7d05665a8f05 59-60
+tests/core/test_service_diff.py
+  h_ed7d05665a8f05 5,72-113
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ae4de94d7bb29a2c7cec1d1c2f1ab492b78cb36d",
+  "prompts": {},
+  "humans": {
+    "h_ed7d05665a8f05": {
+      "author": "Brijgopal Bharadwaj <brijgopalbharadwaj1999@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_7b806b1b8235c3": {
+      "agent_id": {
+        "tool": "github-copilot",
+        "id": "baffa963-569f-4158-ae6a-f869c671ef19",
+        "model": "copilot/claude-opus-5.5"
+      },
+      "human_author": "Brijgopal Bharadwaj <brijgopalbharadwaj1999@gmail.com>"
+    }
+  }
+}
