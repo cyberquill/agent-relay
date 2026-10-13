@@ -268,8 +268,20 @@ def normalize(family: str, event: str, payload: dict[str, JsonValue]) -> HookInp
     )
 
 
+def abbreviate(text: str, limit: int = 600) -> str:
+    """Cut the middle, not the end: the tail of a command is where the destructive part hides."""
+    if len(text) <= limit:
+        return text
+    reserve = len(f" … {len(text)} more chars … ")
+    keep = max(limit - reserve, 2)
+    head = (keep + 1) // 2
+    tail = keep - head
+    omitted = len(text) - keep
+    return f"{text[:head]} … {omitted} more chars … {text[len(text) - tail :]}"
+
+
 def describe_tool(hook: HookInput, limit: int = 600) -> str:
-    """A one-line, human-readable summary of a tool call for approval cards."""
+    """A human-readable summary of a tool call for approval cards, head and tail kept when long."""
     name = hook.tool_name or hook.kind.value
     inp = hook.tool_input
     detail = ""
@@ -286,4 +298,4 @@ def describe_tool(hook: HookInput, limit: int = 600) -> str:
     if hook.mcp_server:
         name = f"{hook.mcp_server}/{name}"
     summary = f"{name}: {detail}" if detail else name
-    return summary if len(summary) <= limit else summary[: limit - 1] + "…"
+    return abbreviate(summary, limit)

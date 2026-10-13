@@ -35,12 +35,16 @@ APP_LABELS: dict[Harness, str] = {
     Harness.OPENCODE: "OpenCode",
 }
 STICKY_MODEL_KEY = "model:{harness}"
-DIFF_LIMIT_BYTES = 5_000_000
+DIFF_LIMIT_BYTES = 2 * 1024 * 1024
 DESK_DECISION = "desk"
 
 
 class RelayError(RuntimeError):
     """A user-facing failure: the message is shown as is."""
+
+
+class DeliveryError(RelayError):
+    """An answer could not reach the app that is waiting for it; the request is open again."""
 
 
 @dataclass(frozen=True)

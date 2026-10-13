@@ -22,6 +22,7 @@ def _finish(outcome: Outcome, verb: str) -> None:
     written(outcome.changed, verb)
     for command in outcome.commands:
         note(f"ran {command}")
+    notes(outcome.notes)
     if not outcome.ok:
         notes(outcome.problems)
         raise fail("some steps failed; see above, then run `relay doctor`")
@@ -52,7 +53,7 @@ def install(apply: Apply = False, diff: Diff = False, python: Python = None) -> 
 
 
 def uninstall(apply: Apply = False) -> None:
-    """Undo `relay install`: restore every backup byte for byte and remove what it created."""
+    """Undo `relay install`: remove what it created, unmerge shared files, restore the rest."""
     lines = uninstall_report(Manifest.load())
     if not lines:
         out("Nothing is installed.")

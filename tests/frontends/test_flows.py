@@ -20,21 +20,16 @@ async def test_new_wizard_asks_for_each_missing_piece(relay: Relay) -> None:
     await relay.say("/new")
     msg, card = relay.webex.last_card()
     assert cards.card_fallback(card) == "Which app?"
-    await relay.click(msg.id, {"relay": "new", "step": "app", "value": "opencode"})
+    await relay.press(msg.id, card, "Next", value="opencode")
     msg, card = relay.webex.last_card()
     assert cards.card_fallback(card) == "Which workspace?"
-    await relay.click(msg.id, {"relay": "new", "step": "ws", "app": "opencode", "value": "proj"})
+    await relay.press(msg.id, card, "Next", value="proj")
     msg, card = relay.webex.last_card()
     assert cards.card_fallback(card) == "Which model?"
-    await relay.click(
-        msg.id, {"relay": "new", "step": "model", "app": "opencode", "ws": "proj", "value": "m2"}
-    )
+    await relay.press(msg.id, card, "Next", value="m2")
     msg, card = relay.webex.last_card()
     assert cards.card_fallback(card) == "What should it do?"
-    await relay.click(
-        msg.id,
-        {"relay": "new", "step": "prompt", "app": "opencode", "ws": "proj", "model": "m2", "value": "fix it"},
-    )
+    await relay.press(msg.id, card, "Start", value="fix it")
     started = relay.adapter.started[-1]
     assert started.prompt == "fix it" and started.model == "m2"
     assert started.workspace == load_workspaces().workspaces[0].path

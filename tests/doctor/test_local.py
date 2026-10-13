@@ -9,6 +9,7 @@ from datetime import datetime
 from pathlib import Path
 
 import keyring
+import keyring.errors
 import pytest
 
 from agent_relay import paths
@@ -170,6 +171,18 @@ def test_keychain_checks_follow_the_config() -> None:
     assert with_pwa["webex-bot-token"].status == "ok"
     assert with_pwa["pwa-token"].status == "fail"
     assert all("fake-bot-value" not in c.detail for c in with_pwa.values())
+
+
+def test_keychain_checks_say_locked_rather_than_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+    def locked(service: str, username: str) -> str:
+        raise keyring.errors.KeyringLocked("(-25308, 'Unknown Error')")
+
+    monkeypatch.setattr(keyring, "get_password", locked)
+    checks = by_name(local.keychain_checks(RelayConfig()))
+    token = checks["webex-bot-token"]
+    assert token.status == "fail"
+    assert "locked" in token.detail and "missing" not in token.detail
+    assert token.fix == "security unlock-keychain ~/Library/Keychains/login.keychain-db"
 
 
 async def test_launchd_checks_tell_loaded_from_missing() -> None:

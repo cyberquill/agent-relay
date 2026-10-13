@@ -18,6 +18,7 @@ WDM = "https://wdm.fake/wdm/api/v1"
 CONV = "https://conv.fake/conversation/api/v1"
 MAX_TEXT_BYTES = 7_439
 MAX_EDITS = 10
+MAX_CARD_MESSAGE_BYTES = 22_740
 
 
 @dataclass
@@ -247,6 +248,8 @@ class FakeWebex:
         else:
             body = json.loads(request.content)
             files = {}
+            if request.content != json.dumps(body, separators=(",", ":"), ensure_ascii=False).encode():
+                self.violations.append("request body is not minified")
         markdown = str(body.get("markdown", ""))
         if len(markdown.encode()) > MAX_TEXT_BYTES:
             self.violations.append(f"message of {len(markdown.encode())} bytes")
@@ -254,6 +257,11 @@ class FakeWebex:
         attachments = body.get("attachments")
         if attachments and files:
             self.violations.append("attachments and files in one message")
+        if isinstance(attachments, list) and attachments and isinstance(attachments[0], dict):
+            card_json = json.dumps(attachments[0]["content"], separators=(",", ":"), ensure_ascii=False)
+            if len(markdown.encode()) + len(card_json.encode()) > MAX_CARD_MESSAGE_BYTES:
+                self.violations.append("text and card over 22,740 bytes")
+                return httpx.Response(400, json={"message": "too long"})
         parent = body.get("parentId")
         room = body.get("roomId")
         if not isinstance(room, str):

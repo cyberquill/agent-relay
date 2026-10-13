@@ -6,7 +6,7 @@ import re
 from typing import TYPE_CHECKING
 
 from agent_relay.core.service import resolve_app
-from agent_relay.frontends.commands import Command, Invalid, split_args
+from agent_relay.frontends.commands import Command, Invalid
 from agent_relay.frontends.registry import CommandSpec, register
 from agent_relay.frontends.webex import cards
 from agent_relay.frontends.webex.handlers import DEFAULT_MODEL
@@ -15,16 +15,29 @@ from agent_relay.models.capabilities import Capability
 if TYPE_CHECKING:
     from agent_relay.frontends.webex.handlers import Context, Handlers
 
-_QUOTED = re.compile(r"""(?P<q>["'])(?P<body>.*?)(?P=q)""", re.DOTALL)
+_OPENING = re.compile(r"""(?<!\S)["']""")
+
+
+def _quoted_prompt(rest: str) -> tuple[str, str] | None:
+    """The first quoted span as (body, text without it). A quote opens a token and closes before
+    whitespace or the end, so the apostrophes in `don't` are ordinary characters."""
+    for opening in _OPENING.finditer(rest):
+        quote = opening.group()
+        closing = re.compile(f"{re.escape(quote)}(?=\\s|\\Z)").search(rest, opening.end())
+        if closing:
+            return rest[opening.end() : closing.start()], rest[: opening.start()] + " " + rest[
+                closing.end() :
+            ]
+    return None
 
 
 def _parse_new(rest: str) -> Command | Invalid:
     prompt: str | None = None
-    match = _QUOTED.search(rest)
-    if match:
-        prompt = match.group("body").strip() or None
-        rest = rest[: match.start()] + " " + rest[match.end() :]
-    tokens = split_args(rest)
+    quoted = _quoted_prompt(rest)
+    if quoted:
+        prompt = quoted[0].strip() or None
+        rest = quoted[1]
+    tokens = rest.split()
     positional, extra = tokens[:3], tokens[3:]
     if extra:
         if prompt is not None:

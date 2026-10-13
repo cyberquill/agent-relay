@@ -101,12 +101,6 @@ function onEvent(event) {
     case "tool.finished":
       push(key, { type: "tool", text: `${event.ok ? "✓" : "✗"} ${event.name} ${event.summary || ""}` });
       break;
-    case "approval.requested":
-      push(key, { type: "message", markdown: "", card: approvalCard(event) });
-      break;
-    case "question.asked":
-      push(key, { type: "message", markdown: "", card: questionCard(event) });
-      break;
     case "session.started":
       thread(key).root = `${event.harness} · ${event.workspace || ""}`;
       refreshSessions();
@@ -119,34 +113,6 @@ function onEvent(event) {
   }
 }
 
-function approvalCard(event) {
-  const base = { relay: "approval", request_id: event.request_id };
-  return {
-    body: [{ type: "TextBlock", text: "Approval needed", weight: "Bolder" }, { type: "TextBlock", text: `${event.tool} ${event.detail || ""}` }],
-    actions: [
-      { type: "Action.Submit", title: "Allow", style: "positive", data: { ...base, decision: "allow" } },
-      { type: "Action.Submit", title: "Allow for session", data: { ...base, decision: "allow_session" } },
-      { type: "Action.Submit", title: "Deny", style: "destructive", data: { ...base, decision: "deny" } },
-    ],
-  };
-}
-
-function questionCard(event) {
-  const base = { relay: "question", request_id: event.request_id };
-  const body = [{ type: "TextBlock", text: "Question", weight: "Bolder" }, { type: "TextBlock", text: event.question }];
-  if (event.options && event.options.length) {
-    body.push({ type: "Input.ChoiceSet", id: "choice", style: "expanded", choices: event.options.map((o) => ({ title: o, value: o })) });
-  }
-  body.push({ "type": "Input.Text", "id": "custom", "isMultiline": true, "placeholder": "Or type an answer" });
-  return {
-    body,
-    actions: [
-      { type: "Action.Submit", title: "Answer", style: "positive", data: { ...base, op: "answer" } },
-      { type: "Action.Submit", title: "Skip", data: { ...base, op: "skip" } },
-    ],
-  };
-}
-
 // rendering
 
 function el(tag, className, text) {
@@ -156,12 +122,19 @@ function el(tag, className, text) {
   return node;
 }
 
+const OUTCOME_NOTE = {
+  already_answered: "Already answered.",
+  expired: "This card has expired or was already answered.",
+  failed: "That did not go through; see the reply above.",
+};
+
 function renderCard(card) {
   const box = el("div", "card");
   const inputs = new Map();
   for (const block of card.body || []) {
     if (block.type === "TextBlock") {
-      box.append(el("div", [block.weight === "Bolder" ? "bold" : "", block.isSubtle ? "subtle" : ""].join(" "), block.text));
+      const classes = [block.weight === "Bolder" ? "bold" : "", block.isSubtle ? "subtle" : "", block.fontType === "Monospace" ? "mono" : ""];
+      box.append(el("div", classes.join(" "), block.text));
     } else if (block.type === "Input.ChoiceSet") {
       const select = el("select");
       for (const choice of block.choices || []) {
@@ -175,6 +148,7 @@ function renderCard(card) {
     } else if (block.type === "Input.Text") {
       const input = el("textarea");
       input.placeholder = block.placeholder || "";
+      if (block.maxLength) { input.maxLength = block.maxLength; }
       inputs.set(block.id, input);
       box.append(input);
     }
@@ -185,12 +159,13 @@ function renderCard(card) {
     const button = el("button", action.style || "", action.title);
     button.type = "button";
     button.addEventListener("click", async () => {
+      // The submit data carries the card's one-use `nonce`; the server refuses a submit without it.
       const values = { ...(action.data || {}) };
       for (const [id, input] of inputs) { values[id] = input.value; }
       actions.querySelectorAll("button").forEach((b) => { b.disabled = true; });
       try {
         const reply = await api("/api/card", { inputs: values });
-        if (reply.outcome === "already_answered") { box.append(el("div", "subtle", "Already answered.")); }
+        if (OUTCOME_NOTE[reply.outcome]) { box.append(el("div", "subtle", OUTCOME_NOTE[reply.outcome])); }
       } catch (error) {
         box.append(el("div", "error", `Failed: ${error.message}`));
         actions.querySelectorAll("button").forEach((b) => { b.disabled = false; });

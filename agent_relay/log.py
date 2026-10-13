@@ -19,6 +19,13 @@ class ScrubFilter(logging.Filter):
         return True
 
 
+class ScrubFormatter(logging.Formatter):
+    """Scrubs the whole formatted record, so tracebacks and stack info are covered too."""
+
+    def format(self, record: logging.LogRecord) -> str:
+        return scrub_text(super().format(record))
+
+
 def get_logger(name: str) -> logging.Logger:
     logger = logging.getLogger(name)
     if not any(isinstance(f, ScrubFilter) for f in logger.filters):
@@ -32,7 +39,7 @@ def configure(level: int = logging.INFO, log_file: Path | None = None, console: 
     root.setLevel(level)
     for handler in list(root.handlers):
         root.removeHandler(handler)
-    formatter = logging.Formatter(_FORMAT)
+    formatter = ScrubFormatter(_FORMAT)
     handlers: list[logging.Handler] = []
     if console:
         handlers.append(logging.StreamHandler())

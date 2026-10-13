@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import os
 import time
 from collections.abc import Callable
 from enum import StrEnum
@@ -37,6 +36,22 @@ def ask(message: JsonObj) -> JsonObj:
         raise fail(NOT_RUNNING) from exc
 
 
+def keep_alive_agents() -> list[launchd.LaunchAgent]:
+    """The launch agents that keep running (relayd, then the OpenCode server); not the weekly update."""
+    return [a for a in launchd.agents("python") if a.keep_alive]
+
+
+def _start_agent(agent: launchd.LaunchAgent, runner: Runner) -> None:
+    target = launchd.service_target(agent)
+    if not launchd.is_loaded(agent, runner):
+        code, output = runner(launchd.bootstrap_command(agent))
+        if code != 0:
+            raise fail(f"launchctl bootstrap failed ({code}): {output[:300]}")
+    code, output = runner(["launchctl", "kickstart", "-k", target])
+    if code != 0:
+        raise fail(f"launchctl kickstart failed ({code}): {output[:300]}")
+
+
 def start_daemon(runner: Runner = run) -> str:
     agent = relayd_agent()
     if not agent.path.is_file():
@@ -44,36 +59,39 @@ def start_daemon(runner: Runner = run) -> str:
             "relayd is not installed as a launch agent. Run `relay install --apply`, "
             "or run `python -m agent_relay.daemon` in a terminal."
         )
-    target = f"gui/{os.getuid()}/{agent.label}"
-    code, _ = runner(["launchctl", "print", target])
-    if code != 0:
-        code, output = runner(launchd.bootstrap_command(agent))
-        if code != 0:
-            raise fail(f"launchctl bootstrap failed ({code}): {output[:300]}")
-    code, output = runner(["launchctl", "kickstart", "-k", target])
-    if code != 0:
-        raise fail(f"launchctl kickstart failed ({code}): {output[:300]}")
-    return f"started {agent.label}; logs in {paths.logs_dir()}"
+    started = [a for a in keep_alive_agents() if a is agent or a.path.is_file()]
+    for each in started:
+        _start_agent(each, runner)
+    return f"started {', '.join(a.label for a in started)}; logs in {paths.logs_dir()}"
 
 
 def stop_daemon(runner: Runner = run, sleep: Callable[[float], None] = time.sleep) -> str:
-    """Boot relayd out and wait until launchd has let go of it, so an immediate `start` bootstraps."""
-    agent = relayd_agent()
-    code, output = runner(launchd.bootout_command(agent))
-    if code != 0:
-        raise fail(f"relayd is not loaded in launchd ({code}): {output[:200]}")
-    if not launchd.wait_unloaded(agent, runner, sleep):
-        note(f"launchd still lists {agent.label}; give it a moment before `relay start`")
-    return f"stopped {agent.label} (launchd restarts it at next login, or with `relay start`)"
+    """Boot every keep-alive agent out and wait until launchd lets go, so an immediate `start` bootstraps."""
+    stopped: list[str] = []
+    refusal = ""
+    for agent in keep_alive_agents():
+        if agent.name != "relayd" and not agent.path.is_file():
+            continue
+        code, output = runner(launchd.bootout_command(agent))
+        if code != 0:
+            if agent.name == "relayd":
+                refusal = f"relayd is not loaded in launchd ({code}): {output[:200]}"
+            continue
+        stopped.append(agent.label)
+        if not launchd.wait_unloaded(agent, runner, sleep):
+            note(f"launchd still lists {agent.label}; give it a moment before `relay start`")
+    if not stopped:
+        raise fail(refusal)
+    return f"stopped {', '.join(stopped)} (launchd restarts them at next login, or with `relay start`)"
 
 
 def start() -> None:
-    """Start (or restart) relayd under launchd."""
+    """Start (or restart) relayd and the OpenCode server under launchd."""
     out(start_daemon())
 
 
 def stop() -> None:
-    """Stop relayd."""
+    """Stop relayd and the OpenCode server."""
     out(stop_daemon())
 
 

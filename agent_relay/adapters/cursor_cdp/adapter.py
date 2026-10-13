@@ -7,6 +7,7 @@ continued at the desk. A Cursor version without a passing `relay selftest cursor
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass, field
@@ -38,6 +39,8 @@ log = get_logger(__name__)
 
 ACTIVE_KEY = "cursor_cdp.active"
 OPEN_WAIT_S = 20.0
+START_DEADLINE_S = 20.0
+NOT_STARTED_TEXT = "Cursor didn't start the turn; try again."
 STOPPED_TEXT = "Stopped from the phone."
 OLDER_CHAT = (
     "Only the latest phone-started Cursor composer chat can be driven from the phone; "
@@ -53,6 +56,7 @@ class _Turn:
     tracker: TurnTracker
     stopped: bool = False
     finishing: asyncio.Task[None] | None = field(default=None, repr=False)
+    watchdog: asyncio.Task[None] | None = field(default=None, repr=False)
 
 
 class CursorCdpAdapter(Adapter):
@@ -67,6 +71,7 @@ class CursorCdpAdapter(Adapter):
         launcher: Launcher | None = None,
         connector: Connector = connect,
         open_wait: float = OPEN_WAIT_S,
+        start_deadline: float = START_DEADLINE_S,
     ) -> None:
         self._registry = registry
         self._port = config.port
@@ -74,6 +79,7 @@ class CursorCdpAdapter(Adapter):
         self._launcher = launcher or Launcher()
         self._connector = connector
         self._open_wait = open_wait
+        self._start_deadline = start_deadline
         self._conn: Connection | None = None
         self._composers: dict[int, Composer] = {}
         self._chosen: dict[int, str] = {}
@@ -171,7 +177,8 @@ class CursorCdpAdapter(Adapter):
             await composer.choose_model(session.model)
             self._chosen[id(composer.page)] = session.model
         baseline = await composer.snapshot()
-        self._turn = _Turn(session.session_key, session.workspace, composer, TurnTracker(baseline))
+        turn = _Turn(session.session_key, session.workspace, composer, TurnTracker(baseline))
+        self._turn = turn
         await self.report_status(session.session_key, SessionStatus.RUNNING, "adapter report")
         try:
             await composer.submit(text)
@@ -179,8 +186,35 @@ class CursorCdpAdapter(Adapter):
             self._turn = None
             await self.report_status(session.session_key, SessionStatus.IDLE, "adapter report")
             raise
+        turn.watchdog = asyncio.get_running_loop().create_task(self._watch(turn))
+
+    async def _watch(self, turn: _Turn) -> None:
+        """A send click that Cursor ignores leaves no stop button and no reply; free the composer."""
+        await asyncio.sleep(self._start_deadline)
+        async with self._lock:
+            if self._turn is not turn or turn.finishing is not None:
+                return
+            try:
+                if turn.tracker.began(await turn.composer.snapshot()):
+                    return
+            except PlaywrightError:
+                log.warning(f"could not read the composer to check {turn.session_key} started")
+            self._turn = None
+            with contextlib.suppress(PlaywrightError, AdapterUnavailableError):
+                await turn.composer.clear()
+            await self.report_status(turn.session_key, SessionStatus.IDLE, "adapter report")
+            self._emit(
+                ErrorEvent(
+                    harness=self.harness,
+                    session_key=turn.session_key,
+                    workspace=turn.workspace,
+                    message=NOT_STARTED_TEXT,
+                )
+            )
 
     async def _finish(self, turn: _Turn) -> None:
+        if turn.watchdog is not None:
+            turn.watchdog.cancel()
         async with self._lock:
             if self._turn is turn:
                 self._turn = None
@@ -279,6 +313,8 @@ class CursorCdpAdapter(Adapter):
 
     async def aclose(self) -> None:
         turn = self._turn
+        if turn is not None and turn.watchdog is not None:
+            turn.watchdog.cancel()
         if turn is not None and turn.finishing is not None:
             await asyncio.gather(turn.finishing, return_exceptions=True)
         if self._conn is not None:

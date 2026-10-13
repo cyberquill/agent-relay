@@ -8,17 +8,20 @@ from dataclasses import dataclass
 from pydantic import JsonValue
 
 from agent_relay.core.service import APP_LABELS, RelayError, RelayService, resolve_app
-from agent_relay.frontends import commands, registry
+from agent_relay.frontends import card_state, commands, registry
+from agent_relay.frontends.card_state import InvalidInput
 from agent_relay.frontends.commands import Command, HelpHint, Invalid, Prompt, Unknown
 from agent_relay.frontends.surface import Surface
 from agent_relay.frontends.webex import cards
 from agent_relay.log import get_logger
 from agent_relay.models.capabilities import Capability
 from agent_relay.models.sessions import SessionRecord
+from agent_relay.settings import load_workspaces, resolve_workspace
 
 log = get_logger(__name__)
 
 DEFAULT_MODEL = "__default__"
+NO_MODEL = ("", DEFAULT_MODEL, "default", "-")
 
 
 @dataclass(frozen=True)
@@ -103,9 +106,39 @@ class Handlers:
 
     # /new wizard: app → workspace → model → prompt
 
+    async def _nonce(self) -> str:
+        return await card_state.issue_nonce(self.service.registry)
+
+    async def _validate(self, carry: dict[str, JsonValue]) -> None:
+        """Whatever a card (or a typed `/new`) carries must be something the relay offers."""
+        svc = self.service
+        values = [carry.get(f) for f in ("app", "ws", "model", "prompt")]
+        if any(v is not None and not isinstance(v, str) for v in values):
+            raise InvalidInput("That card carried something unexpected.")
+        app, ws, model, prompt = (str(v or "") for v in values)
+        if not app:
+            return
+        harness = resolve_app(app)
+        label = APP_LABELS.get(harness, harness.value)
+        adapter = svc.router.adapter(harness)
+        if adapter is None:
+            raise InvalidInput(f"{label} is not enabled.")
+        if not adapter.capabilities.has(Capability.COLD_START):
+            raise InvalidInput(f"{label} cannot start sessions from the phone.")
+        if ws and resolve_workspace(ws, load_workspaces()) is None:
+            raise InvalidInput(f"Unknown workspace `{ws}`. Try `/ws`.")
+        if model not in NO_MODEL:
+            if not adapter.capabilities.has(Capability.MODEL_SELECT):
+                raise InvalidInput(f"{label} does not offer model selection.")
+            if not any(model in (m.id, m.label) for m in await svc.models(harness.value)):
+                raise InvalidInput(f"{label} has no model `{model}`. Try `/models {harness.value}`.")
+        if len(prompt) > cards.MAX_PROMPT_CHARS:
+            raise InvalidInput(f"That prompt is too long ({cards.MAX_PROMPT_CHARS} characters at most).")
+
     async def wizard(self, ctx: Context, carry: dict[str, JsonValue]) -> None:
         svc = self.service
         top = Context(None)
+        await self._validate(carry)
         app = carry.get("app")
         if not isinstance(app, str) or not app:
             apps = [a for a in await svc.apps() if Capability.COLD_START in a.capabilities]
@@ -113,9 +146,10 @@ class Handlers:
                 await self.reply(top, "No app that can start sessions is available. `/doctor` shows why.")
                 return
             choices = [(a.harness.value, a.label) for a in apps]
-            await self.card(
-                top, "Pick an app", cards.choose("app", "Which app?", choices, cards.carry_fields(carry))
+            card = cards.choose(
+                "app", "Which app?", choices, cards.carry_fields(carry), nonce=await self._nonce()
             )
+            await self.card(top, "Pick an app", card)
             return
         harness = resolve_app(app)
         ws = carry.get("ws")
@@ -125,11 +159,10 @@ class Handlers:
                 await self.reply(top, "No workspaces. Add one with `relay ws add <name> <path>`.")
                 return
             choices = [(w.name, f"{w.name} · {w.file or w.path}") for w in spaces]
-            await self.card(
-                top,
-                "Pick a workspace",
-                cards.choose("ws", "Which workspace?", choices, cards.carry_fields(carry)),
+            card = cards.choose(
+                "ws", "Which workspace?", choices, cards.carry_fields(carry), nonce=await self._nonce()
             )
+            await self.card(top, "Pick a workspace", card)
             return
         model = carry.get("model")
         adapter = svc.router.adapter(harness)
@@ -142,17 +175,17 @@ class Handlers:
             models = await svc.models(harness.value)
             choices = [(DEFAULT_MODEL, f"Default{f' ({sticky})' if sticky else ''}")]
             choices += list({m.id: (m.id, m.label) for m in models}.values())
-            await self.card(
-                top, "Pick a model", cards.choose("model", "Which model?", choices, cards.carry_fields(carry))
+            card = cards.choose(
+                "model", "Which model?", choices, cards.carry_fields(carry), nonce=await self._nonce()
             )
+            await self.card(top, "Pick a model", card)
             return
         prompt = carry.get("prompt")
         if not isinstance(prompt, str) or not prompt.strip():
-            await self.card(top, "What should it do?", cards.prompt(cards.carry_fields(carry)))
+            card = cards.prompt(cards.carry_fields(carry), nonce=await self._nonce())
+            await self.card(top, "What should it do?", card)
             return
-        chosen = (
-            model if isinstance(model, str) and model not in ("", DEFAULT_MODEL, "default", "-") else None
-        )
+        chosen = model if isinstance(model, str) and model not in NO_MODEL else None
         session = await svc.start(harness.value, ws, prompt.strip(), chosen)
         await self.renderer.thread_for(session)
 
@@ -164,7 +197,4 @@ class Handlers:
             carry[step] = value if isinstance(value, str) else ""
             if step == "model" and not carry[step]:
                 carry[step] = DEFAULT_MODEL
-        try:
-            await self.wizard(Context(None), carry)
-        except RelayError as exc:
-            await self.reply(Context(None), f"⚠️ {exc}")
+        await self.wizard(Context(None), carry)

@@ -30,16 +30,30 @@ type Entry = tuple[str, bytes | str, int]
 
 @dataclass
 class Commands:
+    """A launchctl that remembers which labels are loaded, as launchd does."""
+
     seen: list[list[str]] = field(default_factory=list)
+    loaded: set[str] = field(default_factory=set)
 
     def __call__(self, argv: Sequence[str]) -> tuple[int, str]:
         self.seen.append(list(argv))
-        if list(argv[:2]) == ["launchctl", "print"]:
-            return 113, "Could not find service"
+        if argv[0] != "launchctl":
+            return 0, ""
+        if argv[1] == "print":
+            return (0, "") if argv[2].rsplit("/", 1)[-1] in self.loaded else (113, "Could not find service")
+        if argv[1] == "bootstrap":
+            self.loaded.add(Path(argv[3]).stem)
+        if argv[1] == "bootout":
+            self.loaded.discard(argv[2].rsplit("/", 1)[-1])
         return 0, ""
 
     def heads(self) -> list[str]:
         return [" ".join(a[:2]) if a[0] == "launchctl" else Path(a[0]).name + " " + a[1] for a in self.seen]
+
+    def launchctl(self, verb: str) -> list[str]:
+        return [
+            a[-1].rsplit("/", 1)[-1].removesuffix(".plist") for a in self.seen if a[:2] == ["launchctl", verb]
+        ]
 
 
 @dataclass
@@ -194,7 +208,86 @@ def test_apply_runs_launchctl_and_installs_the_extension(seed: Seed) -> None:
     for agent in (paths.launch_agents_dir() / f"{label}" for label in labels):
         assert agent.is_file()
     launchctl = [a[1] for a in commands.seen if a[0] == "launchctl"]
-    assert launchctl == ["bootout", "print", "bootstrap"] * 3, "bootstrap waits for launchd to let go"
+    assert launchctl == ["print", "bootstrap"] * 3, "a fresh install only bootstraps what is not loaded"
+
+
+RELAYD = "io.github.cyberquill.agent-relay.relayd"
+OPENCODE = "io.github.cyberquill.agent-relay.opencode"
+UPDATE = "io.github.cyberquill.agent-relay.cursor-update"
+
+
+def test_a_second_install_leaves_unchanged_running_agents_alone(seed: Seed) -> None:
+    first = Commands()
+    apply_install(planned(seed), first)
+    again = Commands(loaded=set(first.loaded))
+    outcome = apply_install(planned(seed), again)
+    assert outcome.ok and again.launchctl("bootout") == [] and again.launchctl("bootstrap") == []
+
+
+def test_only_an_agent_whose_plist_changed_is_reloaded(seed: Seed) -> None:
+    first = Commands()
+    apply_install(planned(seed), first)
+    again = Commands(loaded=set(first.loaded))
+    other = plan_install(
+        RelayConfig(), "/other/python", extension_dir=seed.extension_dir, patch_dir=seed.patch_dir
+    )
+    apply_install(other, again)
+    assert sorted(again.launchctl("bootout")) == sorted([RELAYD, OPENCODE])
+    assert sorted(again.launchctl("bootstrap")) == sorted([RELAYD, OPENCODE])
+    assert UPDATE not in again.launchctl("bootout") and UPDATE in again.loaded
+
+
+def test_an_unchanged_agent_that_is_not_loaded_is_bootstrapped_without_a_bootout(seed: Seed) -> None:
+    first = Commands()
+    apply_install(planned(seed), first)
+    again = Commands(loaded=set(first.loaded) - {OPENCODE})
+    apply_install(planned(seed), again)
+    assert again.launchctl("bootstrap") == [OPENCODE] and again.launchctl("bootout") == []
+
+
+def test_uninstall_keeps_a_hook_and_an_mcp_server_added_after_install(seed: Seed) -> None:
+    apply_install(planned(seed), Commands())
+    hooks = paths.cursor_dir() / "hooks.json"
+    data = json.loads(hooks.read_text())
+    data["hooks"]["stop"].append({"command": "added-later"})
+    hooks.write_text(json.dumps(data))
+    mcp = paths.cursor_dir() / "mcp.json"
+    document = json.loads(mcp.read_text())
+    document["mcpServers"]["added-later"] = {"command": "tool"}
+    mcp.write_text(json.dumps(document))
+
+    lines = install.uninstall_report()
+    assert f"unmerge {hooks}" in lines and f"unmerge {mcp}" in lines
+
+    outcome = apply_uninstall(Commands())
+    assert outcome.ok and outcome.notes == []
+    kept_hooks = json.loads(hooks.read_text())["hooks"]
+    assert kept_hooks["stop"] == [{"command": "added-later"}]
+    assert kept_hooks["preToolUse"] == [{"command": "git-ai hook pre"}]
+    servers = json.loads(mcp.read_text())["mcpServers"]
+    assert "added-later" in servers and "agent-relay" not in servers
+    assert not paths.install_manifest().exists()
+    assert not paths.backups_dir().exists(), "backups of unmerged files are discarded"
+
+
+def test_uninstall_leaves_an_edited_file_without_an_unmerger_and_says_where_the_backup_is(seed: Seed) -> None:
+    apply_install(planned(seed), Commands())
+    skill = paths.agents_skills_dir() / "stepping-away" / "SKILL.md"
+    skill.write_text("my own rewrite\n")
+    assert f"leave {skill} (changed since install)" in install.uninstall_report()
+    outcome = apply_uninstall(Commands())
+    assert skill.read_text() == "my own rewrite\n"
+    [note] = [n for n in outcome.notes if str(skill) in n]
+    backup = note.rsplit("backup at ", 1)[1]
+    assert note.startswith(f"{skill}: left in place, changed since install; backup at ")
+    assert Path(backup).read_bytes() == ORIGINAL_SKILL
+
+
+def test_install_makes_the_backup_tree_private(seed: Seed) -> None:
+    apply_install(planned(seed), Commands())
+    assert paths.backups_dir().stat().st_mode & 0o777 == 0o700
+    backups = [p for p in paths.backups_dir().rglob("*") if p.is_file()]
+    assert backups and all(p.stat().st_mode & 0o777 == 0o600 for p in backups)
 
 
 def test_uninstall_boots_agents_out_and_removes_the_extension(seed: Seed) -> None:

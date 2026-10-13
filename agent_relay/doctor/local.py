@@ -24,7 +24,13 @@ from agent_relay.hook.installers import opencode as opencode_plugin
 from agent_relay.models.config import RelayConfig
 from agent_relay.ops import launchd, stepping_away
 from agent_relay.ops.bundles import SKILL_NAME
-from agent_relay.settings import SECRET_SETUP_COMMAND, Secret, get_secret
+from agent_relay.settings import (
+    KEYCHAIN_UNLOCK_COMMAND,
+    SECRET_SETUP_COMMAND,
+    KeychainLockedError,
+    Secret,
+    lookup_secret,
+)
 from agent_relay.sync.plan import plan_sync
 from agent_relay.sync.secrets import MissingMcpSecretError, Resolver, keychain_resolver
 from agent_relay.sync.skills import plan_dedupe
@@ -225,7 +231,19 @@ def keychain_checks(config: RelayConfig) -> list[Check]:
         wanted.append((Secret.PWA_TOKEN, "fail", "the PWA cannot authenticate the phone"))
     checks: list[Check] = []
     for secret, missing, why in wanted:
-        present = get_secret(secret) is not None
+        try:
+            present = lookup_secret(secret) is not None
+        except KeychainLockedError:
+            checks.append(
+                Check(
+                    area="Keychain",
+                    name=secret.value,
+                    status=missing,
+                    detail=f"the login Keychain is locked, so this cannot be read; {why}",
+                    fix=KEYCHAIN_UNLOCK_COMMAND,
+                )
+            )
+            continue
         checks.append(
             Check(area="Keychain", name=secret.value, status="ok", detail="present")
             if present

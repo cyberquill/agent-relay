@@ -10,13 +10,19 @@ from pathlib import Path
 import pytest
 
 from agent_relay.adapters.base import AdapterUnavailableError, StartRequest, UnsupportedError
-from agent_relay.adapters.cursor_cdp.adapter import OLDER_CHAT, STOPPED_TEXT, CursorCdpAdapter
+from agent_relay.adapters.cursor_cdp.adapter import (
+    NOT_STARTED_TEXT,
+    OLDER_CHAT,
+    START_DEADLINE_S,
+    STOPPED_TEXT,
+    CursorCdpAdapter,
+)
 from agent_relay.adapters.cursor_cdp.connect import Launcher, connect, fetch_version
 from agent_relay.adapters.cursor_cdp.selectors import load_selectors
 from agent_relay.adapters.cursor_cdp.selftest import SELFTEST_KEY, last_report, run_live
 from agent_relay.core.registry import Registry
 from agent_relay.models.config import CdpConfig
-from agent_relay.models.events import Event, TextDelta, TurnCompleted
+from agent_relay.models.events import ErrorEvent, Event, TextDelta, TurnCompleted
 from agent_relay.models.sessions import SessionRecord, SessionStatus
 from tests.adapters.cdp_rig import WORKSPACE_NAME, Chromium, FakeRunner, start_chromium
 
@@ -76,14 +82,21 @@ def chromium(relay_home: Path) -> Iterator[Chromium]:
 
 
 @pytest.fixture
-async def rig(registry: Registry, chromium: Chromium, relay_home: Path) -> AsyncIterator[Rig]:
+async def rig(
+    registry: Registry, chromium: Chromium, relay_home: Path, request: pytest.FixtureRequest
+) -> AsyncIterator[Rig]:
+    start_deadline: float = getattr(request, "param", START_DEADLINE_S)
     runner = FakeRunner()
     launcher = Launcher(app=relay_home / "Cursor.app", runner=runner)
     selectors = load_selectors()
     report = await run_live(registry, chromium.port, selectors, launcher)
     assert report.ok, report.render()
     adapter = CursorCdpAdapter(
-        registry, CdpConfig(enabled=True, port=chromium.port), launcher=launcher, open_wait=1
+        registry,
+        CdpConfig(enabled=True, port=chromium.port),
+        launcher=launcher,
+        open_wait=1,
+        start_deadline=start_deadline,
     )
     recorder = Recorder()
     task = asyncio.create_task(adapter.run(recorder))
@@ -192,6 +205,30 @@ async def test_a_silent_reply_still_completes(rig: Rig) -> None:
     await rig.adapter.start_session(StartRequest(workspace=rig.workspace, prompt="silent"))
     completed = await rig.recorder.wait_completed(1)
     assert completed[0].text is None
+
+
+@pytest.mark.parametrize("rig", [0.6], indirect=True)
+async def test_a_send_that_never_starts_frees_the_composer_for_the_next_prompt(rig: Rig) -> None:
+    session = await rig.adapter.start_session(StartRequest(workspace=rig.workspace, prompt="deadsend"))
+    for _ in range(100):
+        if any(isinstance(e, ErrorEvent) for e in rig.recorder.events):
+            break
+        await asyncio.sleep(0.05)
+    errors = [e for e in rig.recorder.events if isinstance(e, ErrorEvent)]
+    assert [e.message for e in errors] == [NOT_STARTED_TEXT]
+    assert (await rig.session(session.session_key)).status is SessionStatus.IDLE
+    await rig.adapter.send_prompt(await rig.session(session.session_key), "second")
+    completed = await rig.recorder.wait_completed(1)
+    assert completed[0].text == "Echo: second"
+    assert [p["prompt"] for p in await rig.prompts()] == ["second"]
+
+
+@pytest.mark.parametrize("rig", [0.6], indirect=True)
+async def test_a_turn_that_started_is_left_alone_past_the_deadline(rig: Rig) -> None:
+    await rig.adapter.start_session(StartRequest(workspace=rig.workspace, prompt="slow please"))
+    await asyncio.sleep(1.2)
+    assert not [e for e in rig.recorder.events if isinstance(e, ErrorEvent)]
+    assert rig.recorder.deltas(next(e.session_key for e in rig.recorder.events if isinstance(e, TextDelta)))
 
 
 async def test_another_workspace_is_opened_and_waited_for(rig: Rig, relay_home: Path) -> None:

@@ -51,8 +51,11 @@ class FakeAgentHost:
     token: str = "fake-connection-token"
     protocol_version: str = "0.10.0"
     auto_reply: bool = True
+    page_size: int | None = None
+    endless_cursor: bool = False
     sessions: dict[str, dict[str, JsonValue]] = field(default_factory=dict)
     requests: list[tuple[str, dict[str, JsonValue]]] = field(default_factory=list)
+    notified: list[tuple[str, dict[str, JsonValue]]] = field(default_factory=list)
     dispatched: list[dict[str, JsonValue]] = field(default_factory=list)
     rejected: int = 0
     clients: set[ServerConnection] = field(default_factory=set)
@@ -131,6 +134,8 @@ class FakeAgentHost:
                 if "id" not in message:
                     if method == "dispatchAction":
                         await self._on_dispatch(params)
+                    else:
+                        self.notified.append((method, params))
                     continue
                 self.requests.append((method, params))
                 reply: dict[str, JsonValue] = {"jsonrpc": "2.0", "id": message["id"]}
@@ -150,7 +155,16 @@ class FakeAgentHost:
             case "initialize":
                 return _initialize_result()
             case "listSessions":
-                return {"items": list(self.sessions.values())}
+                items: list[JsonValue] = list(self.sessions.values())
+                if self.page_size is None:
+                    return {"items": items}
+                cursor = params.get("cursor")
+                start = int(cursor.removeprefix("page-")) if isinstance(cursor, str) else 0
+                end = start + self.page_size
+                page: dict[str, JsonValue] = {"items": items[start:end]}
+                if end < len(items) or self.endless_cursor:
+                    page["nextCursor"] = f"page-{end}"
+                return page
             case "createSession":
                 assert isinstance(channel, str)
                 dirs = params.get("workingDirectories")
@@ -166,7 +180,7 @@ class FakeAgentHost:
                 return None
             case "subscribe":
                 return {"snapshot": {"resource": channel, "state": {}, "fromSeq": 0}}
-            case "createChat" | "disposeSession" | "unsubscribe":
+            case "createChat" | "disposeSession":
                 return None
         raise KeyError(method)
 

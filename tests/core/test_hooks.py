@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import AsyncIterator
+from datetime import timedelta
 from pathlib import Path
 
 import pytest
@@ -15,7 +16,7 @@ from agent_relay.core import away
 from agent_relay.core.claims import make_claim
 from agent_relay.core.hooks import APPROVED_CALL_KEY, HOOKED
 from agent_relay.core.parking import LIMIT_TEXT, RENEW_TEXT
-from agent_relay.core.registry import Registry
+from agent_relay.core.registry import RECENT_APPROVAL_PREFIX, Registry, stamped_at
 from agent_relay.daemon import Core
 from agent_relay.models.config import RelayConfig
 from agent_relay.models.events import (
@@ -28,6 +29,7 @@ from agent_relay.models.events import (
     SessionReleased,
     SessionStarted,
     TurnCompleted,
+    utcnow,
 )
 from agent_relay.models.sessions import SessionRecord, SessionStatus
 
@@ -270,6 +272,68 @@ async def test_permission_request_after_approved_pre_tool_is_not_asked_twice(
     assert not rec.of(ApprovalRequested)
 
 
+_PRE_C9: dict[str, JsonValue] = {
+    "session_id": "C9",
+    "cwd": "/w/proj",
+    "tool_name": "bash",
+    "tool_input": {"command": "make"},
+}
+_PERM_C9: dict[str, JsonValue] = {**_PRE_C9, "toolName": "bash"}
+
+
+async def _approve_then_stamp(built: Core, rec: Recorder, stamp: str | None) -> str:
+    """Approve one call from the phone, then overwrite the stored recent-approval value."""
+    answering = asyncio.create_task(_answer_when_asked(built, rec, "allow"))
+    await hook(built, "copilot", "PreToolUse", _PRE_C9)
+    await answering
+    rec.events.clear()
+    (key,) = await built.registry.kv_prefix(RECENT_APPROVAL_PREFIX)
+    if stamp is not None:
+        await built.registry.kv_set(key, stamp)
+    return key
+
+
+async def test_recent_approval_is_scoped_to_the_session_and_stamped(
+    core: tuple[Core, Recorder, list[str]],
+) -> None:
+    built, rec, _ = core
+    await away.set_away(built.registry, True)
+    key = await _approve_then_stamp(built, rec, None)
+    assert key.startswith(f"{RECENT_APPROVAL_PREFIX}copilot_cli:C9:")
+    stamped = stamped_at((await built.registry.kv_get(key)) or "")
+    assert stamped is not None and utcnow() - stamped < timedelta(seconds=5)
+
+
+@pytest.mark.parametrize("age", [timedelta(seconds=61), timedelta(hours=3)])
+async def test_recent_approval_expires_after_sixty_seconds(
+    core: tuple[Core, Recorder, list[str]], age: timedelta
+) -> None:
+    built, rec, _ = core
+    await away.set_away(built.registry, True)
+    await _approve_then_stamp(built, rec, f"{(utcnow() - age).isoformat()} allow")
+    reply = await hook(built, "copilot", "permissionRequest", _PERM_C9)
+    assert rec.of(ApprovalRequested), "an old approval must not be reused"
+    assert reply["stdout"]["behavior"] == "deny"  # type: ignore[index,call-overload]
+
+
+async def test_recent_approval_without_a_stamp_is_not_honoured(
+    core: tuple[Core, Recorder, list[str]],
+) -> None:
+    built, rec, _ = core
+    await away.set_away(built.registry, True)
+    await _approve_then_stamp(built, rec, "allow")
+    await hook(built, "copilot", "permissionRequest", _PERM_C9)
+    assert rec.of(ApprovalRequested)
+
+
+async def test_recent_denial_is_never_reused(core: tuple[Core, Recorder, list[str]]) -> None:
+    built, rec, _ = core
+    await away.set_away(built.registry, True)
+    await _approve_then_stamp(built, rec, f"{utcnow().isoformat()} deny")
+    await hook(built, "copilot", "permissionRequest", _PERM_C9)
+    assert rec.of(ApprovalRequested)
+
+
 async def test_cursor_pre_tool_for_shell_defers_to_shell_hook(core: tuple[Core, Recorder, list[str]]) -> None:
     built, _, _ = core
     await away.set_away(built.registry, True)
@@ -409,9 +473,9 @@ async def test_copilot_block_cap_posts_limit(core: tuple[Core, Recorder, list[st
         if reply == {}:
             break
         blocked += 1
-    assert blocked == cap - 1
+    assert blocked == cap
     assert notes == [LIMIT_TEXT]
-    assert (await _session(built, "copilot_cli:C2")).extra["wake_needed"] is True
+    assert "wake_needed" not in (await _session(built, "copilot_cli:C2")).extra
 
 
 async def test_stop_hook_active_without_our_block_is_left_alone(

@@ -82,7 +82,7 @@ def build_pwa(
         return None
     if not token:
         raise ValueError("pwa.enabled is true but there is no PWA token in the Keychain")
-    hub = PwaHub()
+    hub = PwaHub(registry=service.registry, approval_deadline_s=service.config.approvals.deadline_s)
     handlers = Handlers(service, hub, doctor=doctor)
     router.subscribe(hub)
     return Pwa(hub, handlers, PwaServer(build_app(hub, service, handlers, token), config.port))

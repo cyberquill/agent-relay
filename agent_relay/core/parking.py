@@ -100,9 +100,8 @@ class ParkManager:
             await self._set(session, SessionStatus.IDLE, 0, None)
             return ParkResult("skipped")
         limit = self.block_limit(session.harness)
-        if limit is not None and blocks + 1 >= limit:
+        if limit is not None and blocks >= limit:
             await self._set(session, SessionStatus.IDLE, 0, None)
-            await self._registry.set_session_extra(session.session_key, "wake_needed", True)
             await self._notify(session, LIMIT_TEXT)
             log.info(f"{session.session_key}: parking limit ({limit}) reached")
             return ParkResult("limit")

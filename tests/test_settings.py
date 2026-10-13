@@ -2,16 +2,20 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import keyring.errors
 import pytest
 
 from agent_relay import paths
 from agent_relay.models.config import RelayConfig, Workspace, WorkspacesConfig
 from agent_relay.settings import (
+    KeychainLockedError,
     MissingSecretError,
     Secret,
     code_workspace_folders,
+    get_secret,
     load_config,
     load_workspaces,
+    lookup_secret,
     require_secret,
     resolve_workspace,
     save_config,
@@ -30,6 +34,39 @@ def test_missing_secret_message_has_setup_command() -> None:
 def test_secret_roundtrip() -> None:
     set_secret(Secret.PWA_TOKEN, "abc")
     assert require_secret(Secret.PWA_TOKEN) == "abc"
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        keyring.errors.KeyringLocked("Can't get password from keychain: (-128, 'Keychain Access Denied')"),
+        keyring.errors.KeyringError("Can't get password from keychain: (-25308, 'Unknown Error')"),
+        keyring.errors.KeyringError("User interaction is not allowed."),
+    ],
+)
+def test_a_locked_keychain_is_not_a_missing_secret(
+    monkeypatch: pytest.MonkeyPatch, error: keyring.errors.KeyringError
+) -> None:
+    def locked(service: str, username: str) -> str:
+        raise error
+
+    monkeypatch.setattr(keyring, "get_password", locked)
+    with pytest.raises(KeychainLockedError) as err:
+        require_secret(Secret.WEBEX_BOT_TOKEN)
+    assert type(err.value) is KeychainLockedError
+    assert "locked" in str(err.value) and "unlock-keychain" in str(err.value)
+    with pytest.raises(KeychainLockedError):
+        lookup_secret(Secret.WEBEX_BOT_TOKEN)
+    assert get_secret(Secret.WEBEX_BOT_TOKEN) is None
+
+
+def test_another_keychain_failure_still_reads_as_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+    def broken(service: str, username: str) -> str:
+        raise keyring.errors.KeyringError("Can't get password from keychain: (-1, 'Unknown Error')")
+
+    monkeypatch.setattr(keyring, "get_password", broken)
+    with pytest.raises(MissingSecretError):
+        require_secret(Secret.WEBEX_BOT_TOKEN)
 
 
 def test_config_defaults_and_roundtrip() -> None:

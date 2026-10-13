@@ -12,6 +12,8 @@ from collections.abc import AsyncIterator
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from pathlib import Path
 
+import keyring
+import keyring.errors
 import pytest
 
 from agent_relay import daemon, ipc, paths
@@ -33,6 +35,21 @@ def test_missing_token_exits_2_with_setup_command(capsys: pytest.CaptureFixture[
     err = capsys.readouterr().err
     assert SECRET_SETUP_COMMAND[Secret.WEBEX_BOT_TOKEN] in err
     assert "webex-bot-token" in err
+
+
+def test_a_locked_keychain_exits_2_and_says_locked(
+    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _configure()
+
+    def locked(service: str, username: str) -> str:
+        raise keyring.errors.KeyringLocked("(-25308, 'Unknown Error')")
+
+    monkeypatch.setattr(keyring, "get_password", locked)
+    assert daemon.main() == daemon.EXIT_CONFIG
+    err = capsys.readouterr().err
+    assert "locked" in err and "unlock-keychain" in err
+    assert "is missing" not in err
 
 
 def test_missing_allowed_email_exits_2(capsys: pytest.CaptureFixture[str]) -> None:

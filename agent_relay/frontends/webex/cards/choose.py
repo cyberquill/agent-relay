@@ -4,22 +4,21 @@ from __future__ import annotations
 
 from pydantic import JsonValue
 
-from agent_relay.frontends.webex.cards.common import card, submit, text
+from agent_relay.frontends.webex.cards.common import MAX_CHOICES, card, choice_set, submit, text
 
 
 def choose(
-    step: str, title: str, choices: list[tuple[str, str]], carry: dict[str, JsonValue]
+    step: str, title: str, choices: list[tuple[str, str]], carry: dict[str, JsonValue], *, nonce: str
 ) -> dict[str, JsonValue]:
-    return card(
-        [
-            text(title, weight="Bolder"),
-            {
-                "type": "Input.ChoiceSet",
-                "id": "value",
-                "style": "compact",
-                "value": choices[0][0] if choices else "",
-                "choices": [{"title": label, "value": value} for value, label in choices],
-            },
-        ],
-        [submit("Next", {"relay": "new", "step": step, **carry}, "positive")],
-    )
+    body: list[JsonValue] = [
+        text(title, weight="Bolder"),
+        choice_set("value", choices, "compact", choices[0][0] if choices else ""),
+    ]
+    if len(choices) > MAX_CHOICES:
+        body.append(
+            text(
+                f"Showing {MAX_CHOICES} of {len(choices)}. Type /new with the {step} to pick another.",
+                subtle=True,
+            )
+        )
+    return card(body, [submit("Next", {"relay": "new", "step": step, "nonce": nonce, **carry}, "positive")])

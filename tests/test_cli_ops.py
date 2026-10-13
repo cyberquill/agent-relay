@@ -6,6 +6,7 @@ from collections.abc import Sequence
 from pathlib import Path
 
 import pytest
+import typer
 from typer.testing import CliRunner
 
 from agent_relay import paths
@@ -182,6 +183,91 @@ def test_stop_gives_up_waiting_with_a_note(capsys: pytest.CaptureFixture[str]) -
     cli_daemon.stop_daemon(stuck, sleep=lambda _: None)
     assert len(stuck.seen) == 1 + launchd.UNLOAD_POLLS
     assert "give it a moment" in capsys.readouterr().err
+
+
+class PerLabel:
+    """A launchctl that tracks each label separately, as launchd does."""
+
+    def __init__(self, loaded: set[str]) -> None:
+        self.loaded = loaded
+        self.seen: list[list[str]] = []
+
+    def label(self, argv: Sequence[str]) -> str:
+        return Path(argv[-1]).stem if argv[1] == "bootstrap" else argv[-1].rsplit("/", 1)[-1]
+
+    def __call__(self, argv: Sequence[str]) -> tuple[int, str]:
+        self.seen.append(list(argv))
+        label = self.label(argv)
+        if argv[1] == "print":
+            return (0, "") if label in self.loaded else (113, "Could not find service")
+        if argv[1] == "bootout":
+            if label not in self.loaded:
+                return 3, "No such process"
+            self.loaded.discard(label)
+        if argv[1] == "bootstrap":
+            self.loaded.add(label)
+        return 0, ""
+
+    def verbs(self, verb: str) -> list[str]:
+        return [self.label(a) for a in self.seen if a[1] == verb]
+
+
+def _install_plists(*names: str) -> None:
+    for agent in launchd.agents("python"):
+        if agent.name in names:
+            agent.path.parent.mkdir(parents=True, exist_ok=True)
+            agent.path.write_bytes(b"<plist/>")
+
+
+RELAYD = f"{launchd.LABEL_PREFIX}.relayd"
+OPENCODE = f"{launchd.LABEL_PREFIX}.opencode"
+UPDATE = f"{launchd.LABEL_PREFIX}.cursor-update"
+
+
+def test_stop_boots_out_every_keep_alive_agent_but_not_the_weekly_update() -> None:
+    _install_plists("relayd", "opencode", "cursor-update")
+    calls = PerLabel({RELAYD, OPENCODE, UPDATE})
+    message = cli_daemon.stop_daemon(calls, sleep=lambda _: None)
+    assert calls.verbs("bootout") == [RELAYD, OPENCODE]
+    assert calls.loaded == {UPDATE}
+    assert RELAYD in message and OPENCODE in message and UPDATE not in message
+
+
+def test_stop_skips_an_opencode_agent_that_is_not_installed() -> None:
+    _install_plists("relayd")
+    calls = PerLabel({RELAYD})
+    cli_daemon.stop_daemon(calls, sleep=lambda _: None)
+    assert calls.verbs("bootout") == [RELAYD]
+
+
+def test_stop_still_stops_opencode_when_relayd_is_already_down() -> None:
+    _install_plists("relayd", "opencode")
+    calls = PerLabel({OPENCODE})
+    message = cli_daemon.stop_daemon(calls, sleep=lambda _: None)
+    assert calls.loaded == set() and OPENCODE in message and RELAYD not in message
+
+
+def test_stop_fails_when_nothing_is_loaded(capsys: pytest.CaptureFixture[str]) -> None:
+    _install_plists("relayd", "opencode")
+    with pytest.raises(typer.Exit):
+        cli_daemon.stop_daemon(PerLabel(set()), sleep=lambda _: None)
+    assert "relayd is not loaded" in capsys.readouterr().err
+
+
+def test_start_starts_the_opencode_agent_too_when_it_is_installed() -> None:
+    _install_plists("relayd", "opencode", "cursor-update")
+    calls = PerLabel({RELAYD})
+    message = cli_daemon.start_daemon(calls)
+    assert calls.verbs("bootstrap") == [OPENCODE], "relayd was already loaded"
+    assert calls.verbs("kickstart") == [RELAYD, OPENCODE]
+    assert RELAYD in message and OPENCODE in message and UPDATE not in message
+
+
+def test_start_without_the_opencode_agent_starts_relayd_alone() -> None:
+    _install_plists("relayd")
+    calls = PerLabel(set())
+    cli_daemon.start_daemon(calls)
+    assert calls.verbs("kickstart") == [RELAYD]
 
 
 def test_cdp_selftest_refuses_while_the_adapter_is_off() -> None:

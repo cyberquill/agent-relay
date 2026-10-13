@@ -27,6 +27,21 @@ from agent_relay.settings import load_workspaces, resolve_workspace
 
 log = get_logger(__name__)
 
+_CHUNK = 64 * 1024
+
+
+async def _read_capped(stream: asyncio.StreamReader | None, limit: int) -> tuple[bytes, int]:
+    """Keep the first `limit` bytes; count the rest while draining so the process can exit."""
+    if stream is None:
+        raise RelayError("`git diff` has no output to read.")
+    kept = bytearray()
+    more = 0
+    while chunk := await stream.read(_CHUNK):
+        room = limit - len(kept)
+        kept += chunk[: max(room, 0)]
+        more += max(len(chunk) - max(room, 0), 0)
+    return bytes(kept), more
+
 
 class Sessions:
     def __init__(self, deps: Deps, discovery: Discovery) -> None:
@@ -184,20 +199,33 @@ class Sessions:
             raise RelayError("This session has no workspace.")
         proc = await asyncio.create_subprocess_exec(
             "git",
+            "-c",
+            "core.pager=cat",
             "-C",
             session.workspace,
             "diff",
+            "--no-ext-diff",
+            "--no-textconv",
             "HEAD",
+            "--",
+            stdin=asyncio.subprocess.DEVNULL,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
         try:
-            out, err = await asyncio.wait_for(proc.communicate(), 30)
+            (out, more), (err, _) = await asyncio.wait_for(
+                asyncio.gather(
+                    _read_capped(proc.stdout, DIFF_LIMIT_BYTES), _read_capped(proc.stderr, _CHUNK)
+                ),
+                30,
+            )
+            await asyncio.wait_for(proc.wait(), 5)
         except TimeoutError as exc:
             proc.kill()
+            await proc.wait()
             raise RelayError("`git diff` took too long.") from exc
         if proc.returncode != 0:
             raise RelayError(f"`git diff` failed: {err.decode(errors='replace').strip()[:200]}")
-        if len(out) > DIFF_LIMIT_BYTES:
-            raise RelayError("The diff is larger than 5 MB.")
+        if more:
+            out += f"\n… diff truncated ({more} more bytes)\n".encode()
         return out

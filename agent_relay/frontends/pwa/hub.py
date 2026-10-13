@@ -14,10 +14,12 @@ from typing import cast
 
 from pydantic import JsonValue
 
+from agent_relay.core.registry import Registry
+from agent_relay.frontends import card_state, request_cards
 from agent_relay.frontends.surface import Attachment
 from agent_relay.frontends.webex import cards
 from agent_relay.log import get_logger
-from agent_relay.models.events import Event
+from agent_relay.models.events import ApprovalRequested, Event, QuestionAnswered, QuestionAsked
 from agent_relay.models.sessions import SessionRecord
 from agent_relay.scrub import Scrubbable, scrub_obj
 
@@ -38,9 +40,13 @@ def sse(payload: Payload) -> bytes:
 
 
 class PwaHub:
-    def __init__(self, queue_size: int = QUEUE_SIZE) -> None:
+    def __init__(
+        self, queue_size: int = QUEUE_SIZE, registry: Registry | None = None, approval_deadline_s: int = 600
+    ) -> None:
         self._clients: set[asyncio.Queue[Payload]] = set()
         self._queue_size = queue_size
+        self._registry = registry
+        self._approval_deadline_s = approval_deadline_s
 
     @property
     def clients(self) -> int:
@@ -67,6 +73,28 @@ class PwaHub:
 
     async def handle(self, event: Event) -> None:
         self.broadcast({"kind": "event", "event": event.model_dump(mode="json")})
+        await self._request_card(event)
+
+    async def _request_card(self, event: Event) -> None:
+        """Approvals and questions reach the browser as server-built cards, with a one-use nonce."""
+        registry = self._registry
+        if registry is None:
+            return
+        if isinstance(event, QuestionAnswered):
+            await card_state.drop_offer(registry, event.request_id)
+            return
+        if not isinstance(event, ApprovalRequested | QuestionAsked):
+            return
+        session = await registry.get_session(event.session_key)
+        if session is None:
+            return
+        if isinstance(event, ApprovalRequested):
+            markdown, card = await request_cards.approval_card(
+                registry, session, event, self._approval_deadline_s
+            )
+        else:
+            markdown, card = await request_cards.question_card(registry, session, event)
+        self.broadcast(_message(session.session_key, markdown, card, None))
 
     # Surface
 

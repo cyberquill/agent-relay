@@ -1,5 +1,6 @@
 // agent-relay OpenCode plugin: forwards tool calls to relayd for phone approval while away mode
-// is on, and registers this OpenCode server with the relay. Fails open when relayd is down.
+// is on, and registers this OpenCode server with the relay. Fails open when relayd is unreachable,
+// but denies when the connection drops after it was made, since the approval may be mid-flight.
 // OpenCode calls every exported function of a plugin file as a plugin, so only the plugin itself is
 // exported; the helpers ride on it as properties for the tests.
 import { connect } from "node:net";
@@ -7,7 +8,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 
 type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
-type Reply = { stdout?: Json; exit?: number };
+type Reply = { stdout?: Json; exit?: number; lost?: true };
 
 function socketPath(env: Record<string, string | undefined> = process.env): string {
   if (env.RELAY_SOCKET) return env.RELAY_SOCKET;
@@ -25,6 +26,7 @@ function encodeFrame(message: Json): Buffer {
 function request(message: Json, sock: string = socketPath(), connectTimeoutMs = 200): Promise<Reply | null> {
   return new Promise((resolve) => {
     let settled = false;
+    let connected = false;
     let buffer = Buffer.alloc(0);
     const finish = (value: Reply | null): void => {
       if (settled) return;
@@ -35,7 +37,10 @@ function request(message: Json, sock: string = socketPath(), connectTimeoutMs = 
     };
     const socket = connect(sock);
     const timer = setTimeout(() => finish(null), connectTimeoutMs);
+    // null: never reached relayd; { lost }: reached it, then the socket dropped before a reply.
+    const abort = (): void => finish(connected ? { lost: true } : null);
     socket.on("connect", () => {
+      connected = true;
       clearTimeout(timer);
       socket.write(encodeFrame(message));
     });
@@ -47,11 +52,11 @@ function request(message: Json, sock: string = socketPath(), connectTimeoutMs = 
       try {
         finish(JSON.parse(buffer.subarray(4, 4 + size).toString("utf8")) as Reply);
       } catch {
-        finish(null);
+        finish({ lost: true });
       }
     });
-    socket.on("error", () => finish(null));
-    socket.on("close", () => finish(null));
+    socket.on("error", abort);
+    socket.on("close", abort);
   });
 }
 
@@ -60,6 +65,7 @@ function hook(event: string, payload: { [key: string]: Json }, sock?: string): P
 }
 
 function decisionOf(reply: Reply | null): { allow: boolean; reason: string } {
+  if (reply?.lost) return { allow: false, reason: "agent-relay connection lost; denied for safety" };
   const out = reply?.stdout;
   if (out && typeof out === "object" && !Array.isArray(out) && out.decision === "deny") {
     const reason = typeof out.reason === "string" ? out.reason : "Denied from the phone";

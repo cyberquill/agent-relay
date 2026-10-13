@@ -1,8 +1,9 @@
 """`relay install` and `relay uninstall`: everything in the plan's touch table, as one reversible plan.
 
 Install is a dry run until applied. Every file change goes through `fileops`, so the manifest holds
-the state before the relay's first change to each path; uninstall restores from it byte for byte,
-then deletes the backups it restored from. Commands (launchctl, `code`) run only when applied.
+the state before the relay's first change to each path. Uninstall removes what the relay created,
+strips only its entries from files it merged into, restores a backup only over a file nobody has
+edited since, and leaves the rest. Commands (launchctl, `code`) run only when applied.
 """
 
 from __future__ import annotations
@@ -21,9 +22,11 @@ from agent_relay.fileops import (
     Manifest,
     PlannedLink,
     PlannedWrite,
+    Unmerge,
     apply_links,
     apply_moves,
     apply_writes,
+    decide,
     restore,
 )
 from agent_relay.hook.installers import copilot, cursor, opencode
@@ -32,6 +35,8 @@ from agent_relay.models.config import RelayConfig
 from agent_relay.ops import bundles, launchd, stepping_away
 from agent_relay.ops.launchd import LaunchAgent
 from agent_relay.ops.vsix import EXTENSION_DIR, VsixError, build_vsix
+from agent_relay.sync import catalog, jsonc
+from agent_relay.sync.model import HARNESS_ORDER, HarnessFile
 from agent_relay.sync.plan import Plan, plan_mcp
 from agent_relay.sync.skills import DedupePlan, plan_dedupe
 
@@ -101,7 +106,12 @@ class InstallPlan:
             lines.append(f"{verb} {write.path} — {write.reason}")
         lines += [f"link {link.path} → {link.target}" for link in self.links if link.changed()]
         lines += [f"move {m.source} → {m.destination} — {m.reason}" for m in self.dedupe.moves]
-        lines += [f"launchctl bootstrap {agent.label}" for agent in self.agents]
+        rewritten = {w.path for w in self.files if w.changed()}
+        lines += [
+            f"launchctl bootstrap {agent.label}"
+            + ("" if agent.path in rewritten else " (only if not loaded)")
+            for agent in self.agents
+        ]
         if self.vsix:
             lines.append(f"code --install-extension {vsix_path()}")
         return lines
@@ -169,6 +179,7 @@ class Outcome:
     changed: list[Path] = field(default_factory=list)
     commands: list[str] = field(default_factory=list)
     problems: list[str] = field(default_factory=list)
+    notes: list[str] = field(default_factory=list)
 
     @property
     def ok(self) -> bool:
@@ -194,20 +205,66 @@ def apply_install(
     outcome.changed += apply_writes([w for w in plan.writes() if w.changed()], manifest)
     outcome.changed += apply_links(plan.links, manifest)
     outcome.changed += apply_moves(plan.dedupe.moves, manifest)
+    rewritten = set(outcome.changed)
     for agent in plan.agents:
-        _command(launchd.bootout_command(agent), runner, outcome, required=False)
-        launchd.wait_unloaded(agent, runner, sleep)
-        _command(launchd.bootstrap_command(agent), runner, outcome)
+        _load(agent, agent.path in rewritten, runner, outcome, sleep)
     if plan.vsix:
         _command([str(paths.VSCODE_CLI), "--install-extension", str(vsix_path()), "--force"], runner, outcome)
     log.info(f"install applied: {len(outcome.changed)} change(s), {len(outcome.problems)} problem(s)")
     return outcome
 
 
+def _load(
+    agent: LaunchAgent, rewritten: bool, runner: Runner, outcome: Outcome, sleep: Callable[[float], None]
+) -> None:
+    """Bootstrap an agent that is not loaded; reload one only when its plist changed."""
+    loaded = launchd.is_loaded(agent, runner)
+    if loaded and not rewritten:
+        return
+    if loaded:
+        _command(launchd.bootout_command(agent), runner, outcome, required=False)
+        launchd.wait_unloaded(agent, runner, sleep)
+    _command(launchd.bootstrap_command(agent), runner, outcome)
+
+
+def _drop_relay_server(harness: HarnessFile) -> Unmerge:
+    key: str = catalog.FORMATS[harness].KEY
+
+    def unmerge(content: bytes) -> bytes:
+        document = jsonc.loads(content.decode("utf-8"))
+        if not isinstance(document, dict):
+            raise ValueError("MCP config is not a JSON object")
+        servers = document.get(key)
+        if isinstance(servers, dict):
+            document[key] = {k: v for k, v in servers.items() if k != catalog.RELAY_SERVER}
+        return jsonc.dumps(document).encode()
+
+    return unmerge
+
+
+def _mcp_files(harness: HarnessFile) -> list[Path]:
+    if harness is HarnessFile.OPENCODE:
+        folder = paths.opencode_config_dir()
+        return [folder / "opencode.json", folder / "opencode.jsonc"]
+    return [catalog.native_path(harness)]
+
+
+def unmergers() -> dict[str, Unmerge]:
+    """Files the relay merges into rather than owns: uninstall strips its entries from the current bytes."""
+    found: dict[str, Unmerge] = {str(cursor.hooks_file()): cursor.unmerge_bytes}
+    for harness in HARNESS_ORDER:
+        drop = _drop_relay_server(harness)
+        found.update({str(file): drop for file in _mcp_files(harness)})
+    return found
+
+
 def uninstall_report(manifest: Manifest | None = None) -> list[str]:
     current = manifest if manifest is not None else Manifest.load()
-    verbs = {"created": "remove", "modified": "restore", "moved": "move back"}
-    lines = [f"{verbs[entry.action]} {key}" for key, entry in sorted(current.entries.items())]
+    merges = unmergers()
+    lines: list[str] = []
+    for key, entry in sorted(current.entries.items()):
+        fate = decide(key, entry, merges)[0]
+        lines.append(f"{fate} {key}" + (" (changed since install)" if fate == "leave" else ""))
     lines += [f"launchctl bootout {agent.label}" for agent in _installed_agents(current)]
     if _extension_installed(current):
         lines.append(f"code --uninstall-extension {extension_id()}")
@@ -231,10 +288,12 @@ def apply_uninstall(runner: Runner = run) -> Outcome:
         _command([str(paths.VSCODE_CLI), "--uninstall-extension", extension_id()], runner, outcome, False)
     backups = [Path(e.backup) for e in manifest.entries.values() if e.backup]
     moved = [Path(e.moved_to) for e in manifest.entries.values() if e.moved_to]
-    outcome.changed += restore(manifest)
-    discard_backups(backups, moved)
+    report = restore(manifest, unmergers=unmergers())
+    outcome.changed += report.changed
+    outcome.notes += report.notes
+    discard_backups([b for b in backups if b not in report.kept_backups], moved)
     paths.install_manifest().unlink(missing_ok=True)
-    log.info(f"uninstall applied: {len(outcome.changed)} path(s) restored")
+    log.info(f"uninstall applied: {len(outcome.changed)} path(s) restored, {len(report.left)} left in place")
     return outcome
 
 

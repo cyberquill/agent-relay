@@ -214,3 +214,39 @@ async def test_prune_seen_drops_only_old_markers(registry: Registry) -> None:
     assert await registry.kv_get(f"{SEEN_PREFIX}old") is None
     assert await registry.kv_get(f"{SEEN_PREFIX}new") is not None
     assert await registry.kv_get("webex.last_seen") == "msg"
+
+
+async def test_reopen_pending_clears_the_answer_and_keeps_the_deadline(registry: Registry) -> None:
+    deadline = utcnow() + timedelta(minutes=5)
+    await registry.add_pending(
+        PendingRequest(request_id="r", kind="approval", session_key="s", payload={}, deadline=deadline)
+    )
+    assert not await registry.reopen_pending("r"), "an open request has nothing to reopen"
+    assert await registry.resolve_pending("r", {"decision": "allow"})
+    assert await registry.reopen_pending("r")
+    got = await registry.get_pending("r")
+    assert got is not None and (got.status, got.answer, got.deadline) == ("open", None, deadline)
+    assert await registry.resolve_pending("r", {"decision": "deny"}), "first answer wins again"
+    assert await registry.resolve_pending("r", {"decision": "deny"}, status="expired") is False
+    assert not await registry.reopen_pending("missing")
+
+
+async def test_reopen_pending_leaves_expired_requests_closed(registry: Registry) -> None:
+    await registry.add_pending(
+        PendingRequest(request_id="r", kind="approval", session_key="s", payload={}, deadline=utcnow())
+    )
+    assert await registry.resolve_pending("r", {"decision": "deny"}, status="expired")
+    assert not await registry.reopen_pending("r")
+
+
+async def test_prune_stamped_reads_the_leading_timestamp(registry: Registry) -> None:
+    now = utcnow()
+    await registry.kv_set("p:old", f"{(now - timedelta(hours=1)).isoformat()} allow")
+    await registry.kv_set("p:new", f"{now.isoformat()} allow")
+    await registry.kv_set("p:plain", "allow")
+    await registry.kv_set("other:old", (now - timedelta(days=9)).isoformat())
+    assert await registry.prune_stamped("p:", now - timedelta(minutes=1), drop_unparseable=False) == 1
+    assert await registry.kv_get("p:plain") == "allow"
+    assert await registry.prune_stamped("p:", now - timedelta(minutes=1), drop_unparseable=True) == 1
+    assert sorted(await registry.kv_prefix("p:")) == ["p:new"]
+    assert await registry.kv_get("other:old") is not None

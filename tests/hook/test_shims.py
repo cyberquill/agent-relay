@@ -9,7 +9,7 @@ import pytest
 from pydantic import JsonValue
 
 from agent_relay.hook import outputs
-from agent_relay.hook.shims import HookKind, UnknownHookEventError, describe_tool, normalize
+from agent_relay.hook.shims import HookKind, UnknownHookEventError, abbreviate, describe_tool, normalize
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "hooks"
 
@@ -49,10 +49,23 @@ def test_missing_session_id_is_tolerated() -> None:
     assert normalize("copilot", "agentStop", {}).session_id == "unknown"
 
 
-def test_describe_tool_prefers_command_and_truncates() -> None:
-    hook = normalize("cursor", "beforeShellExecution", {"conversation_id": "c", "command": "x" * 900})
+def test_describe_tool_prefers_command_and_keeps_the_destructive_tail() -> None:
+    hook = normalize(
+        "cursor", "beforeShellExecution", {"conversation_id": "c", "command": "x" * 900 + "; rm -rf ~"}
+    )
     text = describe_tool(hook, limit=100)
-    assert text.startswith("Shell: xxx") and len(text) == 100
+    assert text.startswith("Shell: xxx") and text.endswith("; rm -rf ~")
+    assert "more chars" in text and len(text) <= 100
+
+
+def test_abbreviate_marks_what_it_cut_and_leaves_short_text_alone() -> None:
+    assert abbreviate("short", 600) == "short"
+    text = "H" * 500 + "M" * 1000 + "T" * 500
+    cut = abbreviate(text, 200)
+    omitted = int(cut.split(" … ")[1].split()[0])
+    assert cut.startswith("HHH") and cut.endswith("TTT") and len(cut) <= 200
+    assert omitted == len(text) - (len(cut) - len(f" … {omitted} more chars … "))
+    assert abbreviate("y" * 50, 10) == "y … 48 more chars … y"  # a tiny limit still shows both ends
 
 
 def test_describe_tool_names_mcp_server() -> None:

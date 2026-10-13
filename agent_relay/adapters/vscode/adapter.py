@@ -1,7 +1,8 @@
 """VS Code agent chats (VS Code's own "Local" agent), driven through the relay-bridge extension.
 
 Hooks carry everything the chat does (tools, approvals, the final reply); this adapter only opens,
-steers and cancels chats. Without a bridge window it falls back to `code chat -m agent -r`.
+steers and cancels chats. A cold start without a bridge window falls back to `code chat -m agent -r`;
+follow-ups go only to the window the chat was opened in.
 """
 
 from __future__ import annotations
@@ -15,7 +16,6 @@ from agent_relay import paths
 from agent_relay.adapters.base import (
     Adapter,
     AdapterUnavailableError,
-    Decision,
     EventPublisher,
     ModelInfo,
     StartRequest,
@@ -42,6 +42,7 @@ VIA_CLI = "cli"
 OPEN_TIMEOUT_S = 20.0
 LAUNCH_TIMEOUT_S = 20.0
 NO_WINDOW = "No VS Code window with the relay-bridge extension is connected."
+WINDOW_CLOSED = "The VS Code window for this chat is closed. Start a new chat with /new."
 
 
 async def run_code(argv: Sequence[str], cwd: Path) -> int:
@@ -59,7 +60,8 @@ async def run_code(argv: Sequence[str], cwd: Path) -> int:
 
 class VsCodeAdapter(Adapter):
     harness = Harness.VSCODE
-    capabilities = Capabilities(cold_start=True, model_select=True, approve=True, cancel=True, wake_idle=True)
+    # Approvals stay on the hook path: the bridge's acceptTool/skipTool act on whichever chat has focus.
+    capabilities = Capabilities(cold_start=True, model_select=True, cancel=True, wake_idle=True)
 
     def __init__(
         self,
@@ -193,10 +195,6 @@ class VsCodeAdapter(Adapter):
             raise UnsupportedError(self.harness, "stopping a VS Code chat opened at the desk")
         await self._require_window(session).call("cancel")
 
-    async def answer_approval(self, session: SessionRecord, request_id: str, decision: Decision) -> None:
-        command = "skipTool" if decision == "deny" else "acceptTool"
-        await self._require_window(session).call(command)
-
     # helpers
 
     def _finder(self, request: StartRequest) -> Callable[[], BridgeWindow | None]:
@@ -223,17 +221,13 @@ class VsCodeAdapter(Adapter):
     async def _deliver(self, session: SessionRecord, text: str) -> None:
         if not self._phone_opened(session):
             raise UnsupportedError(self.harness, "prompting a VS Code chat opened at the desk")
+        pinned = session.extra.get(WINDOW_KEY)
+        window = self._hub.windows.get(pinned) if isinstance(pinned, str) else None
+        if window is None:
+            raise AdapterUnavailableError(WINDOW_CLOSED)
         if session.harness_id.startswith(UNCLAIMED_PREFIX) and session.workspace:
             await make_claim(self._registry, session.workspace, session.session_key)
-        window = self._window(session)
-        if window is not None:
-            await window.call("prompt", {"query": text, "model": session.model or ""})
-            if session.extra.get(WINDOW_KEY) != window.window_id:
-                await self._registry.set_session_extra(session.session_key, WINDOW_KEY, window.window_id)
-        elif session.workspace:
-            await self._cli_chat(session.workspace, text, session.model)
-        else:
-            raise AdapterUnavailableError(NO_WINDOW)
+        await window.call("prompt", {"query": text, "model": session.model or ""})
 
     async def _open_workspace(self, target: str, cwd: Path) -> None:
         if not self._cli.exists():

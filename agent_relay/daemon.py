@@ -40,7 +40,7 @@ from agent_relay.ipc import IpcServer
 from agent_relay.log import configure, default_log_file, get_logger, set_debug_bodies
 from agent_relay.models.config import RelayConfig
 from agent_relay.models.sessions import SessionRecord
-from agent_relay.settings import MissingSecretError, Secret, load_config, require_secret
+from agent_relay.settings import KeychainLockedError, MissingSecretError, Secret, load_config, require_secret
 
 log = get_logger(__name__)
 
@@ -88,8 +88,8 @@ class Core:
     lifecycle: Lifecycle = field(init=False)
     service: RelayService = field(init=False)
     broker: ApprovalBroker = field(init=False)
-    parking: ParkManager | None = None
-    hooks: HookService | None = None
+    parking: ParkManager = field(init=False)
+    hooks: HookService = field(init=False)
     notify_targets: list[Callable[[SessionRecord, str], Awaitable[None]]] = field(default_factory=list)
     webex: WebexLink | None = None
 
@@ -143,7 +143,6 @@ class Core:
             return {"error": str(exc)}
 
     async def _op_hook(self, message: JsonObj) -> JsonObj:
-        assert self.hooks is not None
         return dict(await self.hooks.handle(message))
 
     async def _op_away(self, message: JsonObj) -> JsonObj:
@@ -228,7 +227,6 @@ async def serve(
     registry = Registry(paths.db_path())
     await registry.open()
     core = Core(config, registry)
-    assert core.parking is not None
     recovered = await core.parking.recover()
     if recovered:
         log.info(f"{recovered} session(s) were parked when relayd stopped; marked idle")
@@ -323,7 +321,7 @@ def main() -> int:
     try:
         config, token = preflight()
         pwa_token = require_secret(Secret.PWA_TOKEN) if config.pwa.enabled else None
-    except (MissingSecretError, ConfigError) as exc:
+    except (MissingSecretError, KeychainLockedError, ConfigError) as exc:
         sys.stderr.write(f"relayd: {exc}\n")
         return EXIT_CONFIG
     level = logging.getLevelNamesMapping().get(config.log_level.upper(), logging.INFO)

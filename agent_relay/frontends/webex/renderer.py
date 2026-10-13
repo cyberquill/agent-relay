@@ -17,8 +17,11 @@ from dataclasses import dataclass, field
 from pydantic import JsonValue
 
 from agent_relay.core.registry import Registry
+from agent_relay.frontends import card_state, request_cards
 from agent_relay.frontends.webex import cards
 from agent_relay.frontends.webex.api import EditLimitError, Message, WebexApi, text_bytes
+from agent_relay.frontends.webex.links import neutralise_links
+from agent_relay.hook.shims import abbreviate
 from agent_relay.log import get_logger, log_body
 from agent_relay.models.config import RendererConfig
 from agent_relay.models.events import (
@@ -41,6 +44,7 @@ from agent_relay.models.sessions import SessionRecord
 log = get_logger(__name__)
 
 ROOM_KEY = "webex.room_id"
+TOOL_DETAIL_CHARS = 300
 APPROVAL_OUTCOME = {
     "allow": "✅ Allowed",
     "allow_session": "✅ Allowed for this session",
@@ -165,7 +169,7 @@ class WebexRenderer:
         clock: Callable[[], float] = time.monotonic,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
     ) -> None:
-        self._approval_deadline_min = max(1, approval_deadline_s // 60)
+        self._approval_deadline_s = approval_deadline_s
         self.outbox = outbox
         self._registry = registry
         self._config = config
@@ -265,7 +269,8 @@ class WebexRenderer:
                 thread.streamed = True
                 await self._flush(session, thread, final=False)
             case ToolStarted(name=name, detail=detail):
-                thread.tools.append(f"🔧 {name}{f': {detail}' if detail else ''}")
+                shown = f": {abbreviate(detail, TOOL_DETAIL_CHARS)}" if detail else ""
+                thread.tools.append(f"🔧 {name}{shown}")
             case ToolFinished(name=name, ok=ok, summary=summary):
                 if not ok:
                     thread.tools.append(f"❌ {name}{f': {summary}' if summary else ''}")
@@ -282,24 +287,28 @@ class WebexRenderer:
             case ErrorEvent(message=message):
                 await self._flush(session, thread, final=True)
                 await self.post_in_thread(session, f"⚠️ {message}")
-            case ApprovalRequested(request_id=request_id, tool=tool, detail=detail):
+            case ApprovalRequested() as asked:
                 await self._flush(session, thread, final=True)
-                card = cards.approval(
-                    request_id, cards.session_label(session), detail or tool, self._approval_deadline_min
+                markdown, card = await request_cards.approval_card(
+                    self._registry, session, asked, self._approval_deadline_s
                 )
-                posted = await self.post_in_thread(session, f"Approval needed: {detail or tool}", card=card)
-                await self._registry.set_pending_message(request_id, posted.id)
-            case QuestionAsked(request_id=request_id, question=question, options=options):
+                posted = await self.post_in_thread(session, markdown, card=card)
+                await self._registry.set_pending_message(asked.request_id, posted.id)
+            case QuestionAsked() as asked_question:
                 await self._flush(session, thread, final=True)
-                card = cards.question(request_id, cards.session_label(session), question, options)
-                posted = await self.post_in_thread(session, f"Question: {question}", card=card)
-                await self._registry.set_pending_message(request_id, posted.id)
+                safe = asked_question.model_copy(
+                    update={"question": neutralise_links(asked_question.question)}
+                )
+                markdown, card = await request_cards.question_card(self._registry, session, safe)
+                posted = await self.post_in_thread(session, markdown, card=card)
+                await self._registry.set_pending_message(asked_question.request_id, posted.id)
             case ApprovalResolved(request_id=request_id, decision=decision, by=by):
                 if by in CLOSED_OUTCOME:
                     await self._close_card(request_id, CLOSED_OUTCOME[by], None)
                 else:
                     await self._close_card(request_id, APPROVAL_OUTCOME[decision], by)
             case QuestionAnswered(request_id=request_id, answer=answer, by=by):
+                await card_state.drop_offer(self._registry, request_id)
                 if by in CLOSED_OUTCOME:
                     await self._close_card(request_id, CLOSED_OUTCOME[by], None)
                 else:
@@ -310,7 +319,7 @@ class WebexRenderer:
     async def _flush(self, session: SessionRecord, thread: _Thread, final: bool) -> None:
         cfg = self._config
         if thread.tools:
-            lines = "\n".join(thread.tools)
+            lines = neutralise_links("\n".join(thread.tools))
             thread.tools = []
             for piece in chunk_text(lines, cfg.max_message_bytes):
                 await self.post_in_thread(session, piece)
@@ -326,7 +335,7 @@ class WebexRenderer:
                     file=("answer.md", text.encode("utf-8"), "text/markdown"),
                 )
                 return
-            for piece in chunk_text(text, cfg.max_message_bytes):
+            for piece in chunk_text(neutralise_links(text), cfg.max_message_bytes):
                 await self.post_in_thread(session, piece)
             return
         if text_bytes(thread.text) < cfg.flush_bytes:
@@ -337,7 +346,7 @@ class WebexRenderer:
         if boundary <= 0:
             boundary = len(thread.text)
         ready, thread.text = thread.text[:boundary], thread.text[boundary:].lstrip("\n")
-        for piece in chunk_text(ready, cfg.max_message_bytes):
+        for piece in chunk_text(neutralise_links(ready), cfg.max_message_bytes):
             await self.post_in_thread(session, piece)
 
     async def _close_card(self, request_id: str, outcome: str, by: str | None) -> None:

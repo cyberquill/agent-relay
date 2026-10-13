@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import json
 from collections.abc import AsyncIterator
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
@@ -92,6 +91,32 @@ async def test_protocol_steps_auth_ack_and_stale_cleanup() -> None:
     assert sock.sent[0]["data"] == {"token": "Bearer tok"}
     assert sock.sent[1] == {"type": "ack", "messageId": message_id}
     assert seen == [Activity("post", message_id)]
+
+
+async def test_on_close_runs_when_the_client_stops() -> None:
+    webex = FakeWebex()
+    closed: list[bool] = []
+
+    async def on_close() -> None:
+        closed.append(True)
+
+    async def on_activity(_: Activity) -> None:
+        return None
+
+    async with webex.client() as http:
+        mercury = Mercury([FakeSocket([], ConnectionClosedError(None, None))])
+        client = WebexWsClient(
+            "tok",
+            http,
+            U2C,
+            on_activity,
+            connector=mercury.connect,
+            sleep=_stop_sleep,
+            on_close=on_close,
+        )
+        with pytest.raises(Stop):
+            await client.run()
+    assert closed == [True]
 
 
 async def test_404_refreshes_device_and_backoff_grows() -> None:
@@ -261,7 +286,7 @@ async def test_catch_up_after_reconnect_processes_missed_messages_exactly_once(r
     )
     with pytest.raises(Stop):
         await client.run()
-    await asyncio.sleep(0)
+    await relay.frontend.drain()
     replies = relay.bot_texts()
     assert sum("agent-relay commands" in r for r in replies) == 1
     assert sum("**proj**" in r for r in replies) == 1

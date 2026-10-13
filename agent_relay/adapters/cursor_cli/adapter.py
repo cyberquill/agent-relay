@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import time
 import uuid
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, field
@@ -68,6 +69,8 @@ PROTOCOL_VERSION = 1
 AUTH_METHOD = "cursor_login"
 RESUME_EXTRA = "resume"
 INIT_TIMEOUT_S = 60.0
+IDLE_S = 900.0
+REAP_EVERY_MAX_S = 30.0
 STOPPED_TEXT = "Stopped from the phone."
 
 
@@ -99,6 +102,7 @@ class _Live:
     text: list[str] = field(default_factory=list)
     asks: dict[str, _Ask] = field(default_factory=dict)
     stale: bool = False
+    touched: float = field(default_factory=time.monotonic)
 
     @property
     def busy(self) -> bool:
@@ -130,14 +134,17 @@ class CursorCliAdapter(Adapter):
         cli: CursorCli | None = None,
         spawn: Spawner = spawn_acp,
         init_timeout: float = INIT_TIMEOUT_S,
+        idle_s: float = IDLE_S,
     ) -> None:
         self._registry = registry
         self._cli = cli or CursorCli(paths.cursor_agent_cli())
         self._spawn = spawn
         self._init_timeout = init_timeout
+        self._idle_s = idle_s
         self._live: dict[str, _Live] = {}
         self._events: asyncio.Queue[Event] = asyncio.Queue()
-        self._lock = asyncio.Lock()
+        self._locks: dict[str, asyncio.Lock] = {}
+        self._reaper: asyncio.Task[None] | None = None
 
     # events
 
@@ -242,13 +249,39 @@ class CursorCliAdapter(Adapter):
         live = _Live(session_key, acp_id, workspace, process, set_model)
         binding.live = live
         self._live[session_key] = live
+        if self._idle_s > 0 and (self._reaper is None or self._reaper.done()):
+            self._reaper = asyncio.create_task(self._reap(), name="cursor-idle-reaper")
         return live
+
+    def _lock_for(self, session_key: str) -> asyncio.Lock:
+        # No await between lookup and insert, so the event loop already makes this atomic.
+        return self._locks.setdefault(session_key, asyncio.Lock())
+
+    def _reapable(self, live: _Live) -> bool:
+        quiet = time.monotonic() - live.touched >= self._idle_s
+        return quiet and not live.busy and not live.asks
+
+    async def _reap(self) -> None:
+        """Close a process idle for `idle_s`; the next prompt resumes the session."""
+        every = max(0.05, min(self._idle_s / 4, REAP_EVERY_MAX_S))
+        while True:
+            await asyncio.sleep(every)
+            for key in [k for k, live in self._live.items() if self._reapable(live)]:
+                try:
+                    async with self._lock_for(key):
+                        live = self._live.get(key)
+                        if live is not None and self._reapable(live):
+                            log.info(f"closing the idle Cursor CLI process for {live.acp_id}")
+                            await self._drop(live)
+                except Exception:
+                    log.exception(f"closing the idle Cursor CLI process for {key} failed")
 
     async def _ensure(self, session: SessionRecord) -> _Live:
         """The live process for a session, respawning and resuming it when relayd lost it."""
-        async with self._lock:
+        async with self._lock_for(session.session_key):
             live = self._live.get(session.session_key)
             if live is not None and live.process.alive and not live.stale:
+                live.touched = time.monotonic()
                 return live
             if live is not None:
                 await self._drop(live)
@@ -270,9 +303,33 @@ class CursorCliAdapter(Adapter):
 
     def _start_turn(self, live: _Live, text: str) -> None:
         live.text = []
+        live.touched = time.monotonic()
         live.turn = asyncio.create_task(self._turn(live, text), name=f"cursor-turn-{live.acp_id}")
 
     async def _turn(self, live: _Live, text: str) -> None:
+        try:
+            await self._run_turn(live, text)
+        except Exception as exc:
+            log.exception(f"Cursor CLI turn for {live.acp_id} failed")
+            await self._abort_turn(live, str(exc) or type(exc).__name__)
+        finally:
+            live.touched = time.monotonic()
+
+    async def _abort_turn(self, live: _Live, message: str) -> None:
+        """A turn died of a non-ACP error: tell the phone, free the session, drop the process."""
+        live.stale = True
+        self._settle_asks(live)
+        self._emit(
+            ErrorEvent(
+                harness=self.harness, session_key=live.session_key, workspace=live.workspace, message=message
+            )
+        )
+        with contextlib.suppress(Exception):
+            await self.report_status(live.session_key, SessionStatus.IDLE, "adapter report")
+        with contextlib.suppress(Exception):
+            await self._drop(live)
+
+    async def _run_turn(self, live: _Live, text: str) -> None:
         session = await self._session(live.session_key)
         workspace = session.workspace if session else live.workspace
         prompt: Params = {"sessionId": live.acp_id, "prompt": [{"type": "text", "text": text}]}
@@ -311,6 +368,7 @@ class CursorCliAdapter(Adapter):
             self._start_turn(live, "\n\n".join(q.text for q in queued))
 
     async def _on_notification(self, live: _Live, method: str, params: Params) -> None:
+        live.touched = time.monotonic()
         if method != "session/update":
             log.debug(f"Cursor CLI notification {method} ignored")
             return
@@ -371,6 +429,7 @@ class CursorCliAdapter(Adapter):
             return await future
         finally:
             live.asks.pop(request_id, None)
+            live.touched = time.monotonic()
 
     def _settle_asks(self, live: _Live) -> None:
         """Answer every open ask as cancelled (turn over or stopped) and close it on the phone."""
@@ -478,6 +537,11 @@ class CursorCliAdapter(Adapter):
             ask.future.set_result(answer)
 
     async def aclose(self) -> None:
+        if self._reaper is not None:
+            self._reaper.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await self._reaper
+            self._reaper = None
         for live in list(self._live.values()):
             if live.turn is not None:
                 live.turn.cancel()

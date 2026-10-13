@@ -18,7 +18,7 @@ from pydantic import JsonValue
 from agent_relay.adapters.base import Decision
 from agent_relay.core.registry import ALLOW_SESSION_PREFIX, Registry
 from agent_relay.core.router import Router
-from agent_relay.core.service import DESK_DECISION, RelayService, pending_key
+from agent_relay.core.service import DESK_DECISION, DeliveryError, RelayService, pending_key
 from agent_relay.core.signals import Signals
 from agent_relay.log import get_logger
 from agent_relay.models.config import ApprovalConfig
@@ -35,6 +35,7 @@ log = get_logger(__name__)
 
 ALLOW_SESSION_KEY = f"{ALLOW_SESSION_PREFIX}{{session_key}}:{{tool}}"
 DEADLINE_REASON = "No answer from the phone before the relay's deadline; denied."
+SWEEP_GIVE_UP = timedelta(minutes=10)
 CLOSED_REASONS = {
     "ended": "The session ended before it was answered; denied.",
     "stopped": "The session was stopped from the phone; denied.",
@@ -289,18 +290,40 @@ class ApprovalBroker:
             log.info(f"{event.request_id} was answered at the desk")
 
     async def sweep(self) -> int:
-        """Deny or skip every open request past its deadline. Returns how many expired."""
+        """Deny or skip every open request past its deadline. Returns how many expired.
+
+        A request whose app cannot be reached stays open and is retried; after `SWEEP_GIVE_UP` past its
+        deadline it is closed as expired so a vanished app cannot keep it alive forever.
+        """
         expired = 0
         now = datetime.now(UTC)
         for request in await self._registry.open_pending():
             if request.deadline > now:
                 continue
-            if request.kind == "approval":
-                done = await self._service.answer_approval(request.request_id, "deny", by="deadline")
-            else:
-                done = await self._service.answer_question(request.request_id, None, by="deadline")
+            try:
+                if request.kind == "approval":
+                    done = await self._service.answer_approval(request.request_id, "deny", by="deadline")
+                else:
+                    done = await self._service.answer_question(request.request_id, None, by="deadline")
+            except DeliveryError as exc:
+                done = await self._give_up_or_retry(request, now, exc)
             expired += int(done)
         return expired
+
+    async def _give_up_or_retry(self, request: PendingRequest, now: datetime, exc: DeliveryError) -> bool:
+        if now - request.deadline < SWEEP_GIVE_UP:
+            log.warning(f"could not expire {request.request_id}, will retry: {exc}")
+            return False
+        answer: dict[str, JsonValue] = (
+            {"decision": "deny", "by": "deadline"}
+            if request.kind == "approval"
+            else {"answer": None, "by": "deadline"}
+        )
+        closed = await self._registry.resolve_pending(request.request_id, answer, status="expired")
+        if closed:
+            self._signals.notify(pending_key(request.request_id))
+            log.warning(f"gave up on {request.request_id}: {exc}")
+        return closed
 
     async def sweeper(self, interval: float = 15.0) -> None:
         while True:

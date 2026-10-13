@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
 from pydantic import JsonValue
 
 from agent_relay import paths
@@ -87,6 +88,39 @@ def test_cursor_install_into_empty_home() -> None:
 def test_unmerge_drops_only_relay_entries() -> None:
     merged = cursor.merge(GIT_AI, RelayConfig(), "/py")
     assert cursor.unmerge(merged) == GIT_AI
+
+
+def test_unmerge_bytes_strips_relay_entries_from_the_current_file_and_keeps_later_ones() -> None:
+    merged = cursor.merge(GIT_AI, RelayConfig(), "/py")
+    later: dict[str, JsonValue] = {"command": "other-tool hook"}
+    hooks = merged["hooks"]
+    assert isinstance(hooks, dict)
+    start = hooks["sessionStart"]
+    assert isinstance(start, list)
+    hooks["sessionStart"] = [*start, later]
+    result = json.loads(cursor.unmerge_bytes(json.dumps(merged).encode()))
+    assert result["hooks"]["sessionStart"] == [later]
+    assert "relay_hook.py" not in json.dumps(result)
+
+
+@pytest.mark.parametrize("broken", [b"{not json", b"[1, 2]"])
+def test_unmerge_bytes_rejects_what_it_cannot_parse(broken: bytes) -> None:
+    with pytest.raises(ValueError, match=r"."):
+        cursor.unmerge_bytes(broken)
+
+
+def test_uninstall_keeps_a_hook_added_after_install() -> None:
+    hooks, _ = _seed()
+    apply_writes(cursor.plan(RelayConfig(), "/py"), Manifest.load())
+    data = json.loads(hooks.read_text())
+    data["hooks"]["afterFileEdit"].append({"command": "added-later"})
+    hooks.write_text(json.dumps(data))
+    report = restore(Manifest.load(), unmergers={str(hooks): cursor.unmerge_bytes})
+    assert report.unmerged == [hooks] and report.left == []
+    kept = json.loads(hooks.read_text())["hooks"]
+    assert {"command": "added-later"} in kept["afterFileEdit"]
+    assert {"command": _GIT_AI_CMD} in kept["afterFileEdit"]
+    assert "relay_hook.py" not in hooks.read_text()
 
 
 def test_copilot_timeouts_follow_config() -> None:

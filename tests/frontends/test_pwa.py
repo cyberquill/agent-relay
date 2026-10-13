@@ -7,25 +7,32 @@ import json
 import socket
 import subprocess
 from collections.abc import AsyncIterator
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import httpx
 import pytest
+from pydantic import JsonValue
 from typer.testing import CliRunner
 
+from agent_relay.adapters.base import Decision
 from agent_relay.cli import app as cli
 from agent_relay.core.registry import Registry
 from agent_relay.core.router import Router
 from agent_relay.core.service import RelayService
+from agent_relay.core.service.common import DeliveryError
 from agent_relay.core.signals import Signals
+from agent_relay.frontends import card_state
 from agent_relay.frontends.pwa.app import STATIC, build_app
 from agent_relay.frontends.pwa.hub import PwaHub
 from agent_relay.frontends.pwa.server import LOOPBACK, Pwa, build_pwa
 from agent_relay.frontends.registry import help_text
 from agent_relay.frontends.webex.handlers import Handlers
 from agent_relay.models.config import PwaConfig, RelayConfig
-from agent_relay.models.events import Harness, TextDelta
+from agent_relay.models.events import ApprovalRequested, Harness, QuestionAsked, ResolvedBy, TextDelta
+from agent_relay.models.sessions import PendingRequest, SessionRecord
 from agent_relay.scrub import REDACTED
+from tests.fakes.adapters import EmittingAdapter
 
 TOKEN = "fake-pwa-token-0000"
 
@@ -163,3 +170,121 @@ def test_expose_prints_tailscale_serve_and_runs_nothing(
     assert result.exit_code == 0, result.output
     assert result.stdout.strip() == f"tailscale serve --bg --https=443 http://{LOOPBACK}:8787"
     assert "funnel" not in result.stdout.lower()
+
+
+def test_the_page_renders_monospace_text_and_sends_the_cards_own_data() -> None:
+    script = (STATIC / "app.js").read_text(encoding="utf-8")
+    assert 'fontType === "Monospace"' in script and "...(action.data" in script
+    assert "approvalCard" not in script and "questionCard" not in script
+    assert ".mono" in (STATIC / "app.css").read_text(encoding="utf-8")
+
+
+H = Harness.OPENCODE
+AUTH = {"Authorization": f"Bearer {TOKEN}"}
+
+
+async def _request(registry: Registry, kind: str, request_id: str) -> SessionRecord:
+    session = await registry.create_session(
+        SessionRecord(session_key="opencode:p1", harness=H, harness_id="p1", workspace="/w/p")
+    )
+    await registry.add_pending(
+        PendingRequest(
+            request_id=request_id,
+            kind="approval" if kind == "approval" else "question",
+            session_key=session.session_key,
+            payload={"source": "adapter"},
+            deadline=datetime.now(UTC) + timedelta(minutes=10),
+        )
+    )
+    return session
+
+
+async def test_the_hub_sends_approvals_and_questions_as_cards_with_a_nonce(registry: Registry) -> None:
+    session = await _request(registry, "approval", "r1")
+    hub = PwaHub(registry=registry)
+    async with hub.subscribe() as queue:
+        await hub.handle(
+            ApprovalRequested(
+                harness=H, session_key=session.session_key, request_id="r1", tool="bash", detail="rm -rf x"
+            )
+        )
+        await hub.handle(
+            QuestionAsked(
+                harness=H, session_key=session.session_key, request_id="q1", question="Which?", options=("a",)
+            )
+        )
+        payloads = [queue.get_nowait() for _ in range(4)]
+    assert [p["kind"] for p in payloads] == ["event", "message", "event", "message"]
+    approval, question = payloads[1], payloads[3]
+    assert approval["markdown"] == "🔐 Approval needed: bash · auto-deny in 10m"
+    assert question["markdown"] == "❓ Question: Which?"
+    for message in (approval, question):
+        card = message["card"]
+        assert isinstance(card, dict) and isinstance(card["actions"], list)
+        for action in card["actions"]:
+            assert isinstance(action, dict) and isinstance(action["data"], dict)
+            assert await registry.kv_get(f"{card_state.NONCE_PREFIX}{action['data']['nonce']}") is not None
+    assert await card_state.load_offer(registry, "q1") == ["a"]
+
+
+async def test_a_hub_without_a_registry_sends_only_the_raw_event(registry: Registry) -> None:
+    session = await _request(registry, "approval", "r1")
+    hub = PwaHub()
+    async with hub.subscribe() as queue:
+        await hub.handle(
+            ApprovalRequested(harness=H, session_key=session.session_key, request_id="r1", tool="b")
+        )
+        assert queue.get_nowait()["kind"] == "event" and queue.empty()
+
+
+async def test_card_submits_need_a_live_nonce_and_relay_errors_are_shown(
+    registry: Registry, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    svc, router = service(registry)
+    router.add_adapter(EmittingAdapter(count=0))
+    hub = PwaHub(registry=registry)
+    app = build_app(hub, svc, Handlers(svc, hub), TOKEN)
+    session = await _request(registry, "approval", "r1")
+    async with (
+        hub.subscribe() as queue,
+        httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://pwa") as client,
+    ):
+        await hub.handle(
+            ApprovalRequested(harness=H, session_key=session.session_key, request_id="r1", tool="b")
+        )
+        queue.get_nowait()  # the raw event
+        data = _first_submit(queue.get_nowait())
+
+        async def post(inputs: dict[str, JsonValue]) -> JsonValue:
+            reply = await client.post("/api/card", headers=AUTH, json={"inputs": inputs})
+            assert reply.status_code == 200
+            outcome: JsonValue = reply.json()["outcome"]
+            return outcome
+
+        assert await post({k: v for k, v in data.items() if k != "nonce"}) == "expired"
+        assert queue.get_nowait()["markdown"] == card_state.EXPIRED
+
+        real = svc.answer_approval
+        failures = [DeliveryError("OpenCode could not be reached.")]
+
+        async def flaky(request_id: str, decision: Decision, by: ResolvedBy = "phone") -> bool:
+            if failures:
+                raise failures.pop()
+            return await real(request_id, decision, by)
+
+        monkeypatch.setattr(svc, "answer_approval", flaky)
+        assert await post(data) == "failed"
+        shown = queue.get_nowait()
+        assert shown["markdown"] == "⚠️ OpenCode could not be reached."
+        assert shown["session"] == session.session_key
+        assert await post(data) == "done"
+        assert await post(data) == "expired"
+    await router.stop()
+
+
+def _first_submit(message: dict[str, JsonValue]) -> dict[str, JsonValue]:
+    card = message["card"]
+    assert isinstance(card, dict) and isinstance(card["actions"], list)
+    action = card["actions"][0]
+    assert isinstance(action, dict) and isinstance(action["data"], dict)
+    return action["data"]

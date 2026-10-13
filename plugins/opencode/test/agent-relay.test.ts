@@ -86,6 +86,49 @@ describe("decisionOf", () => {
     assert.equal(decisionOf({ stdout: {} }).allow, true);
     assert.equal(decisionOf(null).allow, true);
   });
+
+  test("denies when the connection was lost mid-request", () => {
+    assert.deepEqual(decisionOf({ lost: true }), {
+      allow: false,
+      reason: "agent-relay connection lost; denied for safety",
+    });
+  });
+});
+
+describe("relayd restarting mid-approval", () => {
+  let cut: Server;
+  const cutSock = join(dir, "cut.sock");
+
+  before(async () => {
+    cut = createServer((socket) => {
+      socket.once("data", () => socket.destroy());
+    });
+    await new Promise<void>((resolve) => cut.listen(cutSock, resolve));
+  });
+
+  after(async () => {
+    await new Promise<void>((resolve) => cut.close(() => resolve()));
+  });
+
+  test("request reports a drop after connecting as lost, not as unreachable", async () => {
+    assert.deepEqual(await request({ op: "ping" }, cutSock), { lost: true });
+    assert.equal(await request({ op: "ping" }, join(dir, "missing.sock")), null);
+  });
+
+  test("tool.execute.before denies when the socket drops before a reply", async () => {
+    const hooks = await AgentRelay({ directory: "/w" });
+    process.env.RELAY_SOCKET = cutSock;
+    await assert.rejects(
+      hooks["tool.execute.before"]({ tool: "bash", sessionID: "s", callID: "c" }, { args: {} }),
+      /agent-relay connection lost; denied for safety/,
+    );
+  });
+
+  test("tool.execute.before still allows when relayd is unreachable", async () => {
+    process.env.RELAY_SOCKET = join(dir, "missing.sock");
+    const hooks = await AgentRelay({ directory: "/w" });
+    await hooks["tool.execute.before"]({ tool: "bash", sessionID: "s", callID: "c" }, {});
+  });
 });
 
 describe("plugin", () => {

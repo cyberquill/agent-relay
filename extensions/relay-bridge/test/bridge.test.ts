@@ -103,16 +103,21 @@ test("prompt keeps the desk draft and does not open a new chat", async () => {
   });
 });
 
-test("cancel, acceptTool and skipTool run the chat commands", async () => {
+test("cancel runs the chat command", async () => {
+  await connected();
+  assert.deepEqual(await relayd.call(10, "cancel"), { id: 10, ok: true, result: { done: true } });
+  assert.deepEqual(api.commands(), [COMMANDS.cancel]);
+});
+
+test("tool approval commands are refused: they would act on whichever chat has focus", async () => {
   await connected();
   for (const [id, cmd] of [
-    [10, "cancel"],
     [11, "acceptTool"],
     [12, "skipTool"],
   ] as const) {
-    assert.deepEqual(await relayd.call(id, cmd), { id, ok: true, result: { done: true } });
+    assert.deepEqual(await relayd.call(id, cmd), { id, ok: false, error: `unknown command ${cmd}` });
   }
-  assert.deepEqual(api.commands(), [COMMANDS.cancel, COMMANDS.accept, COMMANDS.skip]);
+  assert.deepEqual(api.commands(), []);
 });
 
 test("an unknown command is an error reply, not a crash", async () => {

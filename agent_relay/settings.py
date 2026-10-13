@@ -17,6 +17,7 @@ from agent_relay.sync import jsonc
 CODE_WORKSPACE_SUFFIX = ".code-workspace"
 
 KEYCHAIN_SERVICE = "agent-relay"
+KEYCHAIN_UNLOCK_COMMAND = "security unlock-keychain ~/Library/Keychains/login.keychain-db"
 
 
 class Secret(StrEnum):
@@ -40,16 +41,50 @@ class MissingSecretError(RuntimeError):
         )
 
 
-def get_secret(secret: Secret) -> str | None:
+class KeychainLockedError(RuntimeError):
+    """The Keychain refused to answer because it is locked or needs a user prompt."""
+
+    def __init__(self, secret: Secret | None = None) -> None:
+        self.secret = secret
+        what = f"'{secret.value}'" if secret else "the relay's secrets"
+        super().__init__(
+            f"The login Keychain is locked, so {what} cannot be read. "
+            f"Unlock it with: {KEYCHAIN_UNLOCK_COMMAND}"
+        )
+
+
+# errSecInteractionNotAllowed: the Keychain is locked and there is nobody to prompt (launchd, ssh).
+_LOCKED_MARKERS = ("-25308", "user interaction is not allowed", "interaction not allowed")
+
+
+def _is_locked(exc: keyring.errors.KeyringError) -> bool:
+    if isinstance(exc, keyring.errors.KeyringLocked):
+        return True
+    text = str(exc).lower()
+    return any(marker in text for marker in _LOCKED_MARKERS)
+
+
+def lookup_secret(secret: Secret) -> str | None:
+    """The stored value, None when absent or unreadable. Raises KeychainLockedError when locked."""
     try:
         value = keyring.get_password(KEYCHAIN_SERVICE, secret.value)
-    except keyring.errors.KeyringError:
+    except keyring.errors.KeyringError as exc:
+        if _is_locked(exc):
+            raise KeychainLockedError(secret) from exc
         return None
     return value or None
 
 
+def get_secret(secret: Secret) -> str | None:
+    """Like lookup_secret, but a locked Keychain reads as absent. Use lookup_secret to tell them apart."""
+    try:
+        return lookup_secret(secret)
+    except KeychainLockedError:
+        return None
+
+
 def require_secret(secret: Secret) -> str:
-    value = get_secret(secret)
+    value = lookup_secret(secret)
     if value is None:
         raise MissingSecretError(secret)
     return value

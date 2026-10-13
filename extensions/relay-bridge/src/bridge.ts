@@ -7,8 +7,6 @@ export const COMMANDS = {
   newChat: "workbench.action.chat.newLocalChat",
   open: "workbench.action.chat.open",
   cancel: "workbench.action.chat.cancel",
-  accept: "workbench.action.chat.acceptTool",
-  skip: "workbench.action.chat.skipTool",
 } as const;
 
 export interface ChatModel {
@@ -203,12 +201,6 @@ export class Bridge {
         return { sent: true };
       case "cancel":
         await this.api.executeCommand(COMMANDS.cancel);
-        return { done: true };
-      case "acceptTool":
-        await this.api.executeCommand(COMMANDS.accept);
-        return { done: true };
-      case "skipTool":
-        await this.api.executeCommand(COMMANDS.skip);
         return { done: true };
       default:
         throw new Error(`unknown command ${command.cmd}`);

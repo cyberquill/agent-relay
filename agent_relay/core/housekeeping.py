@@ -5,22 +5,41 @@ from __future__ import annotations
 import asyncio
 from datetime import timedelta
 
-from agent_relay.core.registry import Registry
+from agent_relay.core.registry import (
+    CARD_NONCE_PREFIX,
+    RECENT_APPROVAL_PREFIX,
+    RECENT_APPROVAL_TTL,
+    Registry,
+)
 from agent_relay.log import get_logger
 from agent_relay.models.events import utcnow
 
 log = get_logger(__name__)
 
 SEEN_TTL = timedelta(days=7)
+NONCE_TTL = timedelta(days=2)
 INTERVAL_S = 3600.0
 
 
-async def housekeep(registry: Registry, seen_ttl: timedelta = SEEN_TTL) -> int:
+async def housekeep(
+    registry: Registry, seen_ttl: timedelta = SEEN_TTL, nonce_ttl: timedelta = NONCE_TTL
+) -> int:
     """One pass. Returns how many rows it removed."""
-    pruned = await registry.prune_seen(utcnow() - seen_ttl)
-    if pruned:
-        log.info(f"pruned {pruned} processed-message marker(s)")
-    return pruned
+    now = utcnow()
+    seen = await registry.prune_seen(now - seen_ttl)
+    # A recent approval without a readable time predates the expiry; it is never honoured, so drop it.
+    approvals = await registry.prune_stamped(
+        RECENT_APPROVAL_PREFIX, now - RECENT_APPROVAL_TTL, drop_unparseable=True
+    )
+    nonces = await registry.prune_stamped(CARD_NONCE_PREFIX, now - nonce_ttl, drop_unparseable=False)
+    for count, what in (
+        (seen, "processed-message marker"),
+        (approvals, "recent approval"),
+        (nonces, "card nonce"),
+    ):
+        if count:
+            log.info(f"pruned {count} {what}(s)")
+    return seen + approvals + nonces
 
 
 async def housekeeper(registry: Registry, interval: float = INTERVAL_S) -> None:

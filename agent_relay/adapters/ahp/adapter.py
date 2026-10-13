@@ -67,6 +67,7 @@ TURN_EXTRA = "ahp_turn"
 PROVIDER_EXTRA = "ahp_provider"
 IN_PROGRESS = 8
 READY_TIMEOUT_S = 10.0
+MAX_LIST_PAGES = 50
 DEFAULT_MODEL = "auto"
 
 type Sleep = Callable[[float], Awaitable[None]]
@@ -159,7 +160,7 @@ class AhpAdapter(Adapter):
             if isinstance(snapshot.state, m.RootState):
                 self._root = snapshot.state
         self._subscribed = {uris.ROOT}
-        await self.refresh_sessions()
+        await self.refresh_sessions(reconcile=True)
         self._ready.set()
         log.info(f"connected to the VS Code Agent Host (AHP {result.protocol_version})")
         return conn
@@ -168,6 +169,10 @@ class AhpAdapter(Adapter):
         self._ready.clear()
         conn, self._conn = self._conn, None
         self._subscribed.clear()
+        self._asks.clear()
+        self._inputs.clear()
+        self._turn_started.clear()
+        self._mapper = mp.ActionMapper()
         if conn is not None:
             await conn.close()
 
@@ -195,6 +200,38 @@ class AhpAdapter(Adapter):
         await conn.request("subscribe", m.SubscribeParams(channel=channel))
         self._subscribed.add(channel)
 
+    async def _unsubscribe(self, conn: Connection, channel: str) -> None:
+        if channel == uris.ROOT or channel not in self._subscribed:
+            return
+        self._subscribed.discard(channel)
+        try:
+            await conn.notify("unsubscribe", m.UnsubscribeParams(channel=channel))
+        except AhpUnavailableError as exc:
+            log.debug(f"could not unsubscribe from {channel}: {exc}")
+
+    async def _release(self, conn: Connection | None, record: SessionRecord) -> None:
+        """Stop listening to a session the relay is done with, and forget its in-memory turn state."""
+        channels = [record.extra.get(SESSION_EXTRA), record.extra.get(CHAT_EXTRA)]
+        for channel in channels:
+            if not isinstance(channel, str):
+                continue
+            if conn is not None:
+                await self._unsubscribe(conn, channel)
+            self._mapper.forget(channel)
+            for asks in (self._asks, self._inputs):
+                for call_id in [k for k, ask in asks.items() if ask.chat == channel]:
+                    del asks[call_id]
+        self._turn_started.pop(record.session_key, None)
+
+    async def release_session(self, session: SessionRecord) -> None:
+        """Called when a session ends or is dropped from the relay's tracking."""
+        await self._release(self._conn, session)
+
+    async def _ensure_subscribed(self, conn: Connection, record: SessionRecord) -> None:
+        for channel in (record.extra.get(SESSION_EXTRA), record.extra.get(CHAT_EXTRA)):
+            if isinstance(channel, str):
+                await self._subscribe(conn, channel)
+
     async def _dispatch(self, conn: Connection, chat: str, action: m.AhpModel) -> None:
         params = m.DispatchActionParams(channel=chat, client_seq=next(self._seq), action=action.wire())
         await conn.notify("dispatchAction", params)
@@ -212,25 +249,43 @@ class AhpAdapter(Adapter):
         conn = self._conn
         if conn is None:
             raise AdapterUnavailableError("VS Code's Agent Host is not connected")
-        raw = await conn.request("listSessions", m.ListSessionsParams(channel=uris.ROOT))
-        items = raw.get("items") if isinstance(raw, dict) else None
-        found: list[m.SessionSummary] = []
-        for item in items if isinstance(items, list) else []:
-            try:
-                found.append(m.SessionSummary.model_validate(item))
-            except ValidationError:
-                log.debug("skipped a session summary this relay cannot read")
-        return found
+        return (await self._list_pages(conn))[0]
 
-    async def refresh_sessions(self) -> None:
-        """Adopt host sessions the relay knows, and active desk sessions while away mode is on."""
+    async def _list_pages(self, conn: Connection) -> tuple[list[m.SessionSummary], bool]:
+        """Every session summary, following `nextCursor`. The flag is False when the page cap cut it short."""
+        found: list[m.SessionSummary] = []
+        cursor: str | None = None  # opaque and per connection: never kept past this call
+        for _ in range(MAX_LIST_PAGES):
+            raw = await conn.request("listSessions", m.ListSessionsParams(channel=uris.ROOT, cursor=cursor))
+            items = raw.get("items") if isinstance(raw, dict) else None
+            for item in items if isinstance(items, list) else []:
+                try:
+                    found.append(m.SessionSummary.model_validate(item))
+                except ValidationError:
+                    log.debug("skipped a session summary this relay cannot read")
+            following = raw.get("nextCursor") if isinstance(raw, dict) else None
+            if not isinstance(following, str) or not following:
+                return found, True
+            cursor = following
+        log.warning(f"the Agent Host session list passed {MAX_LIST_PAGES} pages; the rest is ignored")
+        return found, False
+
+    async def refresh_sessions(self, *, reconcile: bool = False) -> None:
+        """Adopt host sessions the relay knows, and active desk sessions while away mode is on.
+
+        `reconcile` is for a fresh connection: a turn the relay still tracks that the host no longer
+        runs is cleared, since nothing will ever finish it.
+        """
         conn = self._conn
         if conn is None:
             return
-        for summary in await self.list_host_sessions():
+        summaries, complete = await self._list_pages(conn)
+        listed: set[str] = set()
+        for summary in summaries:
             sid = uris.session_id(summary.resource)
             if sid is None:
                 continue
+            listed.add(sid)
             record = await self._known(sid)
             workspace = next((p for p in map(uris.file_path, summary.working_directories or []) if p), None)
             if record is None:
@@ -238,7 +293,26 @@ class AhpAdapter(Adapter):
                 if not active or not await away.is_away(self._registry, workspace):
                     continue
                 record = await self._adopt_desk(summary, sid, workspace)
+            if reconcile and not summary.status & IN_PROGRESS:
+                await self._clear_turn(record)
             await self._attach(conn, record, summary)
+        for record in await self._registry.list_sessions(include_ended=True):
+            if record.harness is not self.harness:
+                continue
+            if reconcile and complete and record.harness_id not in listed:
+                await self._clear_turn(record)
+            if record.status is SessionStatus.ENDED:
+                await self._release(conn, record)
+
+    async def _clear_turn(self, record: SessionRecord) -> None:
+        """Forget a turn the host no longer has, and settle a session that was only running for it."""
+        if not isinstance(record.extra.get(TURN_EXTRA), str):
+            return
+        await self._registry.set_session_extra(record.session_key, TURN_EXTRA, None)
+        self._turn_started.pop(record.session_key, None)
+        if record.extra.get(HOOKED) is not True and record.status is SessionStatus.RUNNING:
+            await self.report_status(record.session_key, SessionStatus.IDLE, "adapter report")
+        log.info(f"{record.session_key} lost its turn when the Agent Host connection dropped")
 
     async def _adopt_desk(self, summary: m.SessionSummary, sid: str, workspace: str | None) -> SessionRecord:
         record = await self._registry.create_session(
@@ -264,6 +338,8 @@ class AhpAdapter(Adapter):
             chat = summary.default_chat or uris.chat_uri(uris.DEFAULT_CHAT, summary.resource)
             await self._registry.set_session_extra(record.session_key, CHAT_EXTRA, chat)
             await self._registry.set_session_extra(record.session_key, SESSION_EXTRA, summary.resource)
+        if record.status is SessionStatus.ENDED:
+            return
         await self._subscribe(conn, summary.resource)
         await self._subscribe(conn, chat)
 
@@ -468,6 +544,7 @@ class AhpAdapter(Adapter):
         conn = await self._live()
         chat = await self._chat_of(session)
         fresh = await self._registry.get_session(session.session_key) or session
+        await self._ensure_subscribed(conn, fresh)
         if isinstance(fresh.extra.get(TURN_EXTRA), str):
             steer = m.ChatPendingMessageSetAction(
                 kind="steering", id=str(uuid.uuid4()), message=self._message(text, fresh.model)

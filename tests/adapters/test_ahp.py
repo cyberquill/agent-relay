@@ -461,3 +461,109 @@ async def test_rpc_errors_and_closed_sockets(relay_home: Path) -> None:
     await host.stop()
     with pytest.raises(AhpConnectionError):
         await Connection.open(host.endpoint)
+
+
+async def reconnected(rig: Rig, count: int = 2) -> None:
+    await until(lambda: rig.host.methods().count("initialize") == count)
+    await until(lambda: rig.adapter.connected)
+
+
+async def test_reconnect_clears_a_turn_the_host_no_longer_runs(rig: Rig) -> None:
+    record, _, _ = await quiet_start(rig)
+    assert isinstance((await rig.session(record.session_key)).extra.get(TURN_EXTRA), str)
+    await rig.host.drop_clients()
+    await reconnected(rig)
+    fresh = await rig.session(record.session_key)
+    assert fresh.extra.get(TURN_EXTRA) is None and fresh.status is SessionStatus.IDLE
+    rig.host.auto_reply = False
+    assert await rig.core.service.prompt(record.session_key, "carry on") == "sent"
+    await until(lambda: len(rig.host.actions("chat/turnStarted")) == 2)
+    assert rig.host.actions("chat/pendingMessageSet") == []
+
+
+async def test_reconnect_keeps_a_turn_the_host_still_runs(rig: Rig) -> None:
+    record, _, turn = await quiet_start(rig)
+    rig.host.sessions[uris.session_uri(record.harness_id)]["status"] = 8
+    await rig.host.drop_clients()
+    await reconnected(rig)
+    fresh = await rig.session(record.session_key)
+    assert fresh.extra.get(TURN_EXTRA) == turn and fresh.status is SessionStatus.RUNNING
+
+
+async def test_reconnect_clears_a_turn_on_a_session_the_host_forgot(rig: Rig) -> None:
+    record, _, _ = await quiet_start(rig)
+    del rig.host.sessions[uris.session_uri(record.harness_id)]
+    await rig.host.drop_clients()
+    await reconnected(rig)
+    fresh = await rig.session(record.session_key)
+    assert fresh.extra.get(TURN_EXTRA) is None and fresh.status is SessionStatus.IDLE
+
+
+async def test_a_drop_clears_in_memory_turn_state(rig: Rig) -> None:
+    _, chat, turn = await quiet_start(rig)
+    await ask_tool(rig, chat, turn, "call-9")
+    await until(lambda: rig.rec.of(ApprovalRequested))
+    assert rig.adapter._asks and rig.adapter._turn_started
+    rig.host.sessions.clear()
+    await rig.host.drop_clients()
+    await until(lambda: not rig.adapter.connected)
+    assert not rig.adapter._asks and not rig.adapter._inputs and not rig.adapter._turn_started
+
+
+def unsubscribed(rig: Rig) -> list[JsonValue]:
+    return [p.get("channel") for method, p in rig.host.notified if method == "unsubscribe"]
+
+
+async def test_releasing_a_session_unsubscribes_its_channels(rig: Rig) -> None:
+    record = await rig.start()
+    await until(lambda: rig.rec.of(TurnCompleted))
+    session, chat = uris.session_uri(record.harness_id), rig.chat_of(record)
+    assert unsubscribed(rig) == []
+    await rig.adapter.release_session(await rig.session(record.session_key))
+    await until(lambda: len(unsubscribed(rig)) == 2)
+    assert set(unsubscribed(rig)) == {session, chat}
+    assert uris.ROOT not in unsubscribed(rig)
+    await rig.adapter.release_session(await rig.session(record.session_key))
+    await asyncio.sleep(0.05)
+    assert len(unsubscribed(rig)) == 2
+
+
+async def test_an_ended_session_is_unsubscribed_and_resubscribed_when_it_comes_back(rig: Rig) -> None:
+    record = await rig.start()
+    await until(lambda: rig.rec.of(TurnCompleted))
+    session, chat = uris.session_uri(record.harness_id), rig.chat_of(record)
+    await rig.registry.set_session_status(record.session_key, SessionStatus.ENDED)
+    await rig.adapter.refresh_sessions()
+    await until(lambda: set(unsubscribed(rig)) == {session, chat})
+    await rig.adapter.refresh_sessions()
+    assert rig.host.requests.count(("subscribe", {"channel": chat})) == 1
+    await rig.registry.set_session_status(record.session_key, SessionStatus.IDLE)
+    await rig.adapter.send_prompt(await rig.session(record.session_key), "back again")
+    assert rig.host.requests.count(("subscribe", {"channel": chat})) == 2
+    assert rig.host.requests.count(("subscribe", {"channel": session})) == 2
+
+
+def list_calls(rig: Rig) -> list[dict[str, JsonValue]]:
+    return [params for method, params in rig.host.requests if method == "listSessions"]
+
+
+async def test_list_sessions_follows_next_cursor_until_it_ends(rig: Rig) -> None:
+    for n in range(5):
+        rig.host.add_session(f"0000000{n}-2222-3333-4444-555555555555", WORKSPACE, status=1)
+    rig.host.page_size = 2
+    before = len(list_calls(rig))
+    assert len(await rig.adapter.list_host_sessions()) == 5
+    assert [c.get("cursor") for c in list_calls(rig)[before:]] == [None, "page-2", "page-4"]
+    assert len(await rig.adapter.list_host_sessions()) == 5
+    assert list_calls(rig)[before + 3].get("cursor") is None
+
+
+async def test_list_sessions_stops_at_the_page_cap(rig: Rig, caplog: pytest.LogCaptureFixture) -> None:
+    rig.host.add_session("00000000-2222-3333-4444-555555555555", WORKSPACE, status=1)
+    rig.host.page_size = 1
+    rig.host.endless_cursor = True
+    before = len(list_calls(rig))
+    with caplog.at_level("WARNING", logger="agent_relay.adapters.ahp.adapter"):
+        await rig.adapter.list_host_sessions()
+    assert len(list_calls(rig)) - before == 50
+    assert "50 pages" in caplog.text

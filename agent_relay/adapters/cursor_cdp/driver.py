@@ -89,6 +89,10 @@ class TurnTracker:
     def text(self) -> str:
         return self._text
 
+    def began(self, snap: Snapshot) -> bool:
+        """Whether Cursor acted on the send: a stop button was seen, or a new assistant message exists."""
+        return self._seen_busy or snap.busy or snap.count > self._base_count
+
     def feed(self, snap: Snapshot) -> str:
         """Returns the new reply text since the last snapshot; sets `done` when the turn ends."""
         if self.done:
@@ -165,6 +169,12 @@ class Composer:
         await (await self._one("composer")).evaluate("el => el.focus()")
         await self.page.keyboard.insert_text(prompt)
         await press(await self._one("send"))
+
+    async def clear(self) -> None:
+        """Empties the composer so text from a send that did nothing is not prefixed to the next prompt."""
+        await (await self._one("composer")).evaluate(
+            "el => { el.focus(); document.execCommand('selectAll'); document.execCommand('delete'); }"
+        )
 
     async def stop(self) -> bool:
         if await self.count("stop") == 0:

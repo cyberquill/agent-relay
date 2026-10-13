@@ -75,6 +75,13 @@ def unmerge(existing: dict[str, JsonValue]) -> dict[str, JsonValue]:
     return {**existing, "hooks": hooks}
 
 
+def unmerge_bytes(content: bytes) -> bytes:
+    data = json.loads(content.decode("utf-8"))
+    if not isinstance(data, dict):
+        raise ValueError("hooks.json is not a JSON object")
+    return render_json(unmerge(data))
+
+
 def read_existing() -> dict[str, JsonValue]:
     file = hooks_file()
     if not file.exists():

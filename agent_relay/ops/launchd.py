@@ -92,6 +92,14 @@ def bootout_command(agent: LaunchAgent, uid: int | None = None) -> list[str]:
     return ["launchctl", "bootout", f"gui/{os.getuid() if uid is None else uid}/{agent.label}"]
 
 
+def service_target(agent: LaunchAgent) -> str:
+    return f"gui/{os.getuid()}/{agent.label}"
+
+
+def is_loaded(agent: LaunchAgent, runner: Callable[[Sequence[str]], tuple[int, str]]) -> bool:
+    return runner(["launchctl", "print", service_target(agent)])[0] == 0
+
+
 def wait_unloaded(
     agent: LaunchAgent,
     runner: Callable[[Sequence[str]], tuple[int, str]],
@@ -100,9 +108,8 @@ def wait_unloaded(
 ) -> bool:
     """Wait until launchd no longer lists `agent`. `bootout` returns before it lets go, and a
     `bootstrap` in that window fails with error 5 (or a `kickstart` with 37)."""
-    target = f"gui/{os.getuid()}/{agent.label}"
     for _ in range(polls):
-        if runner(["launchctl", "print", target])[0] != 0:
+        if not is_loaded(agent, runner):
             return True
         sleep(UNLOAD_POLL_S)
     return False

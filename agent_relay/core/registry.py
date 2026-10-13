@@ -12,7 +12,7 @@ import json
 import sqlite3
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from pydantic import JsonValue
@@ -81,6 +81,10 @@ GLOBAL_SCOPE = "*"
 # Per-session grants live under these prefixes, followed by `{session_key}:`; the lifecycle drops them.
 ALLOW_SESSION_PREFIX = "allow_session:"
 RECENT_APPROVAL_PREFIX = "approved_recent:"
+# A recent approval is honoured this long; the stored value is `<ISO-8601 UTC> <decision>`.
+RECENT_APPROVAL_TTL = timedelta(seconds=60)
+# Webex card nonces, valued with the ISO-8601 UTC time they were issued.
+CARD_NONCE_PREFIX = "card.nonce:"
 # Processed Webex message ids, valued with the time they were seen so they can be pruned.
 SEEN_PREFIX = "webex.seen:"
 
@@ -159,6 +163,21 @@ def _readable(rows: list[sqlite3.Row]) -> list[SessionRecord]:
         except ValueError as exc:
             log.warning(f"skipping unreadable session row {row['session_key']}: {exc}")
     return found
+
+
+def stamped_at(value: str) -> datetime | None:
+    """The leading ISO-8601 time of a stored value (`<time>` or `<time> <rest>`), or None. Naive means UTC."""
+    head = value.split(maxsplit=1)[0] if value.strip() else ""
+    try:
+        parsed = datetime.fromisoformat(head)
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=UTC)
+
+
+def _expired(value: str, older_than: datetime, drop_unparseable: bool) -> bool:
+    stamped = stamped_at(value)
+    return drop_unparseable if stamped is None else stamped < older_than
 
 
 def _pending_from_row(row: sqlite3.Row) -> PendingRequest:
@@ -433,6 +452,11 @@ class Registry:
         changed = await self._run(lambda: self._write(sql, params))
         return changed > 0
 
+    async def reopen_pending(self, request_id: str) -> bool:
+        """Put a resolved request back to open, answer cleared and deadline kept. False if not resolved."""
+        sql = "UPDATE pending SET status='open', answer=NULL WHERE request_id=? AND status='resolved'"
+        return await self._run(lambda: self._write(sql, (request_id,))) > 0
+
     async def set_pending_message(self, request_id: str, message_id: str) -> None:
         sql = "UPDATE pending SET webex_message_id=? WHERE request_id=?"
         await self._run(lambda: self._write(sql, (message_id, request_id)))
@@ -547,6 +571,30 @@ class Registry:
         sql = "DELETE FROM kv WHERE substr(key, 1, ?) = ? AND value < ?"
         params = (len(SEEN_PREFIX), SEEN_PREFIX, _ts(older_than))
         return await self._run(lambda: self._write(sql, params))
+
+    async def prune_stamped(self, prefix: str, older_than: datetime, *, drop_unparseable: bool) -> int:
+        """Delete `prefix` keys whose value starts with a timestamp before `older_than`.
+
+        A value that does not start with an ISO-8601 time is deleted only when `drop_unparseable`.
+        """
+
+        def _prune() -> int:
+            db = self._db()
+            db.execute("BEGIN IMMEDIATE")
+            try:
+                rows = db.execute(
+                    "SELECT key, value FROM kv WHERE substr(key, 1, ?) = ?", (len(prefix), prefix)
+                ).fetchall()
+                doomed = [r["key"] for r in rows if _expired(r["value"], older_than, drop_unparseable)]
+                for key in doomed:
+                    db.execute("DELETE FROM kv WHERE key=?", (key,))
+                db.execute("COMMIT")
+            except BaseException:
+                db.execute("ROLLBACK")
+                raise
+            return len(doomed)
+
+        return await self._run(_prune)
 
     async def schema_version(self) -> int:
         return await self._run(lambda: int(self._db().execute("PRAGMA user_version").fetchone()[0]))

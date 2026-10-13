@@ -75,6 +75,7 @@ document.addEventListener("keydown", (event) => { if (event.key === "Escape") { 
 
 sendButton.addEventListener("click", () => {
   if (stopIcon()) { finish(); return; }
+  if (composer.innerText.includes("deadsend")) { return; }
   const prompt = composer.innerText.trim();
   composer.replaceChildren();
   window.__prompts.push({prompt, model: pickerText.textContent});

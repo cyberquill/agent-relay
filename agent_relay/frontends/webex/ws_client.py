@@ -105,12 +105,14 @@ class WebexWsClient:
         connector: Connector = default_connector,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
         backoff: tuple[float, float] = (1.0, MAX_BACKOFF_S),
+        on_close: Callable[[], Awaitable[None]] | None = None,
     ) -> None:
         self._token = token
         self._http = http
         self._u2c_url = u2c_url
         self._on_activity = on_activity
         self._on_connected = on_connected
+        self._on_close = on_close
         self._connector = connector
         self._sleep = sleep
         self._backoff_min, self._backoff_max = backoff
@@ -254,6 +256,14 @@ class WebexWsClient:
                 self.connected = False
 
     async def run(self) -> None:
+        """Connect and listen until cancelled, then let `on_close` clean up."""
+        try:
+            await self._run_forever()
+        finally:
+            if self._on_close is not None:
+                await self._on_close()
+
+    async def _run_forever(self) -> None:
         """Connect and listen forever, reconnecting with exponential backoff.
 
         Network failures, including HTTP calls to Webex, are retried; a rejected token is not.

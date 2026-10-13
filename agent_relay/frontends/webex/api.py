@@ -13,6 +13,7 @@ from typing import cast
 import httpx
 from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
+from agent_relay.frontends.webex.cards.common import fit_card, minify
 from agent_relay.log import get_logger
 from agent_relay.scrub import scrub_obj, scrub_text
 
@@ -22,6 +23,7 @@ MAX_TEXT_BYTES = 7_439
 MAX_EDITS = 10
 MAX_RETRIES = 5
 CARD_CONTENT_TYPE = "application/vnd.microsoft.card.adaptive"
+CARD_DROPPED = "_The interactive card was too large to send._"
 
 
 class WebexError(RuntimeError):
@@ -116,8 +118,11 @@ class WebexApi:
         data: dict[str, str] | None = None,
     ) -> httpx.Response:
         url = endpoint if endpoint.startswith("http") else f"{self._base}{endpoint}"
+        # Compact JSON, so the size the card check counts is the size that is sent.
+        content = minify(json_body).encode() if json_body is not None else None
+        headers = {"Content-Type": "application/json"} if content is not None else None
         response = await self._client.request(
-            method, url, json=json_body, params=params, files=files, data=data
+            method, url, content=content, headers=headers, params=params, files=files, data=data
         )
         for _ in range(MAX_RETRIES):
             if response.status_code != 429:
@@ -126,7 +131,7 @@ class WebexApi:
             log.warning(f"Webex 429 on {method} {endpoint}; retrying in {wait:.0f}s")
             await self._sleep(wait)
             response = await self._client.request(
-                method, url, json=json_body, params=params, files=files, data=data
+                method, url, content=content, headers=headers, params=params, files=files, data=data
             )
         if response.status_code >= 400:
             raise WebexError(response.status_code, scrub_text(response.text[:300]))
@@ -190,6 +195,13 @@ class WebexApi:
         file: tuple[str, bytes, str] | None = None,
     ) -> Message:
         text = scrub_text(markdown)
+        attachment: dict[str, JsonValue] | None = None
+        if card is not None:
+            cleaned_card = cast(dict[str, JsonValue], scrub_obj(card))
+            attachment = fit_card(text, cleaned_card)
+            if attachment is None:
+                log.warning("card too large for one Webex message; sending its text only")
+                text = f"{text}\n\n{CARD_DROPPED}"
         if text_bytes(text) > MAX_TEXT_BYTES:
             raise MessageTooLargeError(f"{text_bytes(text)} bytes > {MAX_TEXT_BYTES}")
         target: dict[str, str] = {}
@@ -209,10 +221,8 @@ class WebexApi:
             )
             return Message.model_validate(response.json())
         body: dict[str, JsonValue] = {**target, "markdown": text}
-        if card is not None:
-            body["attachments"] = [
-                {"contentType": CARD_CONTENT_TYPE, "content": cast(JsonValue, scrub_obj(card))}
-            ]
+        if attachment is not None:
+            body["attachments"] = [{"contentType": CARD_CONTENT_TYPE, "content": attachment}]
         return Message.model_validate(await self._json("POST", "/messages", json_body=body))
 
     def edits_used(self, message_id: str) -> int:

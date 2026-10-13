@@ -71,6 +71,12 @@ TABLE: list[tuple[str, bool, Parsed]] = [
         Invalid(N.NEW, "too many arguments: put the prompt in quotes", ("a", "b", "c", "d")),
     ),
     ('/new oc proj ""', False, Command(N.NEW, ("oc", "proj"), None)),
+    # an apostrophe inside a word is not a quote
+    ("/new oc proj fix don't and can't", False, Command(N.NEW, ("oc", "proj", "fix"), "don't and can't")),
+    ('/new oc proj "don\'t stop"', False, Command(N.NEW, ("oc", "proj"), "don't stop")),
+    ("/new oc proj 'it's here'", False, Command(N.NEW, ("oc", "proj"), "it's here")),
+    ('/new oc proj it\'s "quoted one"', False, Command(N.NEW, ("oc", "proj", "it's"), "quoted one")),
+    ("/new oc proj don\u2019t panic", False, Command(N.NEW, ("oc", "proj", "don't"), "panic")),
     ("/NEW OpenCode", False, Command(N.NEW, ("OpenCode",), None)),
     # listings
     ("/sessions", False, Command(N.SESSIONS)),

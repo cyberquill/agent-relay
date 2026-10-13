@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Callable
+from datetime import datetime
 
 from pydantic import JsonValue
 
@@ -16,7 +18,7 @@ from agent_relay.core.approvals import CLOSED_REASONS, DEADLINE_REASON, Approval
 from agent_relay.core.claims import UNCLAIMED_PREFIX, aliased, link_alias, take_claim
 from agent_relay.core.lifecycle import Lifecycle
 from agent_relay.core.parking import ParkManager, phone_text
-from agent_relay.core.registry import RECENT_APPROVAL_PREFIX, Registry
+from agent_relay.core.registry import RECENT_APPROVAL_PREFIX, RECENT_APPROVAL_TTL, Registry, stamped_at
 from agent_relay.core.router import Router
 from agent_relay.hook import outputs, transcript
 from agent_relay.hook.shims import (
@@ -37,6 +39,7 @@ from agent_relay.models.events import (
     ToolFinished,
     ToolStarted,
     TurnCompleted,
+    utcnow,
 )
 from agent_relay.models.sessions import SessionRecord, SessionStatus
 
@@ -77,12 +80,14 @@ class HookService:
         broker: ApprovalBroker,
         parking: ParkManager,
         lifecycle: Lifecycle,
+        clock: Callable[[], datetime] = utcnow,
     ) -> None:
         self._registry = registry
         self._router = router
         self._broker = broker
         self._parking = parking
         self._lifecycle = lifecycle
+        self._clock = clock
 
     async def handle(self, message: dict[str, object]) -> Reply:
         family, event, payload = message.get("harness"), message.get("event"), message.get("payload")
@@ -282,16 +287,15 @@ class HookService:
         if self._broker.auto_allowed(tool):
             return _reply(outputs.permission(hook, True, "read-only tool"))
         recent = RECENT_APPROVAL_KEY.format(session_key=session.session_key, digest=_digest(hook))
-        if hook.kind is HookKind.PERMISSION and await self._registry.kv_get(recent) == "allow":
+        if hook.kind is HookKind.PERMISSION and await self._recently_allowed(recent):
             return _reply(outputs.permission(hook, True, "approved from the phone"))
         outcome = await self._broker.request(session, tool, describe_tool(hook))
         if outcome.deferred:
             return {}
-        await self._registry.kv_set(recent, "allow" if outcome.allowed else "deny")
+        decision = "allow" if outcome.allowed else "deny"
+        await self._registry.kv_set(recent, f"{self._clock().isoformat()} {decision}")
         if hook.tool_use_id:
-            await self._registry.kv_set(
-                APPROVED_CALL_KEY.format(call_id=hook.tool_use_id), "allow" if outcome.allowed else "deny"
-            )
+            await self._registry.kv_set(APPROVED_CALL_KEY.format(call_id=hook.tool_use_id), decision)
         if outcome.allowed:
             return _reply(outputs.permission(hook, True, "approved from the phone"))
         reason = (
@@ -300,6 +304,15 @@ class HookService:
             else CLOSED_REASONS.get(outcome.by, "Denied from the phone by the user.")
         )
         return _reply(outputs.permission(hook, False, reason))
+
+    async def _recently_allowed(self, key: str) -> bool:
+        """True only for an allow stamped within the last RECENT_APPROVAL_TTL."""
+        stored = await self._registry.kv_get(key)
+        if stored is None:
+            return False
+        stamped = stamped_at(stored)
+        decision = stored.partition(" ")[2]
+        return stamped is not None and decision == "allow" and self._clock() - stamped < RECENT_APPROVAL_TTL
 
     async def _after_tool(self, session: SessionRecord, hook: HookInput) -> Reply:
         await self._publish_tool(session, hook, None, started=False)

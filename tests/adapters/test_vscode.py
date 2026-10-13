@@ -19,6 +19,7 @@ from agent_relay.core.claims import UNCLAIMED_PREFIX, claim_key
 from agent_relay.core.registry import Registry
 from agent_relay.daemon import Core
 from agent_relay.ipc import IpcServer
+from agent_relay.models.capabilities import Capability
 from agent_relay.models.config import RelayConfig, Workspace, WorkspacesConfig
 from agent_relay.models.events import ErrorEvent, Event, Harness, Origin, SessionStarted
 from agent_relay.models.sessions import SessionRecord, SessionStatus
@@ -350,22 +351,36 @@ async def test_prompt_while_running_is_queued_as_steering(rig: Rig) -> None:
     assert "prompt" not in bridge.commands()
 
 
-async def test_prompt_moves_to_the_window_that_now_holds_the_workspace(rig: Rig) -> None:
+async def test_prompt_to_a_chat_whose_window_closed_fails_instead_of_using_another_window(rig: Rig) -> None:
     first = await rig.bridge("win-1")
     record = await idle(rig, await rig.start())
     await first.close()
     await until(lambda: "win-1" not in rig.hub.windows)
     second = await rig.bridge("win-2")
-    await rig.core.service.prompt(record.session_key, "continue")
-    assert second.commands() == ["prompt"]
-    assert (await rig.session(record.session_key)).extra[WINDOW_KEY] == "win-2"
+    with pytest.raises(
+        AdapterUnavailableError, match="window for this chat is closed. Start a new chat with /new"
+    ):
+        await rig.core.service.prompt(record.session_key, "continue")
+    assert second.commands() == []
+    assert (await rig.session(record.session_key)).extra[WINDOW_KEY] == "win-1"
 
 
-async def test_prompt_falls_back_to_code_chat_when_no_window_is_left(rig: Rig) -> None:
+async def test_prompt_to_a_chat_with_no_window_left_does_not_use_code_chat(rig: Rig) -> None:
     record = await idle(rig, await rig.start())
     rig.launcher.calls.clear()
-    await rig.core.service.prompt(record.session_key, "continue")
-    assert rig.launcher.calls == [([str(rig.cli), "chat", "-m", "agent", "-r", "continue"], Path(WORKSPACE))]
+    with pytest.raises(AdapterUnavailableError, match="is closed"):
+        await rig.core.service.prompt(record.session_key, "continue")
+    assert rig.launcher.calls == []
+
+
+async def test_waking_a_chat_whose_window_closed_fails(rig: Rig) -> None:
+    first = await rig.bridge("win-1")
+    record = await idle(rig, await rig.start())
+    await first.close()
+    await until(lambda: "win-1" not in rig.hub.windows)
+    await rig.bridge("win-2")
+    with pytest.raises(AdapterUnavailableError, match="is closed"):
+        await rig.adapter.wake(record, "wake up")
 
 
 async def test_desk_local_chats_are_not_prompted_through_the_bridge(rig: Rig) -> None:
@@ -432,14 +447,14 @@ async def test_set_model_applies_to_the_next_prompt(rig: Rig) -> None:
     assert bridge.args_of("prompt")["model"] == "claude-sonnet"
 
 
-@pytest.mark.parametrize(
-    ("decision", "command"), [("allow", "acceptTool"), ("allow_session", "acceptTool"), ("deny", "skipTool")]
-)
-async def test_approval_answers_map_to_tool_commands(rig: Rig, decision: str, command: str) -> None:
+async def test_approvals_are_not_advertised_and_never_reach_the_bridge(rig: Rig) -> None:
     bridge = await rig.bridge()
     record = await rig.start()
-    await rig.adapter.answer_approval(record, "r1", decision)  # type: ignore[arg-type]
-    assert bridge.commands()[-1] == command
+    assert not rig.adapter.capabilities.has(Capability.APPROVE)
+    for decision in ("allow", "allow_session", "deny"):
+        with pytest.raises(UnsupportedError):
+            await rig.adapter.answer_approval(record, "r1", decision)
+    assert bridge.commands() == ["start"]
 
 
 # events

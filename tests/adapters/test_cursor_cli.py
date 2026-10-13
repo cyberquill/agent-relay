@@ -6,7 +6,7 @@ import asyncio
 import inspect
 import json
 import sys
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator, Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -14,8 +14,9 @@ from typing import Any
 import pytest
 
 from agent_relay.adapters.base import AdapterUnavailableError
-from agent_relay.adapters.cursor_cli.adapter import RESUME_EXTRA, STOPPED_TEXT, CursorCliAdapter
+from agent_relay.adapters.cursor_cli.adapter import IDLE_S, RESUME_EXTRA, STOPPED_TEXT, CursorCliAdapter
 from agent_relay.adapters.cursor_cli.catalog import LOGIN_HINT, CursorCli
+from agent_relay.adapters.cursor_cli.rpc import AcpProcess, NotificationHandler, RequestHandler
 from agent_relay.core import away
 from agent_relay.core.hooks import APPROVED_CALL_KEY
 from agent_relay.core.registry import Registry
@@ -107,7 +108,10 @@ class Rig:
 
 
 @pytest.fixture
-async def rig(registry: Registry, relay_home: Path, monkeypatch: pytest.MonkeyPatch) -> AsyncIterator[Rig]:
+async def rig(
+    registry: Registry, relay_home: Path, monkeypatch: pytest.MonkeyPatch, request: pytest.FixtureRequest
+) -> AsyncIterator[Rig]:
+    idle_s: float = getattr(request, "param", IDLE_S)
     fake_dir = relay_home / "acp"
     fake_dir.mkdir()
     monkeypatch.setenv("FAKE_ACP_DIR", str(fake_dir))
@@ -120,7 +124,7 @@ async def rig(registry: Registry, relay_home: Path, monkeypatch: pytest.MonkeyPa
     core = Core(RelayConfig(), registry)
     rec = Recorder()
     core.router.subscribe(rec)
-    adapter = CursorCliAdapter(registry, CursorCli(shim), init_timeout=10)
+    adapter = CursorCliAdapter(registry, CursorCli(shim), init_timeout=10, idle_s=idle_s)
     core.router.add_adapter(adapter)
     yield Rig(core, adapter, rec, registry, str(workspace), fake_dir)
     await adapter.aclose()
@@ -399,3 +403,76 @@ async def test_cursor_hooks_leave_acp_sessions_alone(rig: Rig) -> None:
     )
     assert reply == {}
     assert rig.rec.of(ApprovalRequested) == []
+
+
+# process lifetime and locking
+
+
+@pytest.mark.parametrize("rig", [0.4], indirect=True)
+async def test_an_idle_session_process_is_closed_and_resumed_by_the_next_prompt(rig: Rig) -> None:
+    record = await rig.start()
+    await rig.turns(1)
+    await until(lambda: record.session_key not in rig.adapter._live)
+    assert rig.methods().count("session/load") == 0
+    assert await rig.core.service.prompt(record.session_key, "Reply with exactly: OK") == "sent"
+    second = (await rig.turns(2))[1]
+    assert second.text == "OK"
+    assert rig.methods().count("session/load") == 1
+
+
+@pytest.mark.parametrize("rig", [0.4], indirect=True)
+async def test_a_session_with_an_open_request_is_not_reaped(rig: Rig) -> None:
+    record = await rig.start("use a tool")
+    ask = await rig.asked(ApprovalRequested)
+    await asyncio.sleep(1.0)
+    assert record.session_key in rig.adapter._live
+    await rig.core.service.answer_approval(ask.request_id, "allow")
+    (done,) = await rig.turns(1)
+    assert done.text == "tool allow-once"
+
+
+async def test_a_slow_spawn_for_one_session_does_not_block_another(rig: Rig) -> None:
+    one = await rig.start()
+    two = await rig.start()
+    await rig.turns(2)
+    await rig.adapter.aclose()
+    release = asyncio.Event()
+    calls: list[int] = []
+    real = rig.adapter._spawn
+
+    async def spawn(
+        argv: Sequence[str], cwd: Path, on_request: RequestHandler, on_notification: NotificationHandler
+    ) -> AcpProcess:
+        calls.append(1)
+        if len(calls) == 1:
+            await release.wait()
+        return await real(argv, cwd, on_request, on_notification)
+
+    rig.adapter._spawn = spawn
+    first = asyncio.create_task(rig.adapter.send_prompt(await rig.session(one.session_key), "again"))
+    await until(lambda: calls and rig.adapter._locks[one.session_key].locked())
+    await asyncio.wait_for(rig.adapter.send_prompt(await rig.session(two.session_key), "again"), 5)
+    assert not first.done()
+    release.set()
+    await first
+
+
+async def test_an_unexpected_turn_failure_frees_the_session_and_drops_the_process(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    record = await rig.start()
+    await rig.turns(1)
+    live = rig.adapter._live[record.session_key]
+
+    async def boom(*args: object, **kwargs: object) -> None:
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(live.process, "request", boom)
+    assert await rig.core.service.prompt(record.session_key, "again") == "sent"
+    await until(lambda: rig.rec.of(ErrorEvent))
+    assert rig.rec.of(ErrorEvent)[0].message == "boom"
+    await until(lambda: _status(rig, record, SessionStatus.IDLE))
+    await until(lambda: record.session_key not in rig.adapter._live)
+    assert await rig.core.service.prompt(record.session_key, "Reply with exactly: OK") == "sent"
+    assert (await rig.turns(2))[1].text == "OK"
+    assert rig.methods().count("session/load") == 1
