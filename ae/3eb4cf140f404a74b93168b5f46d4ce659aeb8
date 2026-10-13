@@ -1,0 +1,30 @@
+tests/frontends/test_bots.py
+  s_b1183e53048170::t_cee8ab53c6ff93 35,115-118
+  s_b1183e53048170::t_4d4202197feec0 251-263
+  s_b1183e53048170::t_0c7358461b1894 119-122,264-265
+agent_relay/frontends/webex/handlers.py
+  s_b1183e53048170::t_03f5037bae7a94 219,222-223,228
+agent_relay/frontends/webex/commands/sessions.py
+  s_b1183e53048170::t_269a360bfa7011 183-184
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ae3eb4cf140f404a74b93168b5f46d4ce659aeb8",
+  "prompts": {},
+  "humans": {
+    "h_ed7d05665a8f05": {
+      "author": "Brijgopal Bharadwaj <brijgopalbharadwaj1999@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_b1183e53048170": {
+      "agent_id": {
+        "tool": "github-copilot",
+        "id": "8155873d-04b7-4e4b-870f-7757cd3dbda7",
+        "model": "copilot/claude-opus-5.5"
+      },
+      "human_author": "Brijgopal Bharadwaj <brijgopalbharadwaj1999@gmail.com>"
+    }
+  }
+}
