@@ -6,14 +6,22 @@ message waiting for a turn that will never come, or a grant that outlives the se
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from pydantic import JsonValue
 
-from agent_relay.adapters.base import EventPublisher
+from agent_relay.adapters.base import Adapter, EventPublisher
 from agent_relay.core.keys import RELEASE_KEY, pending_key, session_signal
 from agent_relay.core.registry import Registry
 from agent_relay.core.signals import Signals
 from agent_relay.log import get_logger
-from agent_relay.models.events import ApprovalResolved, QuestionAnswered, ResolvedBy, SessionReleased
+from agent_relay.models.events import (
+    ApprovalResolved,
+    Harness,
+    QuestionAnswered,
+    ResolvedBy,
+    SessionReleased,
+)
 from agent_relay.models.sessions import PendingRequest, SessionRecord, SessionStatus
 
 log = get_logger(__name__)
@@ -41,10 +49,17 @@ class InvalidTransitionError(RuntimeError):
 
 
 class Lifecycle:
-    def __init__(self, registry: Registry, publisher: EventPublisher, signals: Signals) -> None:
+    def __init__(
+        self,
+        registry: Registry,
+        publisher: EventPublisher,
+        signals: Signals,
+        adapter_for: Callable[[Harness], Adapter | None] | None = None,
+    ) -> None:
         self._registry = registry
         self._publisher = publisher
         self._signals = signals
+        self._adapter_for = adapter_for
 
     async def transition(self, session_key: str, to: SessionStatus, reason: str) -> SessionRecord:
         """Move a session to `to`, validating the move. Ending it also cleans up after it."""
@@ -59,6 +74,7 @@ class Lifecycle:
         if to is SessionStatus.ENDED:
             await self._wind_down(session, "ended", reason)
             await self._registry.drop_session_grants(session_key)
+            await self._release_adapter(session)
         log.debug(f"{session_key}: {session.status.value} -> {to.value} ({reason})")
         return await self._session(session_key)
 
@@ -108,6 +124,15 @@ class Lifecycle:
         if found is None:
             raise UnknownSessionError(session_key)
         return found
+
+    async def _release_adapter(self, session: SessionRecord) -> None:
+        adapter = self._adapter_for(session.harness) if self._adapter_for is not None else None
+        if adapter is None:
+            return
+        try:
+            await adapter.release_session(session)
+        except Exception:
+            log.exception(f"{session.session_key}: the adapter failed to release the session")
 
     async def _wind_down(self, session: SessionRecord, by: ResolvedBy, reason: str) -> None:
         if session.status is SessionStatus.PARKED:

@@ -64,7 +64,7 @@ class RelayService:
         self.router = router
         self.signals = signals
         self.config = config
-        self.lifecycle = lifecycle or Lifecycle(registry, router, signals)
+        self.lifecycle = lifecycle or Lifecycle(registry, router, signals, router.adapter)
         deps = Deps(registry, router, signals, config, self.lifecycle)
         self._discovery = Discovery(deps)
         self._sessions = Sessions(deps, self._discovery)

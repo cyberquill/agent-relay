@@ -63,6 +63,33 @@ class NoResumeAdapter(EmittingAdapter):
         raise UnsupportedError(self.harness, "prompt")
 
 
+class ReleasingAdapter(EmittingAdapter):
+    def __init__(self, fail: bool = False) -> None:
+        super().__init__(count=0)
+        self.fail = fail
+        self.released: list[str] = []
+
+    async def release_session(self, session: SessionRecord) -> None:
+        self.released.append(session.session_key)
+        if self.fail:
+            raise RuntimeError("boom")
+
+
+@pytest.mark.parametrize("fail", [False, True])
+async def test_ending_a_session_tells_its_adapter_even_if_the_adapter_fails(
+    core: tuple[Core, Recorder], fail: bool
+) -> None:
+    built, _ = core
+    adapter = ReleasingAdapter(fail)
+    built.router.add_adapter(adapter)
+    await _session(built)
+    await built.lifecycle.transition("opencode:s1", SessionStatus.IDLE, "turn over")
+    assert adapter.released == []
+    ended = await built.lifecycle.transition("opencode:s1", SessionStatus.ENDED, "done")
+    assert ended.status is SessionStatus.ENDED
+    assert adapter.released == ["opencode:s1"]
+
+
 @pytest.fixture
 async def core(registry: Registry) -> AsyncIterator[tuple[Core, Recorder]]:
     built = Core(RelayConfig(), registry)

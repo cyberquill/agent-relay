@@ -94,7 +94,7 @@ class Core:
     webex: WebexLink | None = None
 
     def __post_init__(self) -> None:
-        self.lifecycle = Lifecycle(self.registry, self.router, self.signals)
+        self.lifecycle = Lifecycle(self.registry, self.router, self.signals, self.router.adapter)
         self.router.bind_lifecycle(self.lifecycle)
         self.service = RelayService(self.registry, self.router, self.signals, self.config, self.lifecycle)
         self.broker = ApprovalBroker(

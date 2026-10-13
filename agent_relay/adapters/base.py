@@ -122,6 +122,10 @@ class Adapter(ABC):
     async def wake(self, session: SessionRecord, text: str) -> None:
         raise UnsupportedError(self.harness, Capability.WAKE_IDLE)
 
+    async def release_session(self, session: SessionRecord) -> None:
+        """Drop per-session resources once the session ends. Most adapters hold none."""
+        return None
+
     async def aclose(self) -> None:
         """Release resources. Adapters without resources inherit this no-op deliberately."""
         return None

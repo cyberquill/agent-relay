@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
@@ -42,6 +44,8 @@ class ApprovalConfig(_Section):
     deadline_s: int = Field(default=600, ge=10)
     hook_timeout_margin_s: int = Field(default=60, ge=5)
     auto_allow: list[str] = Field(default_factory=lambda: list(READ_ONLY_TOOLS))
+    # How long "allow this tool in this workspace" from the phone lasts.
+    workspace_grant_s: int = Field(default=14_400, ge=60)
 
     @model_validator(mode="after")
     def _no_global_auto_approve(self) -> ApprovalConfig:
@@ -80,6 +84,11 @@ class PwaConfig(_Section):
 class CdpConfig(_Section):
     enabled: bool = False
     port: int = 9223
+    start_deadline_s: float = Field(default=20.0, ge=5)
+
+
+class CursorCliConfig(_Section):
+    idle_s: float = Field(default=900.0, ge=60)
 
 
 class OpenCodeConfig(_Section):
@@ -100,6 +109,37 @@ class RendererConfig(_Section):
     max_message_bytes: int = 6_144
     pace_s: float = 2.0
     root_edit_budget: int = 8
+    progress_edit_interval_s: float = Field(default=30.0, ge=5)
+    quick_reply: bool = False
+
+
+QueueMode = Literal["queue", "steer", "interrupt"]
+
+
+class QueueConfig(_Section):
+    default_mode: QueueMode = "queue"
+
+
+class PresenceConfig(_Section):
+    auto_away_on_lock: bool = True
+    poll_s: float = Field(default=10.0, ge=1)
+
+
+class AttachmentsConfig(_Section):
+    enabled: bool = True
+    max_bytes: int = Field(default=20 * 1024 * 1024, ge=1024)
+    # A files-only message waits this long for the text it belongs to.
+    hold_s: int = Field(default=600, ge=10)
+    inbox_dir: str = ".agent-relay/inbox"
+
+
+class WsConfig(_Section):
+    """Adding workspaces from the phone. Off until `roots` names at least one folder."""
+
+    roots: list[str] = Field(default_factory=list)
+    clone_hosts: list[str] = Field(default_factory=lambda: ["github.com"])
+    clone_timeout_s: int = Field(default=300, ge=10)
+    list_depth: int = Field(default=2, ge=1, le=4)
 
 
 class RelayConfig(_Section):
@@ -108,9 +148,14 @@ class RelayConfig(_Section):
     park: ParkConfig = Field(default_factory=ParkConfig)
     pwa: PwaConfig = Field(default_factory=PwaConfig)
     cdp: CdpConfig = Field(default_factory=CdpConfig)
+    cursor_cli: CursorCliConfig = Field(default_factory=CursorCliConfig)
     opencode: OpenCodeConfig = Field(default_factory=OpenCodeConfig)
     adapters: AdaptersConfig = Field(default_factory=AdaptersConfig)
     renderer: RendererConfig = Field(default_factory=RendererConfig)
+    queue: QueueConfig = Field(default_factory=QueueConfig)
+    presence: PresenceConfig = Field(default_factory=PresenceConfig)
+    attachments: AttachmentsConfig = Field(default_factory=AttachmentsConfig)
+    ws: WsConfig = Field(default_factory=WsConfig)
     log_level: str = "INFO"
     debug_bodies: bool = False
 
