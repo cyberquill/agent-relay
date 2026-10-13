@@ -69,7 +69,7 @@ async def test_agent_text_posted_to_webex_has_no_live_links(relay: Relay) -> Non
             harness=H, session_key=key, text="Open [the page](https://x.example/a?k=v) or https://y.example."
         )
     )
-    assert relay.bot_texts()[-1] == "Open the page (`https://x.example/a?k=v`) or `https://y.example`."
+    assert "Open the page (`https://x.example/a?k=v`) or `https://y.example`." in relay.bot_texts()
 
 
 async def test_relays_own_messages_are_not_rewritten(relay: Relay) -> None:
@@ -84,6 +84,6 @@ async def test_tool_lines_and_long_tool_details_are_neutralised_and_cut(relay: R
         ToolStarted(harness=H, session_key=key, tool_id="t1", name="bash", detail=detail)
     )
     await relay.frontend.renderer.handle(TurnCompleted(harness=H, session_key=key, text="done"))
-    line = next(t for t in relay.bot_texts() if t.startswith("🔧 bash"))
+    line = next(ln for t in relay.bot_texts() for ln in t.splitlines() if ln.startswith("🔧 bash"))
     assert "`https://evil.example/?d=1`" in line and line.endswith("; rm -rf ~")
     assert "more chars" in line and len(line) < 400

@@ -16,6 +16,11 @@ class AhpModel(BaseModel):
         return self.model_dump(mode="json", by_alias=True, exclude_none=True)
 
 
+type MessageAttachment = Annotated[
+    MessageEmbeddedResourceAttachment | MessageResourceAttachment | JsonValue,
+    Field(union_mode="left_to_right"),
+]
+
 type ResponsePart = Annotated[
     MarkdownResponsePart | ErrorResponsePart | JsonValue, Field(union_mode="left_to_right")
 ]
@@ -203,7 +208,7 @@ class ActionEnvelope(AhpModel):
 class Message(AhpModel):
     text: str
     origin: MessageOrigin
-    attachments: list[JsonValue] | None = Field(default=None)
+    attachments: list[MessageAttachment] | None = Field(default=None)
     model: ModelSelection | None = Field(default=None)
     agent: AgentSelection | None = Field(default=None)
     meta: dict[str, JsonValue] | None = Field(default=None, alias="_meta")
@@ -211,6 +216,30 @@ class Message(AhpModel):
 
 class MessageOrigin(AhpModel):
     kind: Literal["user", "agent", "tool", "automation", "systemNotification"]
+
+
+class MessageEmbeddedResourceAttachment(AhpModel):
+    label: str
+    range: JsonValue = Field(default=None)
+    display_kind: str | None = Field(default=None, alias="displayKind")
+    meta: dict[str, JsonValue] | None = Field(default=None, alias="_meta")
+    type: Literal["embeddedResource"] = "embeddedResource"
+    data: str
+    content_type: str = Field(alias="contentType")
+    selection: JsonValue = Field(default=None)
+
+
+class MessageResourceAttachment(AhpModel):
+    label: str
+    range: JsonValue = Field(default=None)
+    display_kind: str | None = Field(default=None, alias="displayKind")
+    meta: dict[str, JsonValue] | None = Field(default=None, alias="_meta")
+    uri: str
+    size_hint: int | float | None = Field(default=None, alias="sizeHint")
+    content_type: str | None = Field(default=None, alias="contentType")
+    nonce: str | None = Field(default=None)
+    type: Literal["resource"] = "resource"
+    selection: JsonValue = Field(default=None)
 
 
 class ModelSelection(AhpModel):
@@ -523,6 +552,8 @@ SessionChatSummary.model_rebuild()
 ActionEnvelope.model_rebuild()
 Message.model_rebuild()
 MessageOrigin.model_rebuild()
+MessageEmbeddedResourceAttachment.model_rebuild()
+MessageResourceAttachment.model_rebuild()
 ModelSelection.model_rebuild()
 AgentSelection.model_rebuild()
 MarkdownResponsePart.model_rebuild()
@@ -575,6 +606,8 @@ ACTION_MODELS: dict[str, type[AhpModel]] = {
     "chat/turnCancelled": ChatTurnCancelledAction,
     "chat/turnComplete": ChatTurnCompleteAction,
     "chat/turnStarted": ChatTurnStartedAction,
+    "embeddedResource": MessageEmbeddedResourceAttachment,
+    "resource": MessageResourceAttachment,
     "session/chatAdded": SessionChatAddedAction,
     "session/titleChanged": SessionTitleChangedAction,
 }

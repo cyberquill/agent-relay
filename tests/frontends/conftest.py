@@ -20,18 +20,14 @@ from agent_relay.models.config import RelayConfig, Workspace, WorkspacesConfig
 from agent_relay.settings import save_workspaces
 from tests.fakes.adapters import EmittingAdapter
 from tests.fakes.webex import FakeWebex
+from tests.frontends.card_tools import defaults, find_action
 
 
 def submit_data(card: dict[str, JsonValue], title: str) -> dict[str, JsonValue]:
-    """The `data` of the card's submit button with this title."""
-    actions = card["actions"]
-    assert isinstance(actions, list)
-    for action in actions:
-        if isinstance(action, dict) and action["title"] == title:
-            data = action["data"]
-            assert isinstance(data, dict)
-            return dict(data)
-    raise AssertionError(f"no button {title!r}")
+    """The `data` of the card's submit button with this title (also inside ShowCards and ActionSets)."""
+    data = find_action(card, title).get("data")
+    assert isinstance(data, dict)
+    return dict(data)
 
 
 class FakeClock:
@@ -73,6 +69,10 @@ class Relay:
     ) -> None:
         """Tap a button on a card the bot sent; the card's own data and nonce go with it."""
         await self.click(message_id, {**submit_data(card, title), **extra})
+
+    async def tap(self, message_id: str, card: dict[str, JsonValue], title: str, **extra: JsonValue) -> None:
+        """Tap like a client: each input's initial value, then the button's data and nonce, then `extra`."""
+        await self.click(message_id, {**defaults(card), **submit_data(card, title), **extra})
 
     async def nonce(self) -> str:
         return await card_state.issue_nonce(self.registry)

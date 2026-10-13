@@ -7,12 +7,17 @@ Everything posted is scrubbed for secrets first.
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Awaitable, Callable
+import mimetypes
+from collections.abc import AsyncIterator, Awaitable, Callable
+from contextlib import asynccontextmanager
+from email.message import Message as MimeMessage
 from typing import cast
+from urllib.parse import urlsplit
 
 import httpx
 from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
+from agent_relay.core.inbox import CHUNK, Incoming, SkipFileError, TooLargeError, human_size
 from agent_relay.frontends.webex.cards.common import fit_card, minify
 from agent_relay.log import get_logger
 from agent_relay.scrub import scrub_obj, scrub_text
@@ -22,6 +27,11 @@ log = get_logger(__name__)
 MAX_TEXT_BYTES = 7_439
 MAX_EDITS = 10
 MAX_RETRIES = 5
+LOCKED_RETRIES = 5
+LOCKED_WAIT_MAX_S = 30.0
+HTTP_LOCKED = 423
+HTTP_REDIRECT = 300
+HTTP_ERROR = 400
 CARD_CONTENT_TYPE = "application/vnd.microsoft.card.adaptive"
 CARD_DROPPED = "_The interactive card was too large to send._"
 
@@ -93,6 +103,18 @@ def scrub_attachment(content: bytes) -> bytes:
     except UnicodeDecodeError as exc:
         raise ValueError("only UTF-8 text attachments are sent, so they can be scrubbed") from exc
     return scrub_text(decoded).encode("utf-8")
+
+
+def _download_name(disposition: str | None, mime: str | None) -> str:
+    """The file name Webex sends in Content-Disposition; without one, `file` plus the type's extension."""
+    if disposition:
+        header = MimeMessage()
+        header["Content-Disposition"] = disposition
+        found = header.get_filename()
+        if found:
+            return found
+    extension = mimetypes.guess_extension((mime or "").split(";", 1)[0].strip()) or ""
+    return f"file{extension}"
 
 
 class WebexApi:
@@ -243,3 +265,48 @@ class WebexApi:
 
     async def delete_message(self, message_id: str) -> None:
         await self._request("DELETE", f"/messages/{message_id}")
+
+    # files sent to the bot
+
+    def _is_webex_url(self, url: str) -> bool:
+        wanted, found = urlsplit(self._base), urlsplit(url)
+        return (found.scheme, found.netloc.lower()) == (wanted.scheme, wanted.netloc.lower())
+
+    async def _open_download(self, url: str) -> httpx.Response:
+        """The streamed response, once Webex has finished scanning the file (423, bounded)."""
+        for attempt in range(LOCKED_RETRIES + 1):
+            response = await self._client.send(
+                self._client.build_request("GET", url), stream=True, follow_redirects=False
+            )
+            if response.status_code not in (HTTP_LOCKED, 429) or attempt == LOCKED_RETRIES:
+                return response
+            try:
+                wait = min(float(response.headers.get("Retry-After", "2")), LOCKED_WAIT_MAX_S)
+            except ValueError:
+                wait = 2.0
+            await response.aclose()
+            log.info(f"Webex is still scanning a file; retrying in {wait:.0f}s")
+            await self._sleep(wait)
+        raise AssertionError("unreachable")
+
+    @asynccontextmanager
+    async def download(self, url: str, max_bytes: int) -> AsyncIterator[Incoming]:
+        """Stream a message's file. The bot token goes only to the Webex API host; nothing is followed."""
+        if not self._is_webex_url(url):
+            raise SkipFileError("file", "not a Webex file link")
+        response = await self._open_download(url)
+        try:
+            mime = response.headers.get("Content-Type")
+            name = _download_name(response.headers.get("Content-Disposition"), mime)
+            if response.status_code == HTTP_LOCKED:
+                raise SkipFileError(name, "Webex is still scanning it; send it again in a minute")
+            if HTTP_REDIRECT <= response.status_code < HTTP_ERROR:
+                raise SkipFileError(name, "Webex redirected the download")
+            if response.status_code >= HTTP_ERROR:
+                raise SkipFileError(name, f"Webex refused the download (HTTP {response.status_code})")
+            declared = response.headers.get("Content-Length", "")
+            if declared.isdigit() and int(declared) > max_bytes:
+                raise TooLargeError(name, f"over {human_size(max_bytes)}")
+            yield Incoming(name, mime, response.aiter_bytes(CHUNK))
+        finally:
+            await response.aclose()

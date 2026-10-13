@@ -343,11 +343,13 @@ async def test_prompt_renews_the_claim_until_a_hook_links_the_chat(rig: Rig) -> 
     assert await rig.registry.kv_get(claim_key(WORKSPACE)) is not None
 
 
-async def test_prompt_while_running_is_queued_as_steering(rig: Rig) -> None:
+async def test_prompt_while_running_waits_for_the_next_turn(rig: Rig) -> None:
     bridge = await rig.bridge()
     record = await rig.start()
     receipt = await rig.core.service.prompt(record.session_key, "use pytest")
-    assert receipt == "queued as steering for the next tool call"
+    assert receipt == "Queued (1 waiting)"
+    steered = await rig.core.service.steer(record.session_key, "and ruff")
+    assert steered.startswith("Queued (2 waiting). VS Code cannot be steered mid-turn")
     assert "prompt" not in bridge.commands()
 
 

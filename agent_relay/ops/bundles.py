@@ -1,4 +1,4 @@
-"""Installable plugin bundles carrying relay-hook, relay-mcp and the away skill, one per harness.
+"""Installable plugin bundles carrying relay-hook, relay-mcp and every skill under skills/, one per harness.
 
 - Copilot CLI: a plugin directory (`plugin.json` with skills, commands, hooks and MCP servers).
 - Cursor: a Cursor plugin (`.cursor-plugin/plugin.json`), loadable from `~/.cursor/plugins/local`.
@@ -23,8 +23,9 @@ from agent_relay.hook.installers.opencode import PLUGIN_SOURCE
 from agent_relay.models.config import RelayConfig
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-SKILL_DIR = REPO_ROOT / "skills" / "agent-relay-away"
+SKILLS_DIR = REPO_ROOT / "skills"
 SKILL_NAME = "agent-relay-away"
+SKILL_DIR = SKILLS_DIR / SKILL_NAME
 COMMANDS = ("away", "back")
 PLUGIN_NAME = "agent-relay"
 DESCRIPTION = "Agent Relay: mirror coding-agent sessions to your phone over Webex, with /away and /back"
@@ -41,10 +42,27 @@ def _write_json(target: Path, data: dict[str, JsonValue]) -> None:
     target.write_text(json.dumps(data, indent=2, sort_keys=False) + "\n", encoding="utf-8")
 
 
-def _copy_skill(root: Path) -> None:
-    target = root / "skills" / SKILL_NAME
-    target.mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(SKILL_DIR / "SKILL.md", target / "SKILL.md")
+def skill_dirs(skills_dir: Path | None = None) -> list[Path]:
+    """Every skill folder, sorted by name; a folder without a SKILL.md is an error, not a skipped skill."""
+    found = sorted(p for p in (skills_dir or SKILLS_DIR).iterdir() if p.is_dir())
+    missing = [p.name for p in found if not (p / "SKILL.md").is_file()]
+    if missing:
+        raise ValueError(f"skill folder(s) without a SKILL.md: {', '.join(missing)}")
+    return found
+
+
+def skill_names(skills_dir: Path | None = None) -> list[str]:
+    return [p.name for p in skill_dirs(skills_dir)]
+
+
+def _copy_skills(root: Path, skills_dir: Path | None = None) -> None:
+    """Copy each skill's files; `commands/` ships separately, in each harness's own command folder."""
+    for source in skill_dirs(skills_dir):
+        shutil.copytree(
+            source,
+            root / "skills" / source.name,
+            ignore=shutil.ignore_patterns("commands", "__pycache__", ".DS_Store"),
+        )
 
 
 def _command(name: str, keep_name: bool) -> str:
@@ -85,7 +103,7 @@ def build_copilot(out: Path, config: RelayConfig, python: str | None = None) -> 
         "mcpServers": ".mcp.json",
     }
     _write_json(root / "plugin.json", manifest)
-    _copy_skill(root)
+    _copy_skills(root)
     _copy_commands(root / "commands")
     _write_json(root / "hooks.json", copilot.render(config, python))
     server: dict[str, JsonValue] = {"type": "local", **mcp_server(python), "tools": ["*"]}
@@ -102,7 +120,7 @@ def build_cursor(out: Path, config: RelayConfig, python: str | None = None) -> P
         "author": AUTHOR,
     }
     _write_json(root / ".cursor-plugin" / "plugin.json", manifest)
-    _copy_skill(root)
+    _copy_skills(root)
     _copy_commands(root / "commands")
     _write_json(root / "hooks" / "hooks.json", cursor.merge({}, config, python))
     _write_json(root / "mcp.json", {"mcpServers": {PLUGIN_NAME: mcp_server(python)}})
@@ -114,7 +132,7 @@ def build_opencode(out: Path) -> Path:
     (root / "plugins").mkdir()
     shutil.copyfile(PLUGIN_SOURCE, root / "plugins" / "agent-relay.ts")
     _copy_commands(root / "command", keep_name=False)
-    _copy_skill(root)
+    _copy_skills(root)
     return root
 
 

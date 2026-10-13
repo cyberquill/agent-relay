@@ -39,6 +39,7 @@ class EmittingAdapter(Adapter):
         self.prompt_attachments: list[Sequence[Attachment]] = []
         self.cancelled: list[str] = []
         self.approvals: list[tuple[str, Decision]] = []
+        self.reasons: list[tuple[str, str]] = []
         self.answers: list[tuple[str, str | None]] = []
         self.models: list[tuple[str, str]] = []
 
@@ -79,8 +80,12 @@ class EmittingAdapter(Adapter):
     async def cancel(self, session: SessionRecord) -> None:
         self.cancelled.append(session.session_key)
 
-    async def answer_approval(self, session: SessionRecord, request_id: str, decision: Decision) -> None:
+    async def answer_approval(
+        self, session: SessionRecord, request_id: str, decision: Decision, reason: str | None = None
+    ) -> None:
         self.approvals.append((request_id, decision))
+        if reason is not None:
+            self.reasons.append((request_id, reason))
 
     async def answer_question(self, session: SessionRecord, request_id: str, answer: str | None) -> None:
         self.answers.append((request_id, answer))

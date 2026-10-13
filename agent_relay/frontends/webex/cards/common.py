@@ -18,6 +18,12 @@ CHOICE_TITLE_CHARS = 100
 MAX_ANSWER_CHARS = 4_000
 MAX_PROMPT_CHARS = 20_000
 SHRUNK_TEXT_CHARS = 2_000
+MAX_ACTIONS_ON_CARD = 5  # past this, ShowCard buttons go in a body ActionSet
+HIDDEN_MODEL_MARKERS = ("copilot-utility", "dictation")  # the app's own helpers, never user choices
+
+
+def is_hidden_model(model_id: str, label: str = "") -> bool:
+    return any(marker in f"{model_id} {label}".lower() for marker in HIDDEN_MODEL_MARKERS)
 
 
 def card(body: list[JsonValue], actions: list[JsonValue]) -> dict[str, JsonValue]:
@@ -37,31 +43,62 @@ def text(
     return block
 
 
-def input_text(field: str, hint: str, max_length: int) -> JsonValue:
-    return {
+def input_text(field: str, hint: str, max_length: int, value: str | None = None) -> JsonValue:
+    block: dict[str, JsonValue] = {
         "type": "Input.Text",
         "id": field,
         "isMultiline": True,
         "placeholder": hint,
         "maxLength": max_length,
     }
+    if value:
+        block["value"] = value
+    return block
+
+
+def input_toggle(field: str, title: str, on: bool = False) -> JsonValue:
+    return {
+        "type": "Input.Toggle",
+        "id": field,
+        "title": title,
+        "value": "true" if on else "false",
+        "valueOn": "true",
+        "valueOff": "false",
+    }
 
 
 def choice_set(
     field: str, choices: list[tuple[str, str]], style: str, default: str | None = None
 ) -> JsonValue:
-    """An Input.ChoiceSet of at most MAX_CHOICES entries; callers say when some were left out."""
+    """An Input.ChoiceSet of at most MAX_CHOICES entries (the default always among them); callers
+    say when some were left out."""
+    shown = choices[:MAX_CHOICES]
+    if default is not None and all(value != default for value, _ in shown):
+        shown = [*[c for c in choices if c[0] == default][:1], *shown[: MAX_CHOICES - 1]]
     block: dict[str, JsonValue] = {
         "type": "Input.ChoiceSet",
         "id": field,
         "style": style,
-        "choices": [
-            {"title": label[:CHOICE_TITLE_CHARS], "value": value} for value, label in choices[:MAX_CHOICES]
-        ],
+        "choices": [{"title": label[:CHOICE_TITLE_CHARS], "value": value} for value, label in shown],
     }
     if default is not None:
         block["value"] = default
     return block
+
+
+def show_card(title: str, body: list[JsonValue], actions: list[JsonValue]) -> JsonValue:
+    """An Action.ShowCard: a button that opens a nested card; its submit also sends the parent's inputs."""
+    nested: dict[str, JsonValue] = {
+        "type": "AdaptiveCard",
+        "version": VERSION,
+        "body": body,
+        "actions": actions,
+    }
+    return {"type": "Action.ShowCard", "title": title, "card": nested}
+
+
+def action_set(actions: list[JsonValue]) -> JsonValue:
+    return {"type": "ActionSet", "actions": actions}
 
 
 def submit(title: str, data: dict[str, JsonValue], style: str | None = None) -> JsonValue:

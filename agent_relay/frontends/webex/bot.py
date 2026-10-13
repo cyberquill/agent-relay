@@ -8,16 +8,18 @@ from collections.abc import Awaitable, Callable
 
 import httpx
 
+from agent_relay.core.inbox import Inbox
 from agent_relay.core.registry import SEEN_PREFIX, Registry
 from agent_relay.core.service import RelayService
 from agent_relay.frontends import actions, commands
 from agent_relay.frontends.webex.access import AccessControl
 from agent_relay.frontends.webex.api import AttachmentAction, Message, WebexApi, WebexError
+from agent_relay.frontends.webex.attachments import AttachmentIntake
 from agent_relay.frontends.webex.handlers import Context, Handlers
 from agent_relay.frontends.webex.renderer import Outbox, WebexRenderer
 from agent_relay.frontends.webex.ws_client import Activity, Connector, WebexWsClient, default_connector
 from agent_relay.log import get_logger, log_body
-from agent_relay.models.config import RelayConfig
+from agent_relay.models.config import AttachmentsConfig, RelayConfig
 from agent_relay.models.events import utcnow
 
 log = get_logger(__name__)
@@ -42,12 +44,16 @@ class WebexFrontend:
         access: AccessControl,
         bot_person_id: str,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+        intake: AttachmentIntake | None = None,
     ) -> None:
         self.api = api
         self._registry = registry
         self._service = service
         self.renderer = renderer
         self.handlers = handlers
+        self.intake = intake or AttachmentIntake(api, Inbox(registry, AttachmentsConfig()))
+        if handlers.inbox is None:
+            handlers.inbox = self.intake.inbox
         self._access = access
         self._bot_id = bot_person_id
         self._sleep = sleep
@@ -171,7 +177,14 @@ class WebexFrontend:
             await self._unclaim(message.id)
             raise
         if context is not None:
-            await self.handlers.text(context, message.text or message.markdown)
+            text = message.text or message.markdown
+            intake = await self.intake.accept(message, context.session, text)
+            if intake.notice:
+                await self.handlers.reply(context, intake.notice)
+            if intake.handle_text and intake.received is None:
+                await self.handlers.text(context, text)
+            elif intake.handle_text:
+                await self.handlers.text(context, text, intake.received)
 
     async def _admit_message(self, message: Message) -> Context | None:
         """Access check and thread lookup; None when the message was refused or answered here."""
@@ -285,9 +298,12 @@ async def build_frontend(
     me = await api.me()
     outbox = Outbox(api, registry, config.webex.allowed_email)
     renderer = WebexRenderer(outbox, registry, config.renderer, config.approvals.deadline_s)
-    handlers = Handlers(service, renderer, doctor=doctor)
+    inbox = Inbox(registry, config.attachments)
+    handlers = Handlers(service, renderer, doctor=doctor, inbox=inbox)
     access = AccessControl(registry, config.webex.allowed_email, me.id)
-    frontend = WebexFrontend(api, registry, service, renderer, handlers, access, me.id)
+    frontend = WebexFrontend(
+        api, registry, service, renderer, handlers, access, me.id, intake=AttachmentIntake(api, inbox)
+    )
     ws = WebexWsClient(
         token,
         client,

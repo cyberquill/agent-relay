@@ -19,6 +19,14 @@ def home() -> Path:
     return Path(override) if override else Path.home()
 
 
+def tilde(path: Path) -> str:
+    """`path` for display, with the home directory shown as `~`."""
+    try:
+        return str(Path("~") / path.relative_to(home().resolve()))
+    except ValueError:
+        return str(path)
+
+
 def config_dir() -> Path:
     return home() / ".config" / "agent-relay"
 

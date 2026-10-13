@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from pathlib import Path
 
 from agent_relay.adapters.base import Decision, ModelInfo
 from agent_relay.core.keys import RELEASE_KEY, pending_key, session_signal
@@ -25,11 +26,14 @@ from agent_relay.core.service.common import (
 )
 from agent_relay.core.service.discovery import Discovery
 from agent_relay.core.service.sessions import Sessions
+from agent_relay.core.service.workspaces import NOT_ENABLED as WS_NOT_ENABLED
+from agent_relay.core.service.workspaces import Started, WorkspaceAdmin
 from agent_relay.core.signals import Signals
+from agent_relay.core.workspaces import FolderOffer
 from agent_relay.models.attachments import Attachment
-from agent_relay.models.config import RelayConfig, Workspace
+from agent_relay.models.config import QueueMode, RelayConfig, Workspace
 from agent_relay.models.events import Harness, ResolvedBy
-from agent_relay.models.sessions import SessionRecord
+from agent_relay.models.sessions import QueuedMessage, SessionRecord
 
 __all__ = [
     "APP_ALIASES",
@@ -38,6 +42,7 @@ __all__ = [
     "DIFF_LIMIT_BYTES",
     "RELEASE_KEY",
     "STICKY_MODEL_KEY",
+    "WS_NOT_ENABLED",
     "AppInfo",
     "DeliveryError",
     "RelayError",
@@ -70,6 +75,7 @@ class RelayService:
         self._sessions = Sessions(deps, self._discovery)
         self._approvals = Approvals(deps)
         self._away = AwayControl(deps, self._discovery, self._approvals)
+        self._workspaces = WorkspaceAdmin(deps)
 
     # discovery
 
@@ -137,8 +143,57 @@ class RelayService:
 
     # approvals and questions
 
-    async def answer_approval(self, request_id: str, decision: Decision, by: ResolvedBy = "phone") -> bool:
-        return await self._approvals.answer_approval(request_id, decision, by)
+    async def answer_approval(
+        self, request_id: str, decision: Decision, by: ResolvedBy = "phone", reason: str | None = None
+    ) -> bool:
+        return await self._approvals.answer_approval(request_id, decision, by, reason)
 
     async def answer_question(self, request_id: str, answer: str | None, by: ResolvedBy = "phone") -> bool:
         return await self._approvals.answer_question(request_id, answer, by)
+
+    # workspaces and repos from the phone
+
+    def ws_roots(self) -> list[Path]:
+        return self._workspaces.roots()
+
+    async def ws_folders(self, workspace: str | None = None) -> FolderOffer:
+        return await self._workspaces.folders(workspace)
+
+    async def ws_add_folder(self, folder: object, name: str | None = None) -> Workspace:
+        return await self._workspaces.add_folder(folder, name)
+
+    async def ws_clone(
+        self, url: object, name: str | None, root: object, started: Started | None = None
+    ) -> Workspace:
+        return await self._workspaces.clone(url, name, root, started)
+
+    async def ws_add_repo_folder(self, workspace: object, folder: object) -> Workspace:
+        return await self._workspaces.add_repo_folder(workspace, folder)
+
+    async def ws_add_repo_clone(
+        self, workspace: object, url: object, root: object, started: Started | None = None
+    ) -> Workspace:
+        return await self._workspaces.add_repo_clone(workspace, url, root, started)
+
+    # queue modes
+
+    async def steer(self, session_key: str, text: str, attachments: Sequence[Attachment] = ()) -> str:
+        return await self._sessions.prompt(session_key, text, attachments, steer=True)
+
+    async def queue_mode(self, session_key: str) -> QueueMode:
+        return await self._sessions.queue_mode(session_key)
+
+    async def set_queue_mode(self, session_key: str, mode: str) -> QueueMode:
+        return await self._sessions.set_queue_mode(session_key, mode)
+
+    async def queue_mode_warning(self, session_key: str, mode: QueueMode) -> str | None:
+        return await self._sessions.mode_warning(session_key, mode)
+
+    async def queued(self, session_key: str) -> list[QueuedMessage]:
+        return await self._sessions.queued(session_key)
+
+    async def remove_queued(self, session_key: str, item_id: int) -> bool:
+        return await self._sessions.remove_queued(session_key, item_id)
+
+    async def clear_queued(self, session_key: str) -> int:
+        return await self._sessions.clear_queued(session_key)

@@ -6,35 +6,16 @@ from typing import Annotated
 
 import typer
 
-from agent_relay import paths
 from agent_relay.cli.output import fail, out
-from agent_relay.models.config import Workspace, WorkspacesConfig
-from agent_relay.settings import (
-    CODE_WORKSPACE_SUFFIX,
-    code_workspace_folders,
-    load_workspaces,
-    save_workspaces,
-)
+from agent_relay.core.workspaces import with_workspace
+from agent_relay.models.config import WorkspacesConfig
+from agent_relay.settings import load_workspaces, save_workspaces
 
 app = typer.Typer(help="Workspaces the phone can start sessions in.", no_args_is_help=True)
 
 
-def _entry(name: str, folder: str) -> Workspace:
-    resolved = paths.expand_user(folder).resolve()
-    if resolved.is_file() and resolved.name.endswith(CODE_WORKSPACE_SUFFIX):
-        first = code_workspace_folders(resolved)[0]
-        if not first.is_dir():
-            raise ValueError(f"{first}, the first folder of {resolved}, is not a directory")
-        return Workspace(name=name, path=str(first), file=str(resolved))
-    if not resolved.is_dir():
-        raise ValueError(f"{resolved} is not a directory or a {CODE_WORKSPACE_SUFFIX} file")
-    return Workspace(name=name, path=str(resolved))
-
-
 def added(current: WorkspacesConfig, name: str, folder: str) -> WorkspacesConfig:
-    if any(w.name == name for w in current.workspaces):
-        raise ValueError(f"a workspace named {name!r} exists; remove it first with `relay ws rm {name}`")
-    return WorkspacesConfig(workspaces=[*current.workspaces, _entry(name, folder)])
+    return with_workspace(current, name, folder)
 
 
 def removed(current: WorkspacesConfig, name: str) -> WorkspacesConfig:

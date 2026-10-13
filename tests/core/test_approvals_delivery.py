@@ -29,10 +29,12 @@ class FlakyAdapter(EmittingAdapter):
         super().__init__(count=0)
         self.broken = True
 
-    async def answer_approval(self, session: SessionRecord, request_id: str, decision: Decision) -> None:
+    async def answer_approval(
+        self, session: SessionRecord, request_id: str, decision: Decision, reason: str | None = None
+    ) -> None:
         if self.broken:
             raise ConnectionError("socket closed\nsecond line")
-        await super().answer_approval(session, request_id, decision)
+        await super().answer_approval(session, request_id, decision, reason)
 
     async def answer_question(self, session: SessionRecord, request_id: str, answer: str | None) -> None:
         if self.broken:

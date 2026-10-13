@@ -17,8 +17,9 @@ import keyring.errors
 import pytest
 
 from agent_relay import daemon, ipc, paths
+from agent_relay.core.presence import LockState
 from agent_relay.frontends.webex.ws_client import WebSocketLike
-from agent_relay.models.config import AdaptersConfig, RelayConfig, WebexConfig
+from agent_relay.models.config import AdaptersConfig, PresenceConfig, RelayConfig, WebexConfig
 from agent_relay.settings import SECRET_SETUP_COMMAND, Secret, save_config, set_secret
 from tests.fakes.webex import U2C, FakeWebex
 
@@ -125,6 +126,10 @@ async def _until(check: object, timeout: float = 5.0) -> None:
     raise AssertionError("condition not met")
 
 
+async def _unlocked() -> LockState:
+    return "unlocked"
+
+
 async def test_serve_boots_answers_ipc_and_webex_then_stops() -> None:
     webex = FakeWebex()
     hello = webex.user_says("/help")
@@ -135,7 +140,9 @@ async def test_serve_boots_answers_ipc_and_webex_then_stops() -> None:
     )
     stop = asyncio.Event()
     async with webex.client() as http:
-        server = asyncio.create_task(daemon.serve(config, "test-token", stop, http, mercury.connect))
+        server = asyncio.create_task(
+            daemon.serve(config, "test-token", stop, http, mercury.connect, lock_probe=_unlocked)
+        )
         await _until(lambda: paths.socket_path().exists())
         reply = await asyncio.to_thread(ipc.request, {"op": "ping"}, paths.socket_path(), 2.0)
         assert reply["ok"] is True
@@ -150,3 +157,81 @@ async def test_serve_boots_answers_ipc_and_webex_then_stops() -> None:
         await asyncio.wait_for(server, 5)
     assert not webex.violations
     assert not paths.socket_path().exists()
+
+
+def _presence_config(webex: FakeWebex, *, auto_away_on_lock: bool = True) -> RelayConfig:
+    return RelayConfig(
+        webex=WebexConfig(allowed_email=webex.user_email, u2c_url=U2C),
+        adapters=AdaptersConfig(opencode=False, ahp=False, cursor_cli=False),
+        presence=PresenceConfig(auto_away_on_lock=auto_away_on_lock, poll_s=1),
+    )
+
+
+def _presence_task_alive() -> bool:
+    return any(t.get_name() == "presence" and not t.done() for t in asyncio.all_tasks())
+
+
+async def _away_now() -> bool:
+    reply = await asyncio.to_thread(ipc.request, {"op": "away"}, paths.socket_path(), 2.0)
+    return reply["away"] is True
+
+
+async def test_serve_follows_the_screen_lock_and_stops_the_poller() -> None:
+    webex = FakeWebex()
+    screen: list[LockState] = ["unlocked"]
+
+    async def probe() -> LockState:
+        return screen[0]
+
+    stop = asyncio.Event()
+    async with webex.client() as http:
+        server = asyncio.create_task(
+            daemon.serve(
+                _presence_config(webex), "test-token", stop, http, IdleSocket([]).connect, lock_probe=probe
+            )
+        )
+        await _until(lambda: paths.socket_path().exists())
+        assert _presence_task_alive()
+        assert not await _away_now()
+        screen[0] = "locked"
+        for _ in range(400):
+            if await _away_now():
+                break
+            await asyncio.sleep(0.02)
+        assert await _away_now()
+        screen[0] = "unlocked"
+        for _ in range(400):
+            if not await _away_now():
+                break
+            await asyncio.sleep(0.02)
+        assert not await _away_now()
+        stop.set()
+        await asyncio.wait_for(server, 5)
+    assert not _presence_task_alive()
+
+
+async def test_serve_does_not_poll_when_the_feature_is_off() -> None:
+    webex = FakeWebex()
+    calls: list[int] = []
+
+    async def probe() -> LockState:
+        calls.append(1)
+        return "locked"
+
+    stop = asyncio.Event()
+    async with webex.client() as http:
+        server = asyncio.create_task(
+            daemon.serve(
+                _presence_config(webex, auto_away_on_lock=False),
+                "test-token",
+                stop,
+                http,
+                IdleSocket([]).connect,
+                lock_probe=probe,
+            )
+        )
+        await _until(lambda: paths.socket_path().exists())
+        assert not _presence_task_alive()
+        stop.set()
+        await asyncio.wait_for(server, 5)
+    assert calls == []

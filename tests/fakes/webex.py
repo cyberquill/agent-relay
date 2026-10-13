@@ -6,6 +6,7 @@ import base64
 import itertools
 import json
 import re
+from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from urllib.parse import parse_qs
 
@@ -54,6 +55,22 @@ class FakeMessage:
         return data
 
 
+@dataclass
+class FakeContent:
+    """A file a user sent. `locked` answers 423 that many times first, like Webex scanning it."""
+
+    name: str
+    data: bytes
+    mime: str = "text/plain"
+    locked: int = 0
+    retry_after: str = "1"
+    disposition: str | None = None
+    declare_length: bool = True
+    status: int = 200
+    location: str | None = None
+    reads: int = 0
+
+
 def _multipart_fields(request: httpx.Request) -> tuple[dict[str, str], dict[str, bytes]]:
     match = re.search(r"boundary=([^;]+)", request.headers["content-type"])
     assert match
@@ -93,6 +110,8 @@ class FakeWebex:
         self.rate_limit_next = 0
         self.rate_limited = 0
         self.requests: list[str] = []
+        self.contents: dict[str, FakeContent] = {}
+        self.authorized_hosts: dict[str, set[str | None]] = {}
         self._ids = itertools.count(1)
 
     def transport(self) -> httpx.MockTransport:
@@ -126,6 +145,30 @@ class FakeWebex:
         self.messages[msg.id] = msg
         self.order.append(msg.id)
         return msg.id
+
+    def user_sends_file(
+        self,
+        name: str,
+        data: bytes,
+        text: str = "",
+        parent_id: str | None = None,
+        mime: str = "text/plain",
+        url: str | None = None,
+        locked: int = 0,
+        retry_after: str = "1",
+        disposition: str | None = None,
+        declare_length: bool = True,
+        status: int = 200,
+        location: str | None = None,
+    ) -> str:
+        """A message with one file. `url` replaces the content link; the rest tunes how it downloads."""
+        content_id = self._next("content")
+        self.contents[content_id] = FakeContent(
+            name, data, mime, locked, retry_after, disposition, declare_length, status, location
+        )
+        message_id = self.user_says(text, parent_id=parent_id)
+        self.messages[message_id].files = [url or f"{API}/contents/{content_id}"]
+        return message_id
 
     def user_clicks(
         self,
@@ -161,6 +204,7 @@ class FakeWebex:
     def handle(self, request: httpx.Request) -> httpx.Response:
         url = str(request.url)
         self.requests.append(f"{request.method} {url.split('?')[0]}")
+        self.authorized_hosts.setdefault(request.url.host, set()).add(request.headers.get("authorization"))
         if url.startswith(API) and self.rate_limit_next > 0:
             self.rate_limit_next -= 1
             self.rate_limited += 1
@@ -226,6 +270,8 @@ class FakeWebex:
             return self._list(request)
         if path.startswith("/messages/"):
             return self._message(request, path.rsplit("/", 1)[-1])
+        if path.startswith("/contents/") and method == "GET":
+            return self._content(path.rsplit("/", 1)[-1])
         if path.startswith("/attachment/actions/"):
             action = self.actions.get(path.rsplit("/", 1)[-1])
             return httpx.Response(200, json=action) if action else httpx.Response(404)
@@ -240,6 +286,32 @@ class FakeWebex:
             self.left_rooms.append(path.rsplit(":", 1)[-1])
             return httpx.Response(204)
         return httpx.Response(404, json={"message": f"no route {method} {path}"})
+
+    def _content(self, content_id: str) -> httpx.Response:
+        item = self.contents.get(content_id)
+        if item is None:
+            return httpx.Response(404)
+        item.reads += 1
+        if item.locked > 0:
+            item.locked -= 1
+            return httpx.Response(423, headers={"Retry-After": item.retry_after})
+        headers = {
+            "Content-Type": item.mime,
+            "Content-Disposition": item.disposition or f'attachment; filename="{item.name}"',
+        }
+        if item.location:
+            return httpx.Response(302, headers={**headers, "Location": item.location})
+        if item.status != 200:
+            return httpx.Response(item.status, headers=headers)
+        if item.declare_length:
+            return httpx.Response(200, headers=headers, content=item.data)
+        data = item.data
+
+        async def body() -> AsyncIterator[bytes]:
+            for start in range(0, len(data), 1024):
+                yield data[start : start + 1024]
+
+        return httpx.Response(200, headers=headers, content=body())
 
     def _post_message(self, request: httpx.Request) -> httpx.Response:
         if request.headers["content-type"].startswith("multipart/"):

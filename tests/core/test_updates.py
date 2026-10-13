@@ -167,6 +167,7 @@ async def test_service_refuses_a_degraded_adapter_with_the_reason(registry: Regi
     await updates.set_degraded(registry, Harness.OPENCODE, None)
     record = await service.start("opencode", "proj", "hello")
     await updates.set_degraded(registry, Harness.OPENCODE, "again")
+    await service.set_queue_mode(record.session_key, "steer")
     assert await service.prompt(record.session_key, "more") == "queued as steering for the next tool call"
     assert adapter.prompts == []
     await router.stop()

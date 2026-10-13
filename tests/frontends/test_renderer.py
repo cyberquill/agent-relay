@@ -60,7 +60,8 @@ async def test_streamed_text_is_buffered_and_flushed_at_paragraphs(relay: Relay)
     await renderer.handle(TurnCompleted(harness=H, session_key=session.session_key, text="ignored, streamed"))
     texts = relay.bot_texts()
     assert posts_before_end >= 2
-    assert texts[-1] == "next para"
+    assert texts[-2] == "next para"
+    assert texts[-1].startswith("✅ Turn complete")
     assert "ignored, streamed" not in "".join(texts)
     for msg in relay.webex.bot_messages()[1:]:
         assert msg.parent_id == relay.webex.bot_messages()[0].id
@@ -77,7 +78,7 @@ async def test_idle_flush_after_quiet_period(relay: Relay) -> None:
     assert relay.bot_texts()[-1] == "short"
 
 
-async def test_tool_events_are_batched_one_liners(relay: Relay) -> None:
+async def test_tool_events_share_one_progress_message(relay: Relay) -> None:
     session = await _session(relay)
     renderer = relay.frontend.renderer
     for i in range(5):
@@ -93,16 +94,18 @@ async def test_tool_events_are_batched_one_liners(relay: Relay) -> None:
     )
     await renderer.handle(TurnCompleted(harness=H, session_key=session.session_key, text="done"))
     texts = relay.bot_texts()
-    batch = [t for t in texts if "🔧" in t]
-    assert len(batch) == 1 and batch[0].count("\n") == 5 and "❌ bash: exit 1" in batch[0]
-    assert texts[-1] == "done"
+    progress = [t for t in texts if "🔧 bash" in t]
+    assert len(progress) == 1
+    assert progress[0].count("\n") == 6 and "❌ bash: exit 1" in progress[0]
+    assert progress[0].splitlines()[0] == "**✅ Done · 5 tool calls · 0s**"
+    assert texts[-2] == "done"
 
 
 async def test_large_final_answer_becomes_attachment(relay: Relay) -> None:
     session = await _session(relay)
     big = "x" * (relay.config.renderer.max_message_bytes + 10)
     await relay.frontend.renderer.handle(TurnCompleted(harness=H, session_key=session.session_key, text=big))
-    last = relay.webex.bot_messages()[-1]
+    last = relay.webex.bot_messages()[-2]
     assert last.files == ["answer.md"] and last.file_bytes == big.encode()
 
 

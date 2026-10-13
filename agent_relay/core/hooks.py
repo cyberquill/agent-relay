@@ -14,7 +14,13 @@ from datetime import datetime
 from pydantic import JsonValue
 
 from agent_relay.core import away
-from agent_relay.core.approvals import CLOSED_REASONS, DEADLINE_REASON, ApprovalBroker
+from agent_relay.core.approvals import (
+    CLOSED_REASONS,
+    DEADLINE_REASON,
+    DENIED_REASON,
+    ApprovalBroker,
+    Outcome,
+)
 from agent_relay.core.claims import UNCLAIMED_PREFIX, aliased, link_alias, take_claim
 from agent_relay.core.lifecycle import Lifecycle
 from agent_relay.core.parking import ParkManager, phone_text
@@ -70,6 +76,15 @@ def _reply(stdout: dict[str, JsonValue] | None) -> Reply:
 def _digest(hook: HookInput) -> str:
     raw = json.dumps([hook.session_id, hook.tool_name, hook.tool_input], sort_keys=True, default=str)
     return hashlib.sha256(raw.encode()).hexdigest()[:24]
+
+
+def _denial(outcome: Outcome) -> str:
+    """What the agent is told: the relay's own reason, or the user's words when they gave one."""
+    if outcome.by == "deadline":
+        return DEADLINE_REASON
+    if outcome.by in CLOSED_REASONS:
+        return CLOSED_REASONS[outcome.by]
+    return f"{DENIED_REASON[:-1]}: {outcome.reason}" if outcome.reason else DENIED_REASON
 
 
 class HookService:
@@ -298,12 +313,7 @@ class HookService:
             await self._registry.kv_set(APPROVED_CALL_KEY.format(call_id=hook.tool_use_id), decision)
         if outcome.allowed:
             return _reply(outputs.permission(hook, True, "approved from the phone"))
-        reason = (
-            DEADLINE_REASON
-            if outcome.by == "deadline"
-            else CLOSED_REASONS.get(outcome.by, "Denied from the phone by the user.")
-        )
-        return _reply(outputs.permission(hook, False, reason))
+        return _reply(outputs.permission(hook, False, _denial(outcome)))
 
     async def _recently_allowed(self, key: str) -> bool:
         """True only for an allow stamped within the last RECENT_APPROVAL_TTL."""

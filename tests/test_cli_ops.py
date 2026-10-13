@@ -90,6 +90,13 @@ def test_workspaces_add_list_and_remove(tmp_path: Path) -> None:
     assert runner.invoke(app, ["ws", "rm", "proj"]).exit_code == 1
 
 
+def test_workspaces_add_shares_the_phone_name_rule(tmp_path: Path) -> None:
+    for bad in ("two words", "x" * 41, "a/b"):
+        result = runner.invoke(app, ["ws", "add", bad, str(tmp_path)])
+        assert result.exit_code == 1 and "1 to 40 characters" in result.output, bad
+    assert load_workspaces().workspaces == []
+
+
 def test_workspaces_add_a_code_workspace_file(tmp_path: Path) -> None:
     for name in ("a", "b"):
         (tmp_path / name).mkdir()

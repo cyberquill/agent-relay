@@ -26,6 +26,7 @@ from agent_relay.core.hooks import HookService
 from agent_relay.core.housekeeping import housekeeper
 from agent_relay.core.lifecycle import Lifecycle
 from agent_relay.core.parking import ParkManager
+from agent_relay.core.presence import PresenceMonitor, Probe, probe_lock_state
 from agent_relay.core.registry import Registry
 from agent_relay.core.router import Router
 from agent_relay.core.service import RelayError, RelayService
@@ -223,6 +224,7 @@ async def serve(
     http: httpx.AsyncClient | None = None,
     connector: Connector = default_connector,
     pwa_token: str | None = None,
+    lock_probe: Probe = probe_lock_state,
 ) -> None:
     registry = Registry(paths.db_path())
     await registry.open()
@@ -261,6 +263,9 @@ async def serve(
     pwa = build_pwa(config.pwa, core.service, core.router, pwa_token, core.doctor_text)
     if pwa is not None:
         tasks.append(asyncio.create_task(pwa.server.run(), name="pwa"))
+    if config.presence.auto_away_on_lock:
+        monitor = PresenceMonitor(registry, core.service, config.presence, post_top, lock_probe)
+        tasks.append(asyncio.create_task(monitor.run(), name="presence"))
     log.info("relayd ready")
     announce = asyncio.create_task(_announce(post_top, online_message(recovered)), name="online")
     waiter = asyncio.create_task(stop.wait())

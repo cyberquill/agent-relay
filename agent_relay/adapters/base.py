@@ -46,7 +46,7 @@ class StartRequest(BaseModel):
     workspace_file: str | None = None
 
 
-Decision = Literal["allow", "allow_session", "deny"]
+Decision = Literal["allow", "allow_session", "allow_workspace", "deny"]
 
 
 class EventPublisher(Protocol):
@@ -113,7 +113,10 @@ class Adapter(ABC):
     async def cancel(self, session: SessionRecord) -> None:
         raise UnsupportedError(self.harness, Capability.CANCEL)
 
-    async def answer_approval(self, session: SessionRecord, request_id: str, decision: Decision) -> None:
+    async def answer_approval(
+        self, session: SessionRecord, request_id: str, decision: Decision, reason: str | None = None
+    ) -> None:
+        """`allow_workspace` is a relay-side grant (the app hears allow); `reason` only goes with deny."""
         raise UnsupportedError(self.harness, Capability.APPROVE)
 
     async def answer_question(self, session: SessionRecord, request_id: str, answer: str | None) -> None:

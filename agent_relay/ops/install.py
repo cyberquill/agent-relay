@@ -64,12 +64,15 @@ def extension_id(extension_dir: Path = EXTENSION_DIR) -> str:
     return f"{package['publisher']}.{package['name']}".lower()
 
 
-def skill_link() -> PlannedLink:
-    return PlannedLink(
-        path=paths.agents_skills_dir() / bundles.SKILL_NAME,
-        target=bundles.SKILL_DIR,
-        reason="the /away and /back skill, read by every harness from ~/.agents/skills",
-    )
+def skill_links() -> list[PlannedLink]:
+    return [
+        PlannedLink(
+            path=paths.agents_skills_dir() / folder.name,
+            target=folder,
+            reason=f"the {folder.name} skill, read by every harness from ~/.agents/skills",
+        )
+        for folder in bundles.skill_dirs()
+    ]
 
 
 def launch_agents(config: RelayConfig, python: str) -> tuple[list[LaunchAgent], list[str]]:
@@ -151,7 +154,7 @@ def plan_install(
         for a in plan.agents
     ]
     plan.notes += skipped
-    plan.links.append(skill_link())
+    plan.links += skill_links()
     plan.dedupe = plan_dedupe()
     plan.notes += [line for line in plan.dedupe.report() if line.startswith("keep ")]
     if config.adapters.vscode:

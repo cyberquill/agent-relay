@@ -220,10 +220,9 @@ async def test_the_hub_sends_approvals_and_questions_as_cards_with_a_nonce(regis
     assert question["markdown"] == "❓ Question: Which?"
     for message in (approval, question):
         card = message["card"]
-        assert isinstance(card, dict) and isinstance(card["actions"], list)
-        for action in card["actions"]:
-            assert isinstance(action, dict) and isinstance(action["data"], dict)
-            assert await registry.kv_get(f"{card_state.NONCE_PREFIX}{action['data']['nonce']}") is not None
+        assert isinstance(card, dict)
+        for data in _submits(card):
+            assert await registry.kv_get(f"{card_state.NONCE_PREFIX}{data['nonce']}") is not None
     assert await card_state.load_offer(registry, "q1") == ["a"]
 
 
@@ -267,10 +266,12 @@ async def test_card_submits_need_a_live_nonce_and_relay_errors_are_shown(
         real = svc.answer_approval
         failures = [DeliveryError("OpenCode could not be reached.")]
 
-        async def flaky(request_id: str, decision: Decision, by: ResolvedBy = "phone") -> bool:
+        async def flaky(
+            request_id: str, decision: Decision, by: ResolvedBy = "phone", reason: str | None = None
+        ) -> bool:
             if failures:
                 raise failures.pop()
-            return await real(request_id, decision, by)
+            return await real(request_id, decision, by, reason)
 
         monkeypatch.setattr(svc, "answer_approval", flaky)
         assert await post(data) == "failed"
@@ -282,9 +283,24 @@ async def test_card_submits_need_a_live_nonce_and_relay_errors_are_shown(
     await router.stop()
 
 
+def _submits(card: dict[str, JsonValue]) -> list[dict[str, JsonValue]]:
+    """The data of every submit button, including those inside ShowCard sub-cards."""
+    found: list[dict[str, JsonValue]] = []
+    actions = card.get("actions")
+    assert isinstance(actions, list)
+    for action in actions:
+        assert isinstance(action, dict)
+        if action.get("type") == "Action.ShowCard":
+            inner = action["card"]
+            assert isinstance(inner, dict)
+            found.extend(_submits(inner))
+        else:
+            assert isinstance(action["data"], dict)
+            found.append(action["data"])
+    return found
+
+
 def _first_submit(message: dict[str, JsonValue]) -> dict[str, JsonValue]:
     card = message["card"]
-    assert isinstance(card, dict) and isinstance(card["actions"], list)
-    action = card["actions"][0]
-    assert isinstance(action, dict) and isinstance(action["data"], dict)
-    return action["data"]
+    assert isinstance(card, dict)
+    return _submits(card)[0]

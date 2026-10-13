@@ -19,6 +19,7 @@ from agent_relay.adapters.base import Decision
 from agent_relay.core.registry import ALLOW_SESSION_PREFIX, Registry
 from agent_relay.core.router import Router
 from agent_relay.core.service import DESK_DECISION, DeliveryError, RelayService, pending_key
+from agent_relay.core.service.approvals import workspace_grant_active
 from agent_relay.core.signals import Signals
 from agent_relay.log import get_logger
 from agent_relay.models.config import ApprovalConfig
@@ -35,6 +36,7 @@ log = get_logger(__name__)
 
 ALLOW_SESSION_KEY = f"{ALLOW_SESSION_PREFIX}{{session_key}}:{{tool}}"
 DEADLINE_REASON = "No answer from the phone before the relay's deadline; denied."
+DENIED_REASON = "Denied from the phone by the user."
 SWEEP_GIVE_UP = timedelta(minutes=10)
 CLOSED_REASONS = {
     "ended": "The session ended before it was answered; denied.",
@@ -47,10 +49,28 @@ class Outcome:
     decision: Decision
     by: str
     deferred: bool = False
+    reason: str | None = None
 
     @property
     def allowed(self) -> bool:
         return self.decision != "deny"
+
+
+def outcome_of(answer: dict[str, JsonValue]) -> Outcome:
+    """The broker's view of a stored answer (`decision`, `by`, optional deny `reason`)."""
+    by = str(answer.get("by", "phone"))
+    decision = answer.get("decision")
+    if decision == DESK_DECISION:
+        return Outcome("deny", by, deferred=True)
+    allowed: dict[str, Decision] = {
+        "allow": "allow",
+        "allow_session": "allow_session",
+        "allow_workspace": "allow_workspace",
+    }
+    if isinstance(decision, str) and decision in allowed:
+        return Outcome(allowed[decision], by)
+    reason = answer.get("reason")
+    return Outcome("deny", by, reason=reason if isinstance(reason, str) and reason else None)
 
 
 def is_read_only(tool: str | None, patterns: list[str]) -> bool:
@@ -91,6 +111,10 @@ class ApprovalBroker:
             is not None
         )
 
+    async def allowed_for_workspace(self, workspace: str | None, tool: str | None) -> bool:
+        """A live "allow this tool in this workspace" grant covers the workspace or a folder above it."""
+        return await workspace_grant_active(self._registry, workspace, tool)
+
     # hook-held approvals
 
     async def request(
@@ -99,6 +123,8 @@ class ApprovalBroker:
         """Post an approval and wait for the answer or the deadline (explicit deny)."""
         if await self.allowed_for_session(session.session_key, tool):
             return Outcome("allow", "session")
+        if await self.allowed_for_workspace(session.workspace, tool):
+            return Outcome("allow_workspace", "workspace")
         request_id = f"hook-{uuid.uuid4().hex[:12]}"
         timeout = float(deadline_s if deadline_s is not None else self._config.deadline_s)
         deadline = datetime.now(UTC) + timedelta(seconds=timeout)
@@ -124,16 +150,12 @@ class ApprovalBroker:
         resolved = await self._wait_or_abandon(request_id, deadline)
         if resolved is None:
             return await self._expire_approval(request_id)
-        decision = resolved.get("decision")
-        by = str(resolved.get("by", "phone"))
-        if decision == DESK_DECISION:
-            return Outcome("deny", by, deferred=True)
-        if decision == "allow_session":
+        outcome = outcome_of(resolved)
+        if outcome.decision == "allow_session":
             await self._registry.kv_set(
                 ALLOW_SESSION_KEY.format(session_key=session.session_key, tool=tool), "1"
             )
-            return Outcome("allow_session", by)
-        return Outcome("allow" if decision == "allow" else "deny", by)
+        return outcome
 
     async def ask(
         self, session: SessionRecord, question: str, options: tuple[str, ...], deadline_s: float | None = None
@@ -246,11 +268,7 @@ class ApprovalBroker:
             log.info(f"approval {request_id} expired; denied")
             return Outcome("deny", "deadline")
         request = await self._registry.get_pending(request_id)
-        answer = request.answer if request and request.answer else {}
-        if answer.get("decision") == DESK_DECISION:
-            return Outcome("deny", "desk", deferred=True)
-        decisions: dict[str, Decision] = {"allow": "allow", "allow_session": "allow_session"}
-        return Outcome(decisions.get(str(answer.get("decision")), "deny"), str(answer.get("by", "phone")))
+        return outcome_of(request.answer if request and request.answer else {})
 
     # adapter-held requests arrive as events
 
@@ -276,6 +294,23 @@ class ApprovalBroker:
                 deadline=datetime.now(UTC) + timedelta(seconds=self._config.deadline_s),
             )
         )
+        if isinstance(event, ApprovalRequested):
+            await self._auto_allow_granted(event)
+
+    async def _auto_allow_granted(self, event: ApprovalRequested) -> None:
+        """An adapter-held request the user already allowed for this workspace never waits for the phone."""
+        workspace = event.workspace
+        if workspace is None:
+            session = await self._registry.get_session(event.session_key)
+            workspace = session.workspace if session else None
+        if not await self.allowed_for_workspace(workspace, event.tool):
+            return
+        try:
+            await self._service.answer_approval(event.request_id, "allow")
+        except DeliveryError as exc:
+            log.warning(f"{event.request_id}: workspace grant matched but delivery failed; asking: {exc}")
+            return
+        log.info(f"{event.request_id}: {event.tool} allowed by a workspace grant")
 
     async def _settled_elsewhere(self, event: ApprovalResolved | QuestionAnswered) -> None:
         """An adapter saw the request answered at the desk: close it without answering natively again.

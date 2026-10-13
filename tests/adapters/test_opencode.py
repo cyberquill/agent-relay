@@ -6,6 +6,7 @@ import asyncio
 import inspect
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
+from pathlib import Path
 
 import httpx
 import pytest
@@ -197,7 +198,8 @@ def _ask(sid: str, request_id: str = "per_1", call_id: str | None = None) -> dic
 
 
 @pytest.mark.parametrize(
-    ("decision", "reply"), [("allow", "once"), ("allow_session", "always"), ("deny", "reject")]
+    ("decision", "reply"),
+    [("allow", "once"), ("allow_session", "always"), ("allow_workspace", "once"), ("deny", "reject")],
 )
 async def test_permission_round_trip_current_endpoint(rig: Rig, decision: Decision, reply: str) -> None:
     session = await rig.start()
@@ -210,6 +212,22 @@ async def test_permission_round_trip_current_endpoint(rig: Rig, decision: Decisi
     assert pending is not None and pending.payload["source"] == "adapter"
     assert await rig.core.service.answer_approval("per_1", decision)
     assert rig.fake.replies == [("permission:per_1", {"reply": reply})]
+
+
+async def test_a_deny_reason_travels_as_the_reply_message_on_the_current_endpoint(rig: Rig) -> None:
+    session = await rig.start()
+    rig.fake.emit("permission.asked", _ask(session.harness_id))
+    await until(lambda: rig.core.registry.get_pending("per_1"))
+    assert await rig.core.service.answer_approval("per_1", "deny", reason="use the staging db")
+    assert rig.fake.replies == [("permission:per_1", {"reply": "reject", "message": "use the staging db"})]
+
+
+async def test_the_legacy_endpoint_has_no_message_field(legacy_rig: Rig) -> None:
+    session = await legacy_rig.start()
+    legacy_rig.fake.emit("permission.asked", _ask(session.harness_id))
+    await until(lambda: legacy_rig.core.registry.get_pending("per_1"))
+    assert await legacy_rig.core.service.answer_approval("per_1", "deny", reason="nope")
+    assert legacy_rig.fake.replies == [(f"legacy:{session.harness_id}:per_1", {"response": "reject"})]
 
 
 async def test_permission_legacy_endpoint_and_basic_auth(legacy_rig: Rig) -> None:
@@ -330,7 +348,7 @@ async def test_models_select_cancel_and_wake(rig: Rig) -> None:
     assert body["parts"] == [{"type": "text", "text": "and now the docs"}]
 
 
-async def test_attached_files_reach_opencode_as_path_lines(rig: Rig) -> None:
+async def test_attached_files_reach_opencode_as_file_parts(rig: Rig) -> None:
     from agent_relay.models.attachments import Attachment
 
     session = await rig.start()
@@ -339,7 +357,15 @@ async def test_attached_files_reach_opencode_as_path_lines(rig: Rig) -> None:
     shot = Attachment(name="a.png", mime="image/png", size=1, local_path="/tmp/relay/a.png", sha256="0" * 64)
     assert await rig.core.service.prompt(session.session_key, "see this", (shot,)) == "sent"
     _, body, _ = rig.fake.prompts[-1]
-    assert body["parts"] == [{"type": "text", "text": "see this\n\nAttached file: /tmp/relay/a.png"}]
+    assert body["parts"] == [
+        {"type": "text", "text": "see this"},
+        {
+            "type": "file",
+            "mime": "image/png",
+            "filename": "a.png",
+            "url": Path("/tmp/relay/a.png").resolve().as_uri(),
+        },
+    ]
 
 
 async def test_server_down_reports_unhealthy_and_start_fails_clearly(rig: Rig) -> None:

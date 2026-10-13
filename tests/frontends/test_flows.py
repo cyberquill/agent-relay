@@ -16,20 +16,11 @@ from tests.fakes.adapters import CrashingAdapter
 from tests.frontends.conftest import Relay
 
 
-async def test_new_wizard_asks_for_each_missing_piece(relay: Relay) -> None:
+async def test_new_card_starts_a_session_from_one_card(relay: Relay) -> None:
     await relay.say("/new")
     msg, card = relay.webex.last_card()
-    assert cards.card_fallback(card) == "Which app?"
-    await relay.press(msg.id, card, "Next", value="opencode")
-    msg, card = relay.webex.last_card()
-    assert cards.card_fallback(card) == "Which workspace?"
-    await relay.press(msg.id, card, "Next", value="proj")
-    msg, card = relay.webex.last_card()
-    assert cards.card_fallback(card) == "Which model?"
-    await relay.press(msg.id, card, "Next", value="m2")
-    msg, card = relay.webex.last_card()
-    assert cards.card_fallback(card) == "What should it do?"
-    await relay.press(msg.id, card, "Start", value="fix it")
+    assert cards.card_fallback(card) == "New session"
+    await relay.tap(msg.id, card, "Start", prompt="fix it", model_opencode="m2")
     started = relay.adapter.started[-1]
     assert started.prompt == "fix it" and started.model == "m2"
     assert started.workspace == load_workspaces().workspaces[0].path
@@ -82,6 +73,7 @@ async def _thread(relay: Relay) -> SessionRecord:
 async def test_thread_prompt_model_stop_status(relay: Relay) -> None:
     session = await _thread(relay)
     root = session.webex_thread_id
+    await relay.service.set_queue_mode(session.session_key, "steer")
     await relay.say("please also update the docs", parent_id=root)
     assert relay.adapter.prompts[-1] == (session.session_key, "please also update the docs")
     await relay.say("/model m2", parent_id=root)
@@ -165,14 +157,14 @@ async def test_away_global_and_per_thread(relay: Relay) -> None:
     await relay.say("/away", parent_id=session.webex_thread_id)
     assert await away.is_away(relay.registry, session.workspace)
     await relay.say("/away off")
-    await relay.say("/away")
+    await relay.say("/away on")
     assert await away.is_away(relay.registry, "/elsewhere")
 
 
 async def test_panic_pauses_and_cancels(relay: Relay) -> None:
     session = await _thread(relay)
     await relay.say("/away on")
-    await relay.say("/panic")
+    await relay.say("/panic now")
     assert relay.adapter.cancelled == [session.session_key]
     assert paths.pause_flag().exists()
     assert not await away.is_away(relay.registry, session.workspace)

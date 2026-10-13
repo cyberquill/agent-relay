@@ -5,15 +5,21 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING
 
-from agent_relay.core.service import resolve_app
+from pydantic import JsonValue
+
+from agent_relay.adapters.base import ModelInfo
+from agent_relay.core.service import RelayError, RelayService, resolve_app
+from agent_relay.frontends import card_state
+from agent_relay.frontends.actions import Outcome, register_action
+from agent_relay.frontends.card_state import InvalidInput
 from agent_relay.frontends.commands import Command, Invalid
 from agent_relay.frontends.registry import CommandSpec, register
 from agent_relay.frontends.webex import cards
-from agent_relay.frontends.webex.handlers import DEFAULT_MODEL
+from agent_relay.frontends.webex.handlers import DEFAULT_MODEL, Context, Handlers
 from agent_relay.models.capabilities import Capability
 
 if TYPE_CHECKING:
-    from agent_relay.frontends.webex.handlers import Context, Handlers
+    from agent_relay.models.sessions import SessionRecord
 
 _OPENING = re.compile(r"""(?<!\S)["']""")
 
@@ -68,25 +74,64 @@ async def _new(h: Handlers, ctx: Context, cmd: Command) -> None:
 
 async def _sessions(h: Handlers, ctx: Context, cmd: Command) -> None:
     sessions = await h.service.sessions()
-    lines = [f"- {cards.root_markdown(s)}" for s in sessions] or ["No active sessions."]
-    await h.reply(ctx, "\n".join(lines))
+    if not sessions:
+        await h.reply(ctx, "No active sessions.")
+        return
+    nonce = await card_state.issue_nonce(h.service.registry)
+    await h.card(ctx, f"Sessions ({len(sessions)})", cards.dashboard(sessions, nonce=nonce))
+
+
+def _visible(models: list[ModelInfo]) -> list[ModelInfo]:
+    return [m for m in models if not cards.is_hidden_model(m.id, m.label)]
 
 
 async def _models(h: Handlers, ctx: Context, cmd: Command) -> None:
-    models = await h.service.models(cmd.args[0])
+    models = _visible(await h.service.models(cmd.args[0]))
     lines = [f"- `{m.id}` {m.label}{' (default)' if m.default else ''}" for m in models]
     await h.reply(ctx, "\n".join(lines) or "No models reported.")
+
+
+async def _apply_model(h: Handlers, ctx: Context, session: SessionRecord, model: str) -> None:
+    await h.service.set_model(session.session_key, model)
+    await h.reply(ctx, f"Model set to `{model}`.")
+    await h.renderer.refresh_root(await h.service.session(session.session_key))
 
 
 async def _model(h: Handlers, ctx: Context, cmd: Command) -> None:
     session = h.require(ctx, Capability.MODEL_SELECT, "model selection")
     if cmd.args:
-        await h.service.set_model(session.session_key, cmd.args[0])
-        await h.reply(ctx, f"Model set to `{cmd.args[0]}`.")
-        await h.renderer.refresh_root(await h.service.session(session.session_key))
-    else:
-        current = (await h.service.session(session.session_key)).model or "default"
-        await h.reply(ctx, f"Model: `{current}`")
+        await _apply_model(h, ctx, session, cmd.args[0])
+        return
+    current = (await h.service.session(session.session_key)).model
+    shown = current or "default"
+    try:
+        models = _visible(await h.service.models(session.harness.value))
+    except RelayError as exc:
+        await h.reply(ctx, f"Model: `{shown}` ({exc})")
+        return
+    if not models:
+        await h.reply(ctx, f"Model: `{shown}`")
+        return
+    ids = [m.id for m in models]
+    selected = current if current in ids else next((m.id for m in models if m.default), ids[0])
+    choices = list({m.id: (m.id, m.label) for m in models}.values())
+    nonce = await card_state.issue_nonce(h.service.registry)
+    card = cards.model_switch(session.session_key, shown, choices, selected, nonce=nonce)
+    await h.card(ctx, f"Model: `{shown}`", card)
+
+
+async def _model_action(service: RelayService, handlers: Handlers, inputs: dict[str, JsonValue]) -> Outcome:
+    key, model = inputs.get("session"), inputs.get("model")
+    if not isinstance(key, str) or not isinstance(model, str) or not model:
+        raise InvalidInput("Pick a model first.")
+    ctx = Context(await service.session(key))
+    session = handlers.require(ctx, Capability.MODEL_SELECT, "model selection")
+    if model not in {m.id for m in _visible(await service.models(session.harness.value))}:
+        raise InvalidInput(
+            f"{session.harness.value} has no model `{model}`. Try `/models {session.harness.value}`."
+        )
+    await _apply_model(handlers, ctx, session, model)
+    return "done"
 
 
 async def _stop(h: Handlers, ctx: Context, cmd: Command) -> None:
@@ -100,13 +145,46 @@ async def _status(h: Handlers, ctx: Context, cmd: Command) -> None:
     await h.reply(ctx, await h.service.status(ctx.session.session_key))
 
 
-async def _diff(h: Handlers, ctx: Context, cmd: Command) -> None:
-    assert ctx.session is not None
-    diff = await h.service.diff(ctx.session.session_key)
+async def _send_diff(h: Handlers, ctx: Context, session_key: str) -> None:
+    diff = await h.service.diff(session_key)
     if not diff.strip():
         await h.reply(ctx, "No changes.")
     else:
         await h.reply(ctx, "📎 changes.diff", file=("changes.diff", diff, "text/x-diff"))
+
+
+async def _diff(h: Handlers, ctx: Context, cmd: Command) -> None:
+    assert ctx.session is not None
+    await _send_diff(h, ctx, ctx.session.session_key)
+
+
+async def _sessions_action(
+    service: RelayService, handlers: Handlers, inputs: dict[str, JsonValue]
+) -> Outcome:
+    key, op = inputs.get("session"), inputs.get("op")
+    if op not in cards.DASHBOARD_OPS:
+        raise InvalidInput("That is not an action this card offers.")
+    if not isinstance(key, str) or not key:
+        raise InvalidInput("Pick a session first.")
+    ctx = Context(await service.session(key))
+    match op:
+        case "status":
+            await handlers.reply(ctx, await service.status(key))
+        case "diff":
+            await _send_diff(handlers, ctx, key)
+        case "stop":
+            handlers.require(ctx, Capability.CANCEL, "cancel")
+            await service.stop(key)
+            await handlers.reply(ctx, "⏹️ Stopped.")
+        case "back":
+            await handlers.reply(ctx, await service.back(key))
+        case _:
+            await handlers.reply(ctx, await service.set_away(True, key))
+    return "done"
+
+
+register_action("sessions", _sessions_action)
+register_action("model", _model_action)
 
 
 register(
@@ -123,7 +201,7 @@ register(
     CommandSpec(
         "sessions",
         _sessions,
-        "list sessions",
+        "list sessions, with status, diff, stop, back and away buttons",
         aliases=("session",),
         max_args=0,
         order=11,
@@ -144,7 +222,7 @@ register(
     CommandSpec(
         "model",
         _model,
-        "show or set the session's model",
+        "pick or set the session's model",
         scope="thread",
         usage="/model [model]",
         max_args=1,

@@ -13,6 +13,7 @@ from pydantic import JsonValue
 from agent_relay.core.registry import Registry
 from agent_relay.frontends import card_state
 from agent_relay.frontends.webex import cards
+from agent_relay.frontends.webex.cards.approval import DEFAULT_GRANT_S
 from agent_relay.hook.shims import abbreviate
 from agent_relay.models.events import ApprovalRequested, QuestionAsked, utcnow
 from agent_relay.models.sessions import SessionRecord
@@ -40,13 +41,19 @@ async def _seconds_left(registry: Registry, request_id: str, default_s: int) -> 
 
 
 async def approval_card(
-    registry: Registry, session: SessionRecord, event: ApprovalRequested, default_deadline_s: int
+    registry: Registry,
+    session: SessionRecord,
+    event: ApprovalRequested,
+    default_deadline_s: int,
+    grant_s: int = DEFAULT_GRANT_S,
 ) -> tuple[str, dict[str, JsonValue]]:
     left = remaining_text(await _seconds_left(registry, event.request_id, default_deadline_s))
     markdown = f"🔐 Approval needed: {abbreviate(event.tool or 'a tool', TOOL_CHARS)} · auto-deny in {left}"
     detail = abbreviate(event.detail or event.tool, DETAIL_CHARS)
     nonce = await card_state.issue_nonce(registry)
-    return markdown, cards.approval(event.request_id, cards.session_label(session), detail, left, nonce=nonce)
+    return markdown, cards.approval(
+        event.request_id, cards.session_label(session), detail, left, nonce=nonce, grant_s=grant_s
+    )
 
 
 async def question_card(

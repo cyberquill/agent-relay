@@ -9,6 +9,7 @@ from pydantic import JsonValue
 from agent_relay import paths
 from agent_relay.core import away
 from agent_relay.core.keys import pending_key
+from agent_relay.core.presence import AUTO_KEY
 from agent_relay.core.registry import GLOBAL_SCOPE
 from agent_relay.core.service.approvals import Approvals
 from agent_relay.core.service.common import DESK_DECISION, Deps
@@ -36,6 +37,9 @@ class AwayControl:
     async def set_away_for(self, enabled: bool, workspace: str | None) -> str:
         """Away on/off for one workspace scope (or all); off releases the parked sessions it covers."""
         await away.set_away(self._deps.registry, enabled, workspace)
+        if workspace is None:
+            # A hand-made change to global away is no longer the lock's to undo.
+            await self._deps.registry.kv_delete(AUTO_KEY)
         if enabled:
             paths.pause_flag().unlink(missing_ok=True)
         else:
@@ -157,6 +161,7 @@ class AwayControl:
                 failed.append(f"wind down {session.session_key}")
         try:
             await deps.registry.set_away(False, GLOBAL_SCOPE)
+            await deps.registry.kv_delete(AUTO_KEY)
         except Exception:
             log.exception("panic: could not clear away mode")
             failed.append("away mode")

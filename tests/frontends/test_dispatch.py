@@ -106,9 +106,9 @@ async def test_panic_runs_at_once_even_when_the_top_level_is_busy(
     gated = Gated(relay, monkeypatch, {"/doctor"})
     await _arrive(relay, "/doctor")
     await until(lambda: gated.started == ["/doctor"])
-    await _arrive(relay, "/panic")
+    await _arrive(relay, "/panic now")
     await until(lambda: any("Paused" in t for t in relay.bot_texts()))
-    assert gated.done == ["/panic"]
+    assert gated.done == ["/panic now"]
     gated.gates["/doctor"].set()
     await relay.frontend.drain()
 
@@ -190,7 +190,7 @@ async def test_a_tap_whose_room_lookup_fails_once_is_retried(
     await relay.frontend.on_activity(Activity("cardAction", action.id))
     await relay.frontend.drain()
     assert waits == [1.0]
-    assert "Which workspace?" in str(relay.webex.last_card()[1])
+    assert sum(1 for m in relay.webex.bot_messages() if m.attachments) == 2
 
 
 async def test_a_tap_that_could_not_be_looked_up_is_not_marked_as_seen(
@@ -208,7 +208,7 @@ async def test_a_tap_that_could_not_be_looked_up_is_not_marked_as_seen(
     assert await relay.registry.kv_get(f"{SEEN_PREFIX}{action.id}") is None
     monkeypatch.setattr(relay.frontend.api, "get_room", real)
     await relay.frontend.handle_action(action)
-    assert "Which workspace?" in str(relay.webex.last_card()[1])
+    assert sum(1 for m in relay.webex.bot_messages() if m.attachments) == 2
 
 
 async def test_a_client_error_is_not_retried(relay: Relay, monkeypatch: pytest.MonkeyPatch) -> None:

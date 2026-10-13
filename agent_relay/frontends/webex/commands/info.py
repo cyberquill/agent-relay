@@ -1,4 +1,4 @@
-"""/help, /apps, /ws and /doctor."""
+"""/help, /apps and /doctor."""
 
 from __future__ import annotations
 
@@ -26,19 +26,10 @@ async def _apps(h: Handlers, ctx: Context, cmd: Command) -> None:
     await h.reply(ctx, "\n".join(lines) or "No adapters are enabled.")
 
 
-async def _ws(h: Handlers, ctx: Context, cmd: Command) -> None:
-    spaces = h.service.workspaces()
-    lines = [f"- **{w.name}** `{w.file or w.path}`" for w in spaces] or [
-        "No workspaces. Add them with `relay ws add <name> <path>`."
-    ]
-    await h.reply(ctx, "\n".join(lines))
-
-
 async def _doctor(h: Handlers, ctx: Context, cmd: Command) -> None:
     await h.reply(ctx, await h.doctor())
 
 
 register(CommandSpec("apps", _apps, "list apps", max_args=0, order=30))
-register(CommandSpec("ws", _ws, "list workspaces", aliases=("workspaces",), max_args=0, order=31))
 register(CommandSpec("doctor", _doctor, "health check", order=32))
 register(CommandSpec("help", _help, "this list", aliases=("?",), order=33))

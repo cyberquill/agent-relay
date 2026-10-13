@@ -125,6 +125,23 @@ def save_workspaces(config: WorkspacesConfig, file: Path | None = None) -> Path:
     return target
 
 
+def register_workspace(entry: Workspace) -> Path:
+    """Append a workspace to workspaces.toml; a taken name is refused."""
+    current = load_workspaces()
+    if any(w.name == entry.name for w in current.workspaces):
+        raise ValueError(f"a workspace named {entry.name!r} exists")
+    return save_workspaces(WorkspacesConfig(workspaces=[*current.workspaces, entry]))
+
+
+def replace_workspace(entry: Workspace) -> Path:
+    """Swap the workspace of the same name for `entry`."""
+    current = load_workspaces()
+    if not any(w.name == entry.name for w in current.workspaces):
+        raise ValueError(f"no workspace named {entry.name!r}")
+    swapped = [entry if w.name == entry.name else w for w in current.workspaces]
+    return save_workspaces(WorkspacesConfig(workspaces=swapped))
+
+
 def code_workspace_folders(file: Path) -> list[Path]:
     """The folders of a VS Code `.code-workspace` file, resolved against the file's directory."""
     try:

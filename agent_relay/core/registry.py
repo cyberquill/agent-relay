@@ -504,6 +504,38 @@ class Registry:
         sql = "UPDATE queue SET consumed=1 WHERE session_key=? AND consumed=0"
         await self._run(lambda: self._write(sql, (session_key,)))
 
+    async def list_queued(self, session_key: str) -> list[QueuedMessage]:
+        """The messages still waiting for the session, oldest first. Nothing is consumed."""
+
+        def _list() -> list[QueuedMessage]:
+            rows = (
+                self._db()
+                .execute("SELECT * FROM queue WHERE session_key=? AND consumed=0 ORDER BY id", (session_key,))
+                .fetchall()
+            )
+            return [
+                QueuedMessage(
+                    id=r["id"],
+                    session_key=r["session_key"],
+                    kind=r["kind"],
+                    text=r["text"],
+                    created=datetime.fromisoformat(r["created"]),
+                )
+                for r in rows
+            ]
+
+        return await self._run(_list)
+
+    async def delete_queued(self, session_key: str, item_id: int) -> bool:
+        """Remove one waiting message. False when it was already delivered or removed."""
+        sql = "UPDATE queue SET consumed=1 WHERE id=? AND session_key=? AND consumed=0"
+        return await self._run(lambda: self._write(sql, (item_id, session_key))) > 0
+
+    async def clear_queued(self, session_key: str) -> int:
+        """Remove every waiting message; returns how many there were."""
+        sql = "UPDATE queue SET consumed=1 WHERE session_key=? AND consumed=0"
+        return await self._run(lambda: self._write(sql, (session_key,)))
+
     # away mode
 
     async def set_away(self, enabled: bool, scope: str = GLOBAL_SCOPE) -> None:

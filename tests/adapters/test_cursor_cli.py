@@ -247,7 +247,12 @@ async def test_resume_needs_load_support(rig: Rig) -> None:
 
 @pytest.mark.parametrize(
     ("decision", "option", "ok"),
-    [("allow", "allow-once", True), ("allow_session", "allow-always", True), ("deny", "reject-once", False)],
+    [
+        ("allow", "allow-once", True),
+        ("allow_session", "allow-always", True),
+        ("allow_workspace", "allow-once", True),
+        ("deny", "reject-once", False),
+    ],
 )
 async def test_permission_requests_are_answered_from_the_phone(
     rig: Rig, decision: str, option: str, ok: bool
@@ -264,6 +269,15 @@ async def test_permission_requests_are_answered_from_the_phone(
     (finished,) = rig.rec.of(ToolFinished)
     assert (started.tool_id, started.name) == ("tc1", "Run ls")
     assert (finished.ok, finished.summary) == (ok, "file.txt")
+
+
+async def test_a_deny_reason_is_dropped_because_acp_has_no_field_for_it(rig: Rig) -> None:
+    await rig.start("use a tool")
+    ask = await rig.asked(ApprovalRequested)
+    assert await rig.core.service.answer_approval(ask.request_id, "deny", reason="not in prod")
+    (done,) = await rig.turns(1)
+    assert done.text == "tool reject-once"
+    assert rig.replies()[-1]["result"] == {"outcome": {"outcome": "selected", "optionId": "reject-once"}}
 
 
 async def test_an_earlier_phone_decision_for_the_call_is_reused(rig: Rig) -> None:
@@ -346,7 +360,7 @@ async def test_a_prompt_during_a_turn_runs_when_the_turn_ends(rig: Rig) -> None:
     record = await rig.start("use a tool")
     ask = await rig.asked(ApprovalRequested)
     receipt = await rig.core.service.prompt(record.session_key, "Reply with exactly: OK")
-    assert receipt == "queued as steering for the next tool call"
+    assert receipt == "Queued (1 waiting)"
     await rig.core.service.answer_approval(ask.request_id, "allow")
     first, second = await rig.turns(2)
     assert first.text == "tool allow-once"

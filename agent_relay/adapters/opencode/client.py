@@ -3,16 +3,23 @@
 from __future__ import annotations
 
 import json
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
+from pathlib import Path
 
 import httpx
 from pydantic import JsonValue
 
 from agent_relay.adapters.base import Decision, ModelInfo
+from agent_relay.models.attachments import Attachment
 
-PERMISSION_REPLY: dict[Decision, str] = {"allow": "once", "allow_session": "always", "deny": "reject"}
+PERMISSION_REPLY: dict[Decision, str] = {
+    "allow": "once",
+    "allow_session": "always",
+    "allow_workspace": "once",
+    "deny": "reject",
+}
 
 
 class PermissionVariant(StrEnum):
@@ -147,8 +154,25 @@ class OpenCodeClient:
             raise OpenCodeError("POST /session returned no id")
         return str(created["id"])
 
-    async def prompt(self, session_id: str, directory: str | None, text: str, model: str | None) -> None:
-        body: dict[str, JsonValue] = {"parts": [{"type": "text", "text": text}]}
+    async def prompt(
+        self,
+        session_id: str,
+        directory: str | None,
+        text: str,
+        model: str | None,
+        attachments: Sequence[Attachment] = (),
+    ) -> None:
+        parts: list[JsonValue] = [{"type": "text", "text": text}]
+        parts += [
+            {
+                "type": "file",
+                "mime": a.mime,
+                "filename": a.name,
+                "url": Path(a.local_path).resolve().as_uri(),
+            }
+            for a in attachments
+        ]
+        body: dict[str, JsonValue] = {"parts": parts}
         if model:
             body["model"] = model_ref(model)
         await self._call("POST", f"/session/{session_id}/prompt_async", directory=directory, body=body)
@@ -157,13 +181,19 @@ class OpenCodeClient:
         await self._call("POST", f"/session/{session_id}/abort", directory=directory)
 
     async def reply_permission(
-        self, session_id: str, request_id: str, decision: Decision, directory: str | None
+        self,
+        session_id: str,
+        request_id: str,
+        decision: Decision,
+        directory: str | None,
+        message: str | None = None,
     ) -> None:
         reply = PERMISSION_REPLY[decision]
         if await self.variant() is PermissionVariant.CURRENT:
-            await self._call(
-                "POST", f"/permission/{request_id}/reply", directory=directory, body={"reply": reply}
-            )
+            body: dict[str, JsonValue] = {"reply": reply}
+            if message and decision == "deny":
+                body["message"] = message
+            await self._call("POST", f"/permission/{request_id}/reply", directory=directory, body=body)
         else:
             await self._call(
                 "POST",

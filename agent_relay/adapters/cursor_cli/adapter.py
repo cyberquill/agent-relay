@@ -29,6 +29,7 @@ from agent_relay.adapters.base import (
     UnsupportedError,
 )
 from agent_relay.adapters.cursor_cli import mapping as m
+from agent_relay.adapters.cursor_cli.blocks import prompt_blocks
 from agent_relay.adapters.cursor_cli.catalog import LOGIN_HINT, CursorCli
 from agent_relay.adapters.cursor_cli.rpc import (
     AcpExitedError,
@@ -98,6 +99,7 @@ class _Live:
     workspace: str
     process: AcpProcess
     set_model: bool
+    images: bool = False
     turn: asyncio.Task[None] | None = None
     text: list[str] = field(default_factory=list)
     asks: dict[str, _Ask] = field(default_factory=dict)
@@ -114,6 +116,7 @@ class _Binding:
     """Routes one process's callbacks to its session once `session/new` or `session/load` is done."""
 
     live: _Live | None = None
+    images: bool = False  # the agent's `promptCapabilities.image`
 
 
 class CursorCliAdapter(Adapter):
@@ -126,6 +129,7 @@ class CursorCliAdapter(Adapter):
         question=True,
         cancel=True,
         wake_idle=True,
+        attach_files=True,
     )
 
     def __init__(
@@ -213,6 +217,9 @@ class CursorCliAdapter(Adapter):
                     "clientInfo": {"name": "agent-relay", "version": "0.1.0"},
                 },
             )
+            agent_caps = init.get("agentCapabilities")
+            prompt_caps = agent_caps.get("promptCapabilities") if isinstance(agent_caps, dict) else None
+            binding.images = isinstance(prompt_caps, dict) and prompt_caps.get("image") is True
             methods = init.get("authMethods")
             offered = (
                 [a.get("id") for a in methods if isinstance(a, dict)] if isinstance(methods, list) else []
@@ -246,7 +253,7 @@ class CursorCliAdapter(Adapter):
         acp_id: str,
         set_model: bool,
     ) -> _Live:
-        live = _Live(session_key, acp_id, workspace, process, set_model)
+        live = _Live(session_key, acp_id, workspace, process, set_model, binding.images)
         binding.live = live
         self._live[session_key] = live
         if self._idle_s > 0 and (self._reaper is None or self._reaper.done()):
@@ -301,14 +308,16 @@ class CursorCliAdapter(Adapter):
 
     # turns
 
-    def _start_turn(self, live: _Live, text: str) -> None:
+    def _start_turn(self, live: _Live, text: str, attachments: Sequence[Attachment] = ()) -> None:
         live.text = []
         live.touched = time.monotonic()
-        live.turn = asyncio.create_task(self._turn(live, text), name=f"cursor-turn-{live.acp_id}")
+        live.turn = asyncio.create_task(
+            self._turn(live, text, attachments), name=f"cursor-turn-{live.acp_id}"
+        )
 
-    async def _turn(self, live: _Live, text: str) -> None:
+    async def _turn(self, live: _Live, text: str, attachments: Sequence[Attachment] = ()) -> None:
         try:
-            await self._run_turn(live, text)
+            await self._run_turn(live, text, attachments)
         except Exception as exc:
             log.exception(f"Cursor CLI turn for {live.acp_id} failed")
             await self._abort_turn(live, str(exc) or type(exc).__name__)
@@ -329,10 +338,13 @@ class CursorCliAdapter(Adapter):
         with contextlib.suppress(Exception):
             await self._drop(live)
 
-    async def _run_turn(self, live: _Live, text: str) -> None:
+    async def _run_turn(self, live: _Live, text: str, attachments: Sequence[Attachment] = ()) -> None:
         session = await self._session(live.session_key)
         workspace = session.workspace if session else live.workspace
-        prompt: Params = {"sessionId": live.acp_id, "prompt": [{"type": "text", "text": text}]}
+        prompt: Params = {
+            "sessionId": live.acp_id,
+            "prompt": await prompt_blocks(text, attachments, live.images),
+        }
         try:
             result = await live.process.request("session/prompt", prompt)
         except (AcpRpcError, AcpExitedError) as exc:
@@ -455,7 +467,6 @@ class CursorCliAdapter(Adapter):
     async def start_session(
         self, request: StartRequest, attachments: Sequence[Attachment] = ()
     ) -> SessionRecord:
-        request = request.model_copy(update={"prompt": self.prompt_with_files(request.prompt, attachments)})
         process, binding, acp_id, set_model = await self._open(
             request.workspace, request.model, request.isolation
         )
@@ -475,19 +486,18 @@ class CursorCliAdapter(Adapter):
             )
         )
         live = self._attach(session_key, request.workspace, process, binding, acp_id, set_model)
-        self._start_turn(live, request.prompt)
+        self._start_turn(live, request.prompt, attachments)
         log.info(f"started Cursor CLI session {acp_id} in {request.workspace}")
         return record
 
     async def send_prompt(
         self, session: SessionRecord, text: str, attachments: Sequence[Attachment] = ()
     ) -> None:
-        text = self.prompt_with_files(text, attachments)
         live = await self._ensure(session)
         if live.busy:
             raise UnsupportedError(self.harness, "prompting a Cursor CLI turn in progress")
         await self.report_status(session.session_key, SessionStatus.RUNNING, "adapter report")
-        self._start_turn(live, text)
+        self._start_turn(live, text, attachments)
 
     async def wake(self, session: SessionRecord, text: str) -> None:
         await self.send_prompt(session, text)
@@ -526,10 +536,15 @@ class CursorCliAdapter(Adapter):
             return None
         return ask
 
-    async def answer_approval(self, session: SessionRecord, request_id: str, decision: Decision) -> None:
+    async def answer_approval(
+        self, session: SessionRecord, request_id: str, decision: Decision, reason: str | None = None
+    ) -> None:
         ask = self._pending_ask(session, request_id)
-        if ask is not None:
-            ask.future.set_result(decision)
+        if ask is None:
+            return
+        if reason:
+            log.debug(f"{request_id}: ACP permission replies have no reason field; dropped")
+        ask.future.set_result("allow" if decision == "allow_workspace" else decision)
 
     async def answer_question(self, session: SessionRecord, request_id: str, answer: str | None) -> None:
         ask = self._pending_ask(session, request_id)

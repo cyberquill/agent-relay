@@ -68,6 +68,7 @@ class OpenCodeAdapter(Adapter):
         question=True,
         cancel=True,
         wake_idle=True,
+        attach_files=True,
     )
 
     def __init__(
@@ -277,7 +278,6 @@ class OpenCodeAdapter(Adapter):
     async def start_session(
         self, request: StartRequest, attachments: Sequence[Attachment] = ()
     ) -> SessionRecord:
-        request = request.model_copy(update={"prompt": self.prompt_with_files(request.prompt, attachments)})
         title = request.prompt.strip().splitlines()[0][:80] if request.prompt.strip() else "phone session"
         try:
             sid = await self.primary.create_session(request.workspace, title)
@@ -298,14 +298,15 @@ class OpenCodeAdapter(Adapter):
                 extra={SERVER_EXTRA: self.primary.base_url},
             )
         )
-        await self.primary.prompt(sid, request.workspace, request.prompt, request.model)
+        await self.primary.prompt(sid, request.workspace, request.prompt, request.model, attachments)
         return record
 
     async def send_prompt(
         self, session: SessionRecord, text: str, attachments: Sequence[Attachment] = ()
     ) -> None:
-        text = self.prompt_with_files(text, attachments)
-        await self._client_of(session).prompt(session.harness_id, session.workspace, text, session.model)
+        await self._client_of(session).prompt(
+            session.harness_id, session.workspace, text, session.model, attachments
+        )
 
     async def wake(self, session: SessionRecord, text: str) -> None:
         await self.send_prompt(session, text)
@@ -319,9 +320,11 @@ class OpenCodeAdapter(Adapter):
     async def cancel(self, session: SessionRecord) -> None:
         await self._client_of(session).abort(session.harness_id, session.workspace)
 
-    async def answer_approval(self, session: SessionRecord, request_id: str, decision: Decision) -> None:
+    async def answer_approval(
+        self, session: SessionRecord, request_id: str, decision: Decision, reason: str | None = None
+    ) -> None:
         await self._client_of(session).reply_permission(
-            session.harness_id, request_id, decision, session.workspace
+            session.harness_id, request_id, decision, session.workspace, message=reason
         )
 
     async def answer_question(self, session: SessionRecord, request_id: str, answer: str | None) -> None:

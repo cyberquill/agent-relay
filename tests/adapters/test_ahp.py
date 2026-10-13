@@ -221,6 +221,7 @@ async def ask_tool(rig: Rig, chat: str, turn: str, call: str, options: list[Json
 
 async def test_steering_while_a_turn_runs(rig: Rig) -> None:
     record, chat, _ = await quiet_start(rig)
+    await rig.core.service.set_queue_mode(record.session_key, "steer")
     assert await rig.core.service.prompt(record.session_key, "also update the docs") == "sent"
     await until(lambda: rig.host.actions("chat/pendingMessageSet"))
     (steer,) = rig.host.actions("chat/pendingMessageSet")
@@ -265,6 +266,24 @@ async def test_deny_and_session_scoped_options(rig: Rig) -> None:
     denied, scoped = rig.host.actions("chat/toolCallConfirmed")
     assert (denied["approved"], denied["reason"], denied["selectedOptionId"]) == (False, "denied", "no")
     assert (scoped["approved"], scoped["selectedOptionId"]) == (True, "session")
+
+
+async def test_workspace_allow_picks_the_plain_approve_option_and_a_deny_reason_is_sent(rig: Rig) -> None:
+    _, chat, turn = await quiet_start(rig)
+    options: list[JsonValue] = [
+        {"id": "once", "label": "Allow", "kind": "approve"},
+        {"id": "session", "label": "Allow in this Session", "kind": "approve"},
+        {"id": "no", "label": "Deny", "kind": "deny"},
+    ]
+    await ask_tool(rig, chat, turn, "call-6", options)
+    await ask_tool(rig, chat, turn, "call-7", options)
+    await until(lambda: len(rig.rec.of(ApprovalRequested)) == 2)
+    assert await rig.core.service.answer_approval("call-6", "allow_workspace")
+    assert await rig.core.service.answer_approval("call-7", "deny", reason="use the staging db")
+    await until(lambda: len(rig.host.actions("chat/toolCallConfirmed")) == 2)
+    allowed, denied = rig.host.actions("chat/toolCallConfirmed")
+    assert (allowed["approved"], allowed["selectedOptionId"]) == (True, "once")
+    assert (denied["approved"], denied["reasonMessage"]) == (False, "use the staging db")
 
 
 async def test_approval_answered_at_the_desk_closes_the_card(rig: Rig) -> None:

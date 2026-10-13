@@ -155,7 +155,8 @@ def test_dry_run_plans_the_whole_touch_table_and_writes_nothing(seed: Seed) -> N
         install.vsix_path(),
     ):
         assert str(touched) in report, touched
-    assert f"link {paths.agents_skills_dir() / bundles.SKILL_NAME}" in report
+    for name in bundles.skill_names():
+        assert f"link {paths.agents_skills_dir() / name}" in report
     assert "move " in report and "keep " in "\n".join(plan.notes)
     assert "launchctl bootstrap io.github.cyberquill.agent-relay.cursor-update" in report
     assert leaked(report + diff) == []
@@ -172,8 +173,9 @@ def test_install_uninstall_install_leaves_no_stray_files(seed: Seed) -> None:
     assert installed != before
     git_ai = json.loads((paths.cursor_dir() / "hooks.json").read_text())
     assert git_ai["hooks"]["preToolUse"][0] == {"command": "git-ai hook pre"}
-    link = paths.agents_skills_dir() / bundles.SKILL_NAME
-    assert link.is_symlink() and link.readlink() == bundles.SKILL_DIR
+    for folder in bundles.skill_dirs():
+        link = paths.agents_skills_dir() / folder.name
+        assert link.is_symlink() and link.readlink() == folder
 
     assert apply_uninstall(Commands()).ok
     assert snapshot(skip_relay_state=True) == outside_relay_state

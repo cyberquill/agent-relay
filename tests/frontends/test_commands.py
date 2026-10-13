@@ -33,6 +33,9 @@ class N(StrEnum):
     DOCTOR = "doctor"
     PANIC = "panic"
     HELP = "help"
+    QUEUE = "queue"
+    STEER = "steer"
+    DIGEST = "digest"
 
 
 TABLE: list[tuple[str, bool, Parsed]] = [
@@ -99,6 +102,18 @@ TABLE: list[tuple[str, bool, Parsed]] = [
     ("/status", False, Invalid(N.STATUS, "`/status` only works inside a session thread")),
     ("/diff", True, Command(N.DIFF)),
     ("/diff", False, Invalid(N.DIFF, "`/diff` only works inside a session thread")),
+    # queue modes and the digest
+    ("/queue", True, Command(N.QUEUE)),
+    ("/queue STEER", True, Command(N.QUEUE, ("steer",))),
+    ("/queue clear", True, Command(N.QUEUE, ("clear",))),
+    ("/queue maybe", True, Invalid(N.QUEUE, "usage: `/queue [queue|steer|interrupt|clear]`", ("maybe",))),
+    ("/queue", False, Invalid(N.QUEUE, "`/queue` only works inside a session thread")),
+    ("/steer use pytest", True, Command(N.STEER, (), "use pytest")),
+    ("/steer", True, Invalid(N.STEER, "usage: `/steer <message>`")),
+    ("/steer x", False, Invalid(N.STEER, "`/steer` only works inside a session thread")),
+    ("/digest", False, Command(N.DIGEST)),
+    ("/digest", True, Invalid(N.DIGEST, "`/digest` only works outside a session thread")),
+    ("/digest now", False, Invalid(N.DIGEST, "`/digest` takes no arguments", ("now",))),
     # away / back / misc
     ("/away", False, Command(N.AWAY)),
     ("/away on", True, Command(N.AWAY, ("on",))),
@@ -109,6 +124,9 @@ TABLE: list[tuple[str, bool, Parsed]] = [
     ("/back", False, Command(N.BACK)),
     ("/doctor", False, Command(N.DOCTOR)),
     ("/panic", True, Command(N.PANIC)),
+    ("/panic now", False, Command(N.PANIC, ("now",))),
+    ("/PANIC NOW", True, Command(N.PANIC, ("now",))),
+    ("/panic later", False, Invalid(N.PANIC, "usage: `/panic [now]`", ("later",))),
     ("/help", False, Command(N.HELP)),
     ("/?", False, Command(N.HELP)),
     ("  /help  ", True, Command(N.HELP)),

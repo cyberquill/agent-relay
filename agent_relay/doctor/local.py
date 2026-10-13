@@ -14,6 +14,7 @@ from pathlib import Path
 
 from agent_relay import paths
 from agent_relay.adapters.ahp.endpoints import run_cli
+from agent_relay.core.presence import Probe, probe_lock_state
 from agent_relay.core.updates import DEFAULT_APPS, WatchedApp, app_version
 from agent_relay.doctor.model import Check, Status
 from agent_relay.fileops import PlannedWrite
@@ -256,6 +257,28 @@ def keychain_checks(config: RelayConfig) -> list[Check]:
             )
         )
     return checks
+
+
+async def presence_check(config: RelayConfig, probe: Probe = probe_lock_state) -> Check:
+    """Whether away-on-lock is on, and whether this Mac's lock state can be read."""
+    name = "Away on screen lock"
+    if not config.presence.auto_away_on_lock:
+        return Check(
+            area="Presence",
+            name=name,
+            status="info",
+            detail="off (presence.auto_away_on_lock is false)",
+            fix="relay config set presence.auto_away_on_lock true",
+        )
+    state = await probe()
+    if state == "unknown":
+        return Check(
+            area="Presence",
+            name=name,
+            status="warn",
+            detail="on, but the lock state cannot be read (`ioreg` failed); away will not follow the lock",
+        )
+    return Check(area="Presence", name=name, status="ok", detail=f"on; the screen is {state}")
 
 
 async def launchd_checks(python: str, runner: Runner = run_cli) -> list[Check]:

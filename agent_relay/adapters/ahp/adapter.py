@@ -9,11 +9,13 @@ tool events, the final answer and parking stay with the hooks so nothing reaches
 from __future__ import annotations
 
 import asyncio
+import base64
 import itertools
 import time
 import uuid
 from collections.abc import Awaitable, Callable, Sequence
 from datetime import UTC, datetime
+from pathlib import Path
 
 from pydantic import ValidationError
 
@@ -79,6 +81,31 @@ def _now_iso() -> str:
     return datetime.now(UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
 
+async def _message_attachment(
+    item: Attachment,
+) -> m.MessageEmbeddedResourceAttachment | m.MessageResourceAttachment:
+    """Images travel inline, like a pasted image; anything else is a file URI the host reads itself."""
+    if item.mime.startswith("image/"):
+        try:
+            data = await asyncio.to_thread(Path(item.local_path).read_bytes)
+        except OSError:
+            log.warning(f"cannot read {item.name}; sending it as a file reference")
+        else:
+            return m.MessageEmbeddedResourceAttachment(
+                label=item.name,
+                display_kind="image",
+                data=base64.b64encode(data).decode(),
+                content_type=item.mime,
+            )
+    return m.MessageResourceAttachment(
+        label=item.name,
+        display_kind="document",
+        uri=uris.file_uri(item.local_path),
+        size_hint=item.size,
+        content_type=item.mime,
+    )
+
+
 class AhpAdapter(Adapter):
     harness = Harness.VSCODE_COPILOT
     capabilities = Capabilities(
@@ -89,6 +116,7 @@ class AhpAdapter(Adapter):
         question=True,
         cancel=True,
         wake_idle=True,
+        attach_files=True,
     )
 
     def __init__(
@@ -472,7 +500,6 @@ class AhpAdapter(Adapter):
     async def start_session(
         self, request: StartRequest, attachments: Sequence[Attachment] = ()
     ) -> SessionRecord:
-        request = request.model_copy(update={"prompt": self.prompt_with_files(request.prompt, attachments)})
         conn = await self._live()
         sid = str(uuid.uuid4())
         session = uris.session_uri(sid)
@@ -507,7 +534,7 @@ class AhpAdapter(Adapter):
             await self._subscribe(conn, chat)
         except AhpRpcError as exc:
             raise RelayError(f"VS Code refused the new session: {exc}") from exc
-        await self._start_turn(conn, record, chat, request.prompt, request.model)
+        await self._start_turn(conn, record, chat, request.prompt, request.model, attachments)
         return await self._registry.get_session(record.session_key) or record
 
     async def _chat_of(self, session: SessionRecord) -> str:
@@ -521,17 +548,28 @@ class AhpAdapter(Adapter):
             return chat
         raise UnsupportedError(self.harness, Capability.WAKE_IDLE)
 
-    def _message(self, text: str, model: str | None) -> m.Message:
+    async def _message(
+        self, text: str, model: str | None, attachments: Sequence[Attachment] = ()
+    ) -> m.Message:
         return m.Message(
-            text=text, origin=m.MessageOrigin(kind="user"), model=m.ModelSelection(id=model or DEFAULT_MODEL)
+            text=text,
+            origin=m.MessageOrigin(kind="user"),
+            model=m.ModelSelection(id=model or DEFAULT_MODEL),
+            attachments=[await _message_attachment(a) for a in attachments] or None,
         )
 
     async def _start_turn(
-        self, conn: Connection, session: SessionRecord, chat: str, text: str, model: str | None
+        self,
+        conn: Connection,
+        session: SessionRecord,
+        chat: str,
+        text: str,
+        model: str | None,
+        attachments: Sequence[Attachment] = (),
     ) -> None:
         turn_id = str(uuid.uuid4())
         action = m.ChatTurnStartedAction(
-            turn_id=turn_id, started_at=_now_iso(), message=self._message(text, model)
+            turn_id=turn_id, started_at=_now_iso(), message=await self._message(text, model, attachments)
         )
         await self._dispatch(conn, chat, action)
         await self._registry.set_session_extra(session.session_key, TURN_EXTRA, turn_id)
@@ -540,18 +578,19 @@ class AhpAdapter(Adapter):
     async def send_prompt(
         self, session: SessionRecord, text: str, attachments: Sequence[Attachment] = ()
     ) -> None:
-        text = self.prompt_with_files(text, attachments)
         conn = await self._live()
         chat = await self._chat_of(session)
         fresh = await self._registry.get_session(session.session_key) or session
         await self._ensure_subscribed(conn, fresh)
         if isinstance(fresh.extra.get(TURN_EXTRA), str):
             steer = m.ChatPendingMessageSetAction(
-                kind="steering", id=str(uuid.uuid4()), message=self._message(text, fresh.model)
+                kind="steering",
+                id=str(uuid.uuid4()),
+                message=await self._message(text, fresh.model, attachments),
             )
             await self._dispatch(conn, chat, steer)
             return
-        await self._start_turn(conn, fresh, chat, text, fresh.model)
+        await self._start_turn(conn, fresh, chat, text, fresh.model, attachments)
 
     async def wake(self, session: SessionRecord, text: str) -> None:
         await self.send_prompt(session, text)
@@ -585,7 +624,9 @@ class AhpAdapter(Adapter):
             matching = scoped or matching
         return matching[0].id if matching else None
 
-    async def answer_approval(self, session: SessionRecord, request_id: str, decision: Decision) -> None:
+    async def answer_approval(
+        self, session: SessionRecord, request_id: str, decision: Decision, reason: str | None = None
+    ) -> None:
         conn = await self._live()
         ask = self._asks.pop(request_id, None)
         fresh = await self._registry.get_session(session.session_key) or session
@@ -600,6 +641,7 @@ class AhpAdapter(Adapter):
                 tool_call_id=request_id,
                 approved=False,
                 reason="denied",
+                reason_message=reason,
                 selected_option_id=self._option(ask, decision),
             )
         else:

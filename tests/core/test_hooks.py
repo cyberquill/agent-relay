@@ -17,6 +17,7 @@ from agent_relay.core.claims import make_claim
 from agent_relay.core.hooks import APPROVED_CALL_KEY, HOOKED
 from agent_relay.core.parking import LIMIT_TEXT, RENEW_TEXT
 from agent_relay.core.registry import RECENT_APPROVAL_PREFIX, Registry, stamped_at
+from agent_relay.core.service.approvals import record_workspace_grant
 from agent_relay.daemon import Core
 from agent_relay.models.config import RelayConfig
 from agent_relay.models.events import (
@@ -232,6 +233,114 @@ async def test_away_off_keeps_a_phone_session_approval_on_the_phone(
     stdout = reply["stdout"]
     assert isinstance(stdout, dict) and stdout["decision"] == "deny"
     assert rec.of(ApprovalResolved)[-1].by == "deadline"
+
+
+async def _answer_deny_with(built: Core, rec: Recorder, reason: str | None) -> None:
+    request_id = await _when_asked(rec)
+    await built.service.answer_approval(request_id, "deny", reason=reason)
+
+
+async def _pre_tool_decision(built: Core, payload: dict[str, JsonValue]) -> JsonValue:
+    reply = await hook(built, "copilot", "PreToolUse", payload)
+    stdout = reply["stdout"]
+    assert isinstance(stdout, dict)
+    return stdout["permissionDecision"]
+
+
+def _message_of(stdout: dict[str, JsonValue]) -> str:
+    found = (
+        stdout.get("permissionDecisionReason")
+        or stdout.get("message")
+        or stdout.get("agent_message")
+        or stdout.get("reason")
+    )
+    assert isinstance(found, str)
+    return found
+
+
+@pytest.mark.parametrize(
+    ("family", "event", "payload"),
+    [
+        ("copilot", "PreToolUse", LOCAL_PRE),
+        ("copilot", "permissionRequest", CLI_PERM),
+        ("copilot", "preToolUse", CLI_PERM),
+        ("cursor", "beforeShellExecution", CURSOR_SHELL),
+        ("opencode", "tool.execute.before", OC_PRE),
+    ],
+)
+async def test_a_deny_reason_reaches_the_agent_in_every_harness_format(
+    core: tuple[Core, Recorder, list[str]], family: str, event: str, payload: dict[str, JsonValue]
+) -> None:
+    built, rec, _ = core
+    await away.set_away(built.registry, True)
+    answering = asyncio.create_task(_answer_deny_with(built, rec, "use the staging db"))
+    reply = await hook(built, family, event, payload)
+    await answering
+    stdout = reply["stdout"]
+    assert isinstance(stdout, dict)
+    assert _message_of(stdout) == "Denied from the phone by the user: use the staging db"
+    rec.events.clear()
+    other: dict[str, JsonValue] = {**payload}
+    for key in ("tool_input", "toolArgs", "command", "args"):
+        if key in other:
+            other[key] = "something else" if isinstance(other[key], str) else {"command": "other"}
+    answering = asyncio.create_task(_answer_deny_with(built, rec, None))
+    reply = await hook(built, family, event, other)
+    await answering
+    stdout = reply["stdout"]
+    assert isinstance(stdout, dict) and _message_of(stdout) == "Denied from the phone by the user."
+
+
+async def test_a_workspace_grant_skips_later_prompts_for_that_tool_in_that_workspace(
+    core: tuple[Core, Recorder, list[str]],
+) -> None:
+    built, rec, _ = core
+    await away.set_away(built.registry, True)
+    answering = asyncio.create_task(_answer_when_asked(built, rec, "allow_workspace"))
+    assert await _pre_tool_decision(built, LOCAL_PRE) == "allow"
+    await answering
+    rec.events.clear()
+    again: dict[str, JsonValue] = {**LOCAL_PRE, "tool_input": {"command": "ls -la"}, "tool_use_id": "t2"}
+    assert await _pre_tool_decision(built, again) == "allow"
+    nested: dict[str, JsonValue] = {
+        **again,
+        "session_id": "L2",
+        "cwd": "/w/proj/src/deep",
+        "tool_use_id": "t3",
+    }
+    assert await _pre_tool_decision(built, nested) == "allow"
+    assert not rec.of(ApprovalRequested)
+    assert await built.registry.kv_get(APPROVED_CALL_KEY.format(call_id="t2")) == "allow"
+
+
+@pytest.mark.parametrize(
+    ("overrides", "why"),
+    [
+        ({"session_id": "L3", "cwd": "/w/other"}, "another workspace"),
+        ({"session_id": "L4", "cwd": "/w"}, "the parent folder"),
+        ({"tool_name": "edit_file"}, "another tool"),
+    ],
+)
+async def test_a_workspace_grant_does_not_leak_to_another_workspace_or_tool(
+    core: tuple[Core, Recorder, list[str]], overrides: dict[str, JsonValue], why: str
+) -> None:
+    built, rec, _ = core
+    await away.set_away(built.registry, True)
+    answering = asyncio.create_task(_answer_when_asked(built, rec, "allow_workspace"))
+    await _pre_tool_decision(built, LOCAL_PRE)
+    await answering
+    rec.events.clear()
+    assert await _pre_tool_decision(built, {**LOCAL_PRE, **overrides, "tool_use_id": "t9"}) == "deny", why
+    assert rec.of(ApprovalRequested), why
+
+
+async def test_an_expired_workspace_grant_asks_again(core: tuple[Core, Recorder, list[str]]) -> None:
+    built, rec, _ = core
+    await away.set_away(built.registry, True)
+    gone = utcnow() - timedelta(hours=1)
+    await record_workspace_grant(built.registry, "/w/proj", "run_in_terminal", 60, gone)
+    assert await _pre_tool_decision(built, LOCAL_PRE) == "deny"
+    assert rec.of(ApprovalRequested)
 
 
 async def test_allow_for_session_skips_later_prompts(core: tuple[Core, Recorder, list[str]]) -> None:
@@ -490,6 +599,7 @@ async def test_steering_goes_out_on_next_post_tool(core: tuple[Core, Recorder, l
     built, _, _ = core
     await away.set_away(built.registry, True)
     await hook(built, "copilot", "PreToolUse", {**LOCAL_PRE, "tool_name": "read_file"})
+    await built.service.set_queue_mode("vscode:L1", "steer")
     receipt = await built.service.prompt("vscode:L1", "use pytest, not unittest")
     assert receipt.startswith("queued as steering")
     reply = await hook(

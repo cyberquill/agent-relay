@@ -88,14 +88,63 @@ def test_opencode_bundle_is_a_config_overlay(built: dict[str, Path]) -> None:
 
 def test_skill_and_command_frontmatter(built: dict[str, Path]) -> None:
     for root in built.values():
-        head = frontmatter(root / "skills" / bundles.SKILL_NAME / "SKILL.md")
-        assert head["name"] == bundles.SKILL_NAME
-        assert 0 < len(head["description"]) <= 1024
+        for name in bundles.skill_names():
+            head = frontmatter(root / "skills" / name / "SKILL.md")
+            assert head["name"] == name
+            assert 0 < len(head["description"]) <= 1024
     for harness in ("copilot", "cursor"):
         for name in bundles.COMMANDS:
             head = frontmatter(built[harness] / "commands" / f"{name}.md")
             assert head["name"] == name
             assert head["description"]
+
+
+def test_every_skill_under_skills_ships_in_every_bundle(built: dict[str, Path]) -> None:
+    names = bundles.skill_names()
+    assert {"agent-relay-away", "agent-relay-recall"} <= set(names)
+    for root in built.values():
+        assert sorted(p.name for p in (root / "skills").iterdir()) == names
+        for name in names:
+            shipped = (root / "skills" / name / "SKILL.md").read_bytes()
+            assert shipped == (bundles.SKILLS_DIR / name / "SKILL.md").read_bytes()
+
+
+def test_skill_commands_are_not_copied_into_the_skill_folder(built: dict[str, Path]) -> None:
+    for root in built.values():
+        assert not (root / "skills" / bundles.SKILL_NAME / "commands").exists()
+
+
+def test_the_skill_set_comes_from_the_folder_and_extra_files_ship(tmp_path: Path) -> None:
+    skills = tmp_path / "skills"
+    (skills / "one").mkdir(parents=True)
+    (skills / "one" / "SKILL.md").write_text("---\nname: one\n---\n", encoding="utf-8")
+    (skills / "one" / "notes.md").write_text("reference", encoding="utf-8")
+    (skills / "two").mkdir()
+    (skills / "two" / "SKILL.md").write_text("---\nname: two\n---\n", encoding="utf-8")
+    assert bundles.skill_names(skills) == ["one", "two"]
+    bundles._copy_skills(tmp_path / "out", skills)
+    assert (tmp_path / "out" / "skills" / "one" / "notes.md").read_text(encoding="utf-8") == "reference"
+    assert (tmp_path / "out" / "skills" / "two" / "SKILL.md").is_file()
+
+
+def test_a_skill_folder_without_skill_md_is_an_error(tmp_path: Path) -> None:
+    (tmp_path / "broken").mkdir()
+    with pytest.raises(ValueError, match="broken"):
+        bundles.skill_names(tmp_path)
+
+
+def test_recall_skill_is_read_only_and_names_every_store() -> None:
+    text = (bundles.SKILLS_DIR / "agent-relay-recall" / "SKILL.md").read_text(encoding="utf-8")
+    for fragment in (
+        "chatSessions",
+        "~/.copilot/session-state",
+        "agent-transcripts",
+        "cursorDiskKV",
+        "opencode.db",
+        "mode=ro",
+        "not a continuation",
+    ):
+        assert fragment in text, fragment
 
 
 def test_commands_flip_away_mode(built: dict[str, Path]) -> None:
