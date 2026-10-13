@@ -103,7 +103,7 @@ async def test_thread_prompt_model_stop_status(relay: Relay) -> None:
 
 async def test_parked_session_gets_prompt_queued(relay: Relay) -> None:
     session = await _thread(relay)
-    await relay.registry.set_session_fields(session.session_key, status=SessionStatus.PARKED.value)
+    await relay.registry.set_session_status(session.session_key, SessionStatus.PARKED)
     await relay.say("carry on", parent_id=session.webex_thread_id)
     queued = await relay.registry.pop_queued(session.session_key, ("prompt",))
     assert [q.text for q in queued] == ["carry on"]
@@ -111,7 +111,7 @@ async def test_parked_session_gets_prompt_queued(relay: Relay) -> None:
 
 
 async def test_unsupported_command_is_refused_per_capability(relay: Relay) -> None:
-    session = await relay.registry.upsert_session(
+    session = await relay.registry.create_session(
         SessionRecord(session_key="cursor_cdp:x", harness=Harness.CURSOR_CDP, harness_id="x", workspace="/w")
     )
     relay.router.add_adapter(CrashingAdapter())
@@ -124,7 +124,7 @@ async def test_unsupported_command_is_refused_per_capability(relay: Relay) -> No
 
 async def test_back_in_a_thread_releases_any_parked_session(relay: Relay) -> None:
     """Relay's stop hook parks; the adapter's capabilities have no say in it."""
-    session = await relay.registry.upsert_session(
+    session = await relay.registry.create_session(
         SessionRecord(session_key="cursor_cdp:x", harness=Harness.CURSOR_CDP, harness_id="x", workspace="/w")
     )
     relay.router.add_adapter(CrashingAdapter())
@@ -132,7 +132,7 @@ async def test_back_in_a_thread_releases_any_parked_session(relay: Relay) -> Non
     stored = await relay.service.session(session.session_key)
     await relay.say("/back", parent_id=stored.webex_thread_id)
     assert relay.bot_texts()[-1] == "That session is not parked."
-    await relay.registry.set_session_fields(session.session_key, status=SessionStatus.PARKED.value)
+    await relay.registry.set_session_status(session.session_key, SessionStatus.PARKED)
     await relay.say("/back", parent_id=stored.webex_thread_id)
     assert set(relay.bot_texts()[-2:]) == {"Released.", "▶️ Released (/back)."}
     assert await relay.registry.kv_get(f"release:{session.session_key}") == "/back"
@@ -202,3 +202,25 @@ async def test_diff_attachment(relay: Relay) -> None:
     await relay.say("/diff", parent_id=session.webex_thread_id)
     last = relay.webex.bot_messages()[-1]
     assert last.files == ["changes.diff"] and b"+one" in last.file_bytes
+
+
+async def test_a_newly_registered_command_is_dispatched_and_listed_without_a_central_edit(
+    relay: Relay,
+) -> None:
+    from agent_relay.frontends import registry
+    from agent_relay.frontends.commands import Command
+    from agent_relay.frontends.webex.handlers import Context, Handlers
+
+    async def hello(h: Handlers, ctx: Context, cmd: Command) -> None:
+        await h.reply(ctx, f"hello {' '.join(cmd.args) or 'there'}")
+
+    registry.register(registry.CommandSpec("hello", hello, "say hello", usage="/hello [who]"))
+    try:
+        await relay.say("/hello world")
+        assert relay.bot_texts()[-1] == "hello world"
+        await relay.say("/help")
+        assert "`/hello [who]` say hello" in relay.bot_texts()[-1]
+    finally:
+        registry.unregister("hello")
+    await relay.say("/hello")
+    assert relay.bot_texts()[-1] == "Unknown command `/hello`. `/help` lists commands."

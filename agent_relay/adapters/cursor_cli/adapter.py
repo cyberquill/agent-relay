@@ -41,6 +41,7 @@ from agent_relay.adapters.cursor_cli.rpc import (
 from agent_relay.core.hooks import APPROVED_CALL_KEY
 from agent_relay.core.registry import Registry
 from agent_relay.log import get_logger
+from agent_relay.models.attachments import Attachment
 from agent_relay.models.capabilities import Capabilities
 from agent_relay.models.events import (
     ApprovalRequested,
@@ -285,7 +286,7 @@ class CursorCliAdapter(Adapter):
                     harness=self.harness, session_key=live.session_key, workspace=workspace, message=message
                 )
             )
-            await self._registry.set_session_fields(live.session_key, status=SessionStatus.IDLE.value)
+            await self.report_status(live.session_key, SessionStatus.IDLE, "adapter report")
             if isinstance(exc, AcpExitedError):
                 await self._drop(live)
             return
@@ -297,7 +298,7 @@ class CursorCliAdapter(Adapter):
         elif isinstance(stop, str) and stop not in ("end_turn", ""):
             note = f"(Cursor stopped: {stop.replace('_', ' ')})"
             reply = f"{reply}\n\n{note}" if reply else note
-        await self._registry.set_session_fields(live.session_key, status=SessionStatus.IDLE.value)
+        await self.report_status(live.session_key, SessionStatus.IDLE, "adapter report")
         self._emit(
             TurnCompleted(harness=self.harness, session_key=live.session_key, workspace=workspace, text=reply)
         )
@@ -306,7 +307,7 @@ class CursorCliAdapter(Adapter):
             return
         queued = await self._registry.pop_queued(live.session_key, ("steer", "prompt"))
         if queued:
-            await self._registry.set_session_fields(live.session_key, status=SessionStatus.RUNNING.value)
+            await self.report_status(live.session_key, SessionStatus.RUNNING, "adapter report")
             self._start_turn(live, "\n\n".join(q.text for q in queued))
 
     async def _on_notification(self, live: _Live, method: str, params: Params) -> None:
@@ -392,13 +393,16 @@ class CursorCliAdapter(Adapter):
     async def list_models(self) -> list[ModelInfo]:
         return await self._cli.models()
 
-    async def start_session(self, request: StartRequest) -> SessionRecord:
+    async def start_session(
+        self, request: StartRequest, attachments: Sequence[Attachment] = ()
+    ) -> SessionRecord:
+        request = request.model_copy(update={"prompt": self.prompt_with_files(request.prompt, attachments)})
         process, binding, acp_id, set_model = await self._open(
             request.workspace, request.model, request.isolation
         )
         session_key = f"{self.harness.value}:{acp_id}"
         title = request.prompt.strip().splitlines()[0][:80] if request.prompt.strip() else None
-        record = await self._registry.upsert_session(
+        record = await self._registry.create_session(
             SessionRecord(
                 session_key=session_key,
                 harness=self.harness,
@@ -416,11 +420,14 @@ class CursorCliAdapter(Adapter):
         log.info(f"started Cursor CLI session {acp_id} in {request.workspace}")
         return record
 
-    async def send_prompt(self, session: SessionRecord, text: str) -> None:
+    async def send_prompt(
+        self, session: SessionRecord, text: str, attachments: Sequence[Attachment] = ()
+    ) -> None:
+        text = self.prompt_with_files(text, attachments)
         live = await self._ensure(session)
         if live.busy:
             raise UnsupportedError(self.harness, "prompting a Cursor CLI turn in progress")
-        await self._registry.set_session_fields(session.session_key, status=SessionStatus.RUNNING.value)
+        await self.report_status(session.session_key, SessionStatus.RUNNING, "adapter report")
         self._start_turn(live, text)
 
     async def wake(self, session: SessionRecord, text: str) -> None:

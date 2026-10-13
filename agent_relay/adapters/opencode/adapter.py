@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import time
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
 
 import httpx
 
@@ -29,6 +29,7 @@ from agent_relay.core.hooks import APPROVED_CALL_KEY, OPENCODE_SERVER_PREFIX
 from agent_relay.core.registry import Registry
 from agent_relay.core.service import RelayError
 from agent_relay.log import get_logger
+from agent_relay.models.attachments import Attachment
 from agent_relay.models.capabilities import Capabilities
 from agent_relay.models.config import OpenCodeConfig
 from agent_relay.models.events import (
@@ -169,7 +170,7 @@ class OpenCodeAdapter(Adapter):
         if not await away.is_away(self._registry, directory):
             self._ignored[sid] = now + IGNORE_TTL_S
             return None
-        record = await self._registry.upsert_session(
+        record = await self._registry.create_session(
             SessionRecord(
                 session_key=f"{self.harness.value}:{sid}",
                 harness=self.harness,
@@ -215,11 +216,9 @@ class OpenCodeAdapter(Adapter):
                     )
             case m.Busy():
                 if session.status is not SessionStatus.RUNNING:
-                    await self._registry.set_session_fields(
-                        session.session_key, status=SessionStatus.RUNNING.value
-                    )
+                    await self.report_status(session.session_key, SessionStatus.RUNNING, "adapter report")
             case m.Idle(text=text):
-                await self._registry.set_session_fields(session.session_key, status=SessionStatus.IDLE.value)
+                await self.report_status(session.session_key, SessionStatus.IDLE, "adapter report")
                 await self._emit(TurnCompleted, session, text=text)
             case m.Failed(message=message):
                 await self._emit(ErrorEvent, session, message=message)
@@ -275,7 +274,10 @@ class OpenCodeAdapter(Adapter):
         except (httpx.HTTPError, OpenCodeError) as exc:
             raise AdapterUnavailableError(f"OpenCode models unavailable: {exc}") from exc
 
-    async def start_session(self, request: StartRequest) -> SessionRecord:
+    async def start_session(
+        self, request: StartRequest, attachments: Sequence[Attachment] = ()
+    ) -> SessionRecord:
+        request = request.model_copy(update={"prompt": self.prompt_with_files(request.prompt, attachments)})
         title = request.prompt.strip().splitlines()[0][:80] if request.prompt.strip() else "phone session"
         try:
             sid = await self.primary.create_session(request.workspace, title)
@@ -283,7 +285,7 @@ class OpenCodeAdapter(Adapter):
             raise AdapterUnavailableError(
                 f"opencode serve is not reachable at {self.primary.base_url}: {exc}"
             ) from exc
-        record = await self._registry.upsert_session(
+        record = await self._registry.create_session(
             SessionRecord(
                 session_key=f"{self.harness.value}:{sid}",
                 harness=self.harness,
@@ -299,7 +301,10 @@ class OpenCodeAdapter(Adapter):
         await self.primary.prompt(sid, request.workspace, request.prompt, request.model)
         return record
 
-    async def send_prompt(self, session: SessionRecord, text: str) -> None:
+    async def send_prompt(
+        self, session: SessionRecord, text: str, attachments: Sequence[Attachment] = ()
+    ) -> None:
+        text = self.prompt_with_files(text, attachments)
         await self._client_of(session).prompt(session.harness_id, session.workspace, text, session.model)
 
     async def wake(self, session: SessionRecord, text: str) -> None:

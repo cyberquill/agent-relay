@@ -25,7 +25,7 @@ H = Harness.OPENCODE
 
 
 async def _session(relay: Relay, key: str = "opencode:s1") -> SessionRecord:
-    return await relay.registry.upsert_session(
+    return await relay.registry.create_session(
         SessionRecord(
             session_key=key, harness=H, harness_id=key.split(":")[1], workspace="/w/proj", model="m1"
         )
@@ -117,7 +117,7 @@ async def test_limits_hold_under_a_flood_with_rate_limits(relay: Relay) -> None:
         if i % 50 == 0:
             await renderer.handle(TextDelta(harness=H, session_key=session.session_key, text="\n\n"))
     for status in [SessionStatus.PARKED, SessionStatus.IDLE] * 10:
-        await relay.registry.set_session_fields(session.session_key, status=status.value)
+        await relay.registry.set_session_status(session.session_key, status)
         await renderer.refresh_root(await relay.service.session(session.session_key))
     await renderer.handle(TurnCompleted(harness=H, session_key=session.session_key))
     assert relay.webex.violations == []
@@ -133,7 +133,7 @@ async def test_root_edit_budget_persists(relay: Relay) -> None:
     session = await _session(relay)
     renderer = relay.frontend.renderer
     await renderer.thread_for(session)
-    await relay.registry.set_session_fields(session.session_key, status="parked")
+    await relay.registry.set_session_status(session.session_key, SessionStatus.PARKED)
     await renderer.refresh_root(await relay.service.session(session.session_key))
     stored = await relay.service.session(session.session_key)
     assert stored.extra["root_edits"] == 1 and stored.webex_thread_id

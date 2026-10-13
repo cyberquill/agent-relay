@@ -209,7 +209,7 @@ async def test_away_off_keeps_a_phone_session_approval_on_the_phone(
     core: tuple[Core, Recorder, list[str]],
 ) -> None:
     built, rec, _ = core
-    await built.registry.upsert_session(
+    await built.registry.create_session(
         SessionRecord(
             session_key="opencode:ses_p",
             harness=Harness.OPENCODE,
@@ -444,7 +444,7 @@ async def test_steering_goes_out_on_next_post_tool(core: tuple[Core, Recorder, l
 async def test_agent_idle_notification_wakes_with_queued_text(core: tuple[Core, Recorder, list[str]]) -> None:
     built, _, _ = core
     await away.set_away(built.registry, True)
-    await built.registry.upsert_session(
+    await built.registry.create_session(
         SessionRecord(
             session_key="copilot_cli:C3",
             harness=Harness.COPILOT_CLI,
@@ -490,7 +490,7 @@ async def test_bad_messages_fail_open(core: tuple[Core, Recorder, list[str]]) ->
 
 async def test_restart_recovers_parked_and_expires_pending(core: tuple[Core, Recorder, list[str]]) -> None:
     built, _, _ = core
-    await built.registry.upsert_session(
+    await built.registry.create_session(
         SessionRecord(
             session_key="cursor:Z", harness=Harness.CURSOR, harness_id="Z", status=SessionStatus.PARKED
         )
@@ -504,7 +504,7 @@ async def test_a_phone_session_with_away_off_ends_its_turn_idle_without_parking(
     core: tuple[Core, Recorder, list[str]],
 ) -> None:
     built, rec, _ = core
-    await built.registry.upsert_session(
+    await built.registry.create_session(
         SessionRecord(
             session_key="cursor:K1",
             harness=Harness.CURSOR,
@@ -521,7 +521,7 @@ async def test_a_phone_session_with_away_off_ends_its_turn_idle_without_parking(
 
 async def test_phone_sessions_are_gated_even_with_away_off(core: tuple[Core, Recorder, list[str]]) -> None:
     built, rec, _ = core
-    await built.registry.upsert_session(
+    await built.registry.create_session(
         SessionRecord(
             session_key="opencode:ses_p",
             harness=Harness.OPENCODE,
@@ -545,7 +545,7 @@ async def test_agent_host_hooks_with_their_own_session_id_join_the_phone_session
 ) -> None:
     """VS Code's hooks report a session id unrelated to the Agent Host's, so the phone's claim links them."""
     built, rec, _ = core
-    await built.registry.upsert_session(
+    await built.registry.create_session(
         SessionRecord(
             session_key="vscode_copilot:A1",
             harness=Harness.VSCODE_COPILOT,
@@ -579,7 +579,7 @@ async def test_an_agent_host_claim_is_not_taken_by_a_copilot_cli_hook(
     built, _, _ = core
     await away.set_away(built.registry, True)
     await make_claim(built.registry, "/w/proj", "vscode_copilot:A1")
-    await built.registry.upsert_session(
+    await built.registry.create_session(
         SessionRecord(
             session_key="vscode_copilot:A1",
             harness=Harness.VSCODE_COPILOT,

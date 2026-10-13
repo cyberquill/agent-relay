@@ -6,15 +6,17 @@ continuation, so the agent stops again at once and the next stop hook resumes th
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Literal
 
 from agent_relay.core import away
+from agent_relay.core.keys import RELEASE_KEY, session_signal
+from agent_relay.core.lifecycle import Lifecycle
 from agent_relay.core.registry import Registry
 from agent_relay.core.router import Router
-from agent_relay.core.service import RELEASE_KEY, session_signal
 from agent_relay.core.signals import Signals
 from agent_relay.log import get_logger
 from agent_relay.models.config import ParkConfig
@@ -58,6 +60,7 @@ class ParkManager:
         signals: Signals,
         config: ParkConfig,
         notify: Notify,
+        lifecycle: Lifecycle,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
     ) -> None:
         self._registry = registry
@@ -65,6 +68,7 @@ class ParkManager:
         self._signals = signals
         self._config = config
         self._notify = notify
+        self._lifecycle = lifecycle
         self._clock = clock
 
     def block_limit(self, harness: Harness) -> int | None:
@@ -80,7 +84,9 @@ class ParkManager:
     async def _set(
         self, session: SessionRecord, status: SessionStatus, blocks: int, deadline: str | None
     ) -> None:
-        await self._registry.set_session_fields(session.session_key, status=status.value)
+        current = await self._registry.get_session(session.session_key)
+        if current is not None and current.status is not SessionStatus.ENDED:
+            await self._lifecycle.observe(session.session_key, status, "parking")
         await self._registry.set_session_extra(session.session_key, BLOCKS_KEY, blocks)
         await self._registry.set_session_extra(session.session_key, DEADLINE_KEY, deadline)
 
@@ -116,9 +122,20 @@ class ParkManager:
                 )
             )
         else:
-            await self._registry.set_session_fields(session.session_key, status=SessionStatus.PARKED.value)
+            await self._lifecycle.observe(session.session_key, SessionStatus.PARKED, "parking")
         slice_end = now + timedelta(seconds=self._config.slice_s)
-        return await self._wait(session, blocks, deadline, slice_end)
+        try:
+            return await self._wait(session, blocks, deadline, slice_end)
+        except asyncio.CancelledError:
+            await asyncio.shield(self._drop_waiter(session))
+            raise
+
+    async def _drop_waiter(self, session: SessionRecord) -> None:
+        """The hook that was parked is gone. Queued messages stay queued for the next hook."""
+        current = await self._registry.get_session(session.session_key)
+        if current is not None and current.status is SessionStatus.PARKED:
+            await self._set(session, SessionStatus.IDLE, 0, None)
+            log.info(f"{session.session_key}: the parked hook went away; session is idle")
 
     async def _wait(
         self, session: SessionRecord, blocks: int, deadline: datetime, slice_end: datetime

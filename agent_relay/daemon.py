@@ -23,6 +23,8 @@ from agent_relay.adapters.vscode.hub import BridgeHub
 from agent_relay.core import away, phone
 from agent_relay.core.approvals import ApprovalBroker
 from agent_relay.core.hooks import HookService
+from agent_relay.core.housekeeping import housekeeper
+from agent_relay.core.lifecycle import Lifecycle
 from agent_relay.core.parking import ParkManager
 from agent_relay.core.registry import Registry
 from agent_relay.core.router import Router
@@ -83,6 +85,7 @@ class Core:
     registry: Registry
     router: Router = field(default_factory=Router)
     signals: Signals = field(default_factory=Signals)
+    lifecycle: Lifecycle = field(init=False)
     service: RelayService = field(init=False)
     broker: ApprovalBroker = field(init=False)
     parking: ParkManager | None = None
@@ -91,13 +94,17 @@ class Core:
     webex: WebexLink | None = None
 
     def __post_init__(self) -> None:
-        self.service = RelayService(self.registry, self.router, self.signals, self.config)
+        self.lifecycle = Lifecycle(self.registry, self.router, self.signals)
+        self.router.bind_lifecycle(self.lifecycle)
+        self.service = RelayService(self.registry, self.router, self.signals, self.config, self.lifecycle)
         self.broker = ApprovalBroker(
             self.registry, self.router, self.signals, self.service, self.config.approvals
         )
         self.router.subscribe(self.broker)
-        self.parking = ParkManager(self.registry, self.router, self.signals, self.config.park, self.notify)
-        self.hooks = HookService(self.registry, self.router, self.broker, self.parking)
+        self.parking = ParkManager(
+            self.registry, self.router, self.signals, self.config.park, self.notify, self.lifecycle
+        )
+        self.hooks = HookService(self.registry, self.router, self.broker, self.parking, self.lifecycle)
 
     async def notify(self, session: SessionRecord, text: str) -> None:
         for target in self.notify_targets:
@@ -250,6 +257,7 @@ async def serve(
         asyncio.create_task(ws.run(), name="webex-ws"),
         asyncio.create_task(frontend.ticker(), name="renderer-tick"),
         asyncio.create_task(core.broker.sweeper(), name="pending-sweeper"),
+        asyncio.create_task(housekeeper(registry), name="housekeeper"),
         asyncio.create_task(watcher.run(), name="update-watcher"),
     ]
     pwa = build_pwa(config.pwa, core.service, core.router, pwa_token, core.doctor_text)

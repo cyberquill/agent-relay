@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from enum import StrEnum
+
 import pytest
 
+from agent_relay.frontends import registry
 from agent_relay.frontends.commands import (
     Command,
-    CommandName,
     HelpHint,
     Invalid,
     Parsed,
@@ -15,7 +17,23 @@ from agent_relay.frontends.commands import (
     parse,
 )
 
-N = CommandName
+
+class N(StrEnum):
+    NEW = "new"
+    SESSIONS = "sessions"
+    APPS = "apps"
+    WS = "ws"
+    MODELS = "models"
+    MODEL = "model"
+    STOP = "stop"
+    STATUS = "status"
+    DIFF = "diff"
+    AWAY = "away"
+    BACK = "back"
+    DOCTOR = "doctor"
+    PANIC = "panic"
+    HELP = "help"
+
 
 TABLE: list[tuple[str, bool, Parsed]] = [
     # plain text
@@ -100,8 +118,40 @@ def test_parse(text: str, in_thread: bool, expected: Parsed) -> None:
 
 def test_every_command_appears_in_the_table() -> None:
     covered = {e.name for _, _, e in TABLE if isinstance(e, Command | Invalid)}
-    assert covered == set(CommandName)
+    assert covered == registry.names() == {n.value for n in N}
 
 
 def test_unbalanced_quote_does_not_crash() -> None:
     assert parse('/new oc proj "unterminated', False) == Command(N.NEW, ("oc", "proj", '"unterminated'), None)
+
+
+def test_help_is_generated_from_the_registry_and_lists_every_command() -> None:
+    text = registry.help_text()
+    for spec in registry.specs():
+        assert f"`{spec.usage or '/' + spec.name}`" in text, spec.name
+    assert {s.name for s in registry.specs()} == {n.value for n in N}
+    assert text.splitlines()[0] == "**agent-relay commands**"
+    assert [s.order for s in registry.specs()] == sorted(s.order for s in registry.specs())
+
+
+def test_a_command_registered_in_its_own_module_parses_without_touching_the_parser() -> None:
+    async def noop(*_: object) -> None:
+        return None
+
+    spec = registry.register(
+        registry.CommandSpec(
+            "ping", noop, "reply pong", aliases=("p",), scope="thread", usage="/ping [n]", max_args=1
+        )
+    )
+    try:
+        assert parse("/ping 3", True) == Command("ping", ("3",))
+        assert parse("/p", True) == Command("ping")
+        assert parse("/ping 1 2", True) == Invalid("ping", "usage: `/ping [n]`", ("1", "2"))
+        assert parse("/ping", False) == Invalid("ping", "`/ping` only works inside a session thread")
+        assert "`/ping [n]` reply pong (in a session thread)" in registry.help_text()
+        with pytest.raises(ValueError, match="already registered"):
+            registry.register(spec)
+    finally:
+        registry.unregister("ping")
+    assert parse("/ping", True) == Unknown("ping")
+    assert "/ping" not in registry.help_text()

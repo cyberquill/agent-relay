@@ -12,10 +12,11 @@ import json
 from pydantic import JsonValue
 
 from agent_relay.core import away
-from agent_relay.core.approvals import DEADLINE_REASON, ApprovalBroker
+from agent_relay.core.approvals import CLOSED_REASONS, DEADLINE_REASON, ApprovalBroker
 from agent_relay.core.claims import UNCLAIMED_PREFIX, aliased, link_alias, take_claim
+from agent_relay.core.lifecycle import Lifecycle
 from agent_relay.core.parking import ParkManager, phone_text
-from agent_relay.core.registry import Registry
+from agent_relay.core.registry import RECENT_APPROVAL_PREFIX, Registry
 from agent_relay.core.router import Router
 from agent_relay.hook import outputs, transcript
 from agent_relay.hook.shims import (
@@ -51,7 +52,7 @@ COPILOT_FAMILY = (Harness.VSCODE_COPILOT, Harness.VSCODE, Harness.COPILOT_CLI)
 CURSOR_FAMILY = (Harness.CURSOR, Harness.CURSOR_CLI)
 ACP_OWNED = frozenset({Harness.CURSOR_CLI})
 CURSOR_GATED = ("shell", "terminal", "mcp")
-RECENT_APPROVAL_KEY = "approved_recent:{digest}"
+RECENT_APPROVAL_KEY = f"{RECENT_APPROVAL_PREFIX}{{session_key}}:{{digest}}"
 APPROVED_CALL_KEY = "approved_call:{call_id}"
 OPENCODE_SERVER_PREFIX = "opencode.server:"
 LAST_TEXT = "last_text"
@@ -70,12 +71,18 @@ def _digest(hook: HookInput) -> str:
 
 class HookService:
     def __init__(
-        self, registry: Registry, router: Router, broker: ApprovalBroker, parking: ParkManager
+        self,
+        registry: Registry,
+        router: Router,
+        broker: ApprovalBroker,
+        parking: ParkManager,
+        lifecycle: Lifecycle,
     ) -> None:
         self._registry = registry
         self._router = router
         self._broker = broker
         self._parking = parking
+        self._lifecycle = lifecycle
 
     async def handle(self, message: dict[str, object]) -> Reply:
         family, event, payload = message.get("harness"), message.get("event"), message.get("payload")
@@ -105,6 +112,11 @@ class HookService:
             if hook.kind in (HookKind.SESSION_END, HookKind.SUBAGENT_STOP):
                 return {}
             session = await self._register(hook)
+        if session.status is SessionStatus.ENDED and hook.kind is not HookKind.SESSION_END:
+            session = (
+                await self._lifecycle.observe(session.session_key, SessionStatus.RUNNING, "hook activity")
+                or session
+            )
         if session.extra.get(HOOKED) is not True:
             await self._registry.set_session_extra(session.session_key, HOOKED, True)
         try:
@@ -149,7 +161,7 @@ class HookService:
         if session is None:
             return None
         if session.harness_id.startswith(UNCLAIMED_PREFIX):
-            await self._registry.set_session_fields(session.session_key, harness_id=hook.session_id)
+            await self._registry.update_session_fields(session.session_key, harness_id=hook.session_id)
             log.info(f"linked {session.session_key} to VS Code chat {hook.session_id}")
             return await self._registry.get_session(session.session_key)
         if session.harness is Harness.VSCODE_COPILOT:
@@ -159,7 +171,7 @@ class HookService:
         return None
 
     async def _register(self, hook: HookInput) -> SessionRecord:
-        record = await self._registry.upsert_session(
+        record = await self._registry.create_session(
             SessionRecord(
                 session_key=f"{hook.harness.value}:{hook.session_id}",
                 harness=hook.harness,
@@ -192,7 +204,9 @@ class HookService:
         if kind is HookKind.STOP:
             return await self._stop(session, hook)
         if kind is HookKind.PROMPT_SUBMIT:
-            await self._registry.set_session_fields(session.session_key, status=SessionStatus.RUNNING.value)
+            await self._lifecycle.observe(
+                session.session_key, SessionStatus.RUNNING, f"{hook.kind.value} hook"
+            )
             await self._parking.reset_blocks(session.session_key)
             return {}
         if kind is HookKind.AGENT_RESPONSE and hook.text:
@@ -206,7 +220,7 @@ class HookService:
         if kind is HookKind.SESSION_END:
             if session.harness is Harness.VSCODE_COPILOT:
                 return {}
-            await self._registry.set_session_fields(session.session_key, status=SessionStatus.ENDED.value)
+            await self._lifecycle.observe(session.session_key, SessionStatus.ENDED, "session ended")
             await self._router.publish(
                 SessionReleased(
                     harness=session.harness,
@@ -267,7 +281,7 @@ class HookService:
         await self._publish_tool(session, hook, None, started=True)
         if self._broker.auto_allowed(tool):
             return _reply(outputs.permission(hook, True, "read-only tool"))
-        recent = RECENT_APPROVAL_KEY.format(digest=_digest(hook))
+        recent = RECENT_APPROVAL_KEY.format(session_key=session.session_key, digest=_digest(hook))
         if hook.kind is HookKind.PERMISSION and await self._registry.kv_get(recent) == "allow":
             return _reply(outputs.permission(hook, True, "approved from the phone"))
         outcome = await self._broker.request(session, tool, describe_tool(hook))
@@ -280,7 +294,11 @@ class HookService:
             )
         if outcome.allowed:
             return _reply(outputs.permission(hook, True, "approved from the phone"))
-        reason = DEADLINE_REASON if outcome.by == "deadline" else "Denied from the phone by the user."
+        reason = (
+            DEADLINE_REASON
+            if outcome.by == "deadline"
+            else CLOSED_REASONS.get(outcome.by, "Denied from the phone by the user.")
+        )
         return _reply(outputs.permission(hook, False, reason))
 
     async def _after_tool(self, session: SessionRecord, hook: HookInput) -> Reply:
@@ -299,7 +317,7 @@ class HookService:
         queued = await self._registry.pop_queued(session.session_key, ("prompt", "steer"))
         if not queued:
             return {}
-        await self._registry.set_session_fields(session.session_key, status=SessionStatus.RUNNING.value)
+        await self._lifecycle.observe(session.session_key, SessionStatus.RUNNING, f"{hook.kind.value} hook")
         return _reply(outputs.add_context(hook, phone_text([q.text for q in queued])))
 
     async def _final_text(self, session: SessionRecord, hook: HookInput) -> str | None:

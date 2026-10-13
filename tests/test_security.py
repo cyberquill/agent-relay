@@ -68,11 +68,11 @@ async def test_allow_for_session_ends_with_the_session(registry: Registry) -> No
         workspace="/w",
         origin=Origin.DESK,
     )
-    await registry.upsert_session(session)
+    await registry.create_session(session)
     key = ALLOW_SESSION_KEY.format(session_key=session.session_key, tool="bash")
     await registry.kv_set(key, "1")
     assert await broker.allowed_for_session(session.session_key, "bash")
-    await registry.set_session_fields(session.session_key, status=SessionStatus.ENDED.value)
+    await service.lifecycle.transition(session.session_key, SessionStatus.ENDED, "test")
     assert await registry.kv_get(key) is None
     await registry.kv_set(key, "1")
     assert not await broker.allowed_for_session(session.session_key, "bash")

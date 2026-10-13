@@ -15,6 +15,7 @@ from collections.abc import Awaitable, Callable
 from pathlib import Path
 
 MAX_FRAME = 16 * 1024 * 1024
+DISCONNECT_POLL_S = 0.1
 _HEADER = struct.Struct(">I")
 
 type JsonObj = dict[str, object]
@@ -66,14 +67,15 @@ def request(
 
 
 async def read_frame(reader: asyncio.StreamReader) -> JsonObj | None:
+    """The next frame, or None when the peer closed (also when it closed mid-frame)."""
     try:
         header = await reader.readexactly(_HEADER.size)
+        (length,) = _HEADER.unpack(header)
+        if length > MAX_FRAME:
+            raise FrameError(f"frame too large: {length} bytes")
+        return decode_body(await reader.readexactly(length))
     except asyncio.IncompleteReadError:
         return None
-    (length,) = _HEADER.unpack(header)
-    if length > MAX_FRAME:
-        raise FrameError(f"frame too large: {length} bytes")
-    return decode_body(await reader.readexactly(length))
 
 
 async def write_frame(writer: asyncio.StreamWriter, message: JsonObj) -> None:
@@ -166,10 +168,30 @@ class IpcServer:
                 if stream is not None:
                     await stream(frame, reader, writer)
                     return
-                reply = await self.handler(frame)
+                connected, reply = await self._serve(reader, frame)
+                if not connected:
+                    return
                 if reply is not None:
                     await write_frame(writer, reply)
         except (ConnectionError, FrameError, json.JSONDecodeError):
             return
         finally:
             writer.close()
+
+    async def _serve(self, reader: asyncio.StreamReader, frame: JsonObj) -> tuple[bool, JsonObj | None]:
+        """Run the handler as a task and cancel it if the client hangs up first.
+
+        A hook blocked on an approval or a park would otherwise keep waiting, and keep its phone
+        card answerable, for a process that no longer exists. Returns (still connected, reply).
+        """
+        task = asyncio.ensure_future(self.handler(frame))
+        try:
+            while not task.done():
+                await asyncio.wait({task}, timeout=DISCONNECT_POLL_S)
+                if not task.done() and (reader.at_eof() or reader.exception() is not None):
+                    return False, None
+            return True, task.result()
+        finally:
+            if not task.done():
+                task.cancel()
+                await asyncio.gather(task, return_exceptions=True)

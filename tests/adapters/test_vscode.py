@@ -322,7 +322,7 @@ async def test_an_unanswered_command_times_out(rig: Rig) -> None:
 
 
 async def idle(rig: Rig, record: SessionRecord) -> SessionRecord:
-    await rig.registry.set_session_fields(record.session_key, status=SessionStatus.IDLE.value)
+    await rig.registry.set_session_status(record.session_key, SessionStatus.IDLE)
     return await rig.session(record.session_key)
 
 
@@ -370,7 +370,7 @@ async def test_prompt_falls_back_to_code_chat_when_no_window_is_left(rig: Rig) -
 
 async def test_desk_local_chats_are_not_prompted_through_the_bridge(rig: Rig) -> None:
     bridge = await rig.bridge()
-    desk = await rig.registry.upsert_session(
+    desk = await rig.registry.create_session(
         SessionRecord(
             session_key="vscode:D1",
             harness=Harness.VSCODE,

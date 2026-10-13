@@ -18,10 +18,10 @@ from agent_relay.core.registry import Registry
 from agent_relay.core.router import Router
 from agent_relay.core.service import RelayService
 from agent_relay.core.signals import Signals
-from agent_relay.frontends.commands import HELP_TEXT
 from agent_relay.frontends.pwa.app import STATIC, build_app
 from agent_relay.frontends.pwa.hub import PwaHub
 from agent_relay.frontends.pwa.server import LOOPBACK, Pwa, build_pwa
+from agent_relay.frontends.registry import help_text
 from agent_relay.frontends.webex.handlers import Handlers
 from agent_relay.models.config import PwaConfig, RelayConfig
 from agent_relay.models.events import Harness, TextDelta
@@ -118,7 +118,7 @@ async def test_commands_run_and_replies_stream_over_sse(running: tuple[Pwa, int]
             if line.startswith("data: "):
                 payload = json.loads(line[6:])
         assert payload["kind"] == "message" and payload["session"] is None
-        assert payload["markdown"] == HELP_TEXT
+        assert payload["markdown"] == help_text()
         missing = await client.post("/api/send", headers=auth, json={"text": "hi", "session": "nope"})
         assert missing.status_code == 404
         card = await client.post("/api/card", headers=auth, json={"inputs": {"relay": "nothing"}})

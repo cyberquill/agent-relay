@@ -12,7 +12,7 @@ import asyncio
 import itertools
 import time
 import uuid
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
 from datetime import UTC, datetime
 
 from pydantic import ValidationError
@@ -38,6 +38,7 @@ from agent_relay.core.hooks import APPROVED_CALL_KEY, HOOKED
 from agent_relay.core.registry import Registry
 from agent_relay.core.service import RelayError
 from agent_relay.log import get_logger
+from agent_relay.models.attachments import Attachment
 from agent_relay.models.capabilities import Capabilities, Capability
 from agent_relay.models.events import (
     ApprovalRequested,
@@ -240,7 +241,7 @@ class AhpAdapter(Adapter):
             await self._attach(conn, record, summary)
 
     async def _adopt_desk(self, summary: m.SessionSummary, sid: str, workspace: str | None) -> SessionRecord:
-        record = await self._registry.upsert_session(
+        record = await self._registry.create_session(
             SessionRecord(
                 session_key=f"{self.harness.value}:{sid}",
                 harness=self.harness,
@@ -256,7 +257,7 @@ class AhpAdapter(Adapter):
 
     async def _attach(self, conn: Connection, record: SessionRecord, summary: m.SessionSummary) -> None:
         if record.harness is Harness.COPILOT_CLI:
-            await self._registry.set_session_fields(record.session_key, harness=self.harness.value)
+            await self._registry.update_session_fields(record.session_key, harness=self.harness.value)
             log.info(f"{record.session_key} runs in VS Code; the Agent Host now serves it")
         chat = record.extra.get(CHAT_EXTRA)
         if not isinstance(chat, str):
@@ -283,7 +284,7 @@ class AhpAdapter(Adapter):
             session = await self._known(sid) if sid else None
             for record in self._mapper.map(channel, action):
                 if session is not None and isinstance(record, mp.TitleChanged):
-                    await self._registry.set_session_fields(session.session_key, title=record.title[:80])
+                    await self._registry.update_session_fields(session.session_key, title=record.title[:80])
             return
         owner = uris.chat_session(channel)
         sid = uris.session_id(owner) if owner else None
@@ -309,7 +310,7 @@ class AhpAdapter(Adapter):
         await self._registry.set_session_extra(session.session_key, TURN_EXTRA, None)
         self._turn_started.pop(session.session_key, None)
         if not hooked and session.status is not SessionStatus.PARKED:
-            await self._registry.set_session_fields(session.session_key, status=SessionStatus.IDLE.value)
+            await self.report_status(session.session_key, SessionStatus.IDLE, "adapter report")
 
     async def _apply(self, session: SessionRecord, record: mp.Record) -> None:
         hooked = session.extra.get(HOOKED) is True
@@ -318,9 +319,7 @@ class AhpAdapter(Adapter):
                 await self._registry.set_session_extra(session.session_key, TURN_EXTRA, turn_id)
                 self._turn_started.setdefault(session.session_key, time.monotonic())
                 if not hooked and session.status is not SessionStatus.RUNNING:
-                    await self._registry.set_session_fields(
-                        session.session_key, status=SessionStatus.RUNNING.value
-                    )
+                    await self.report_status(session.session_key, SessionStatus.RUNNING, "adapter report")
             case mp.Delta(text=text):
                 await self._emit(TextDelta, session, text=text)
             case mp.ToolStart(call_id=call_id, name=name, detail=detail):
@@ -394,7 +393,10 @@ class AhpAdapter(Adapter):
             for model in agent.models
         ]
 
-    async def start_session(self, request: StartRequest) -> SessionRecord:
+    async def start_session(
+        self, request: StartRequest, attachments: Sequence[Attachment] = ()
+    ) -> SessionRecord:
+        request = request.model_copy(update={"prompt": self.prompt_with_files(request.prompt, attachments)})
         conn = await self._live()
         sid = str(uuid.uuid4())
         session = uris.session_uri(sid)
@@ -411,7 +413,7 @@ class AhpAdapter(Adapter):
                 ),
             )
             await self._subscribe(conn, session)
-            record = await self._registry.upsert_session(
+            record = await self._registry.create_session(
                 SessionRecord(
                     session_key=f"{self.harness.value}:{sid}",
                     harness=self.harness,
@@ -459,7 +461,10 @@ class AhpAdapter(Adapter):
         await self._registry.set_session_extra(session.session_key, TURN_EXTRA, turn_id)
         self._turn_started[session.session_key] = time.monotonic()
 
-    async def send_prompt(self, session: SessionRecord, text: str) -> None:
+    async def send_prompt(
+        self, session: SessionRecord, text: str, attachments: Sequence[Attachment] = ()
+    ) -> None:
+        text = self.prompt_with_files(text, attachments)
         conn = await self._live()
         chat = await self._chat_of(session)
         fresh = await self._registry.get_session(session.session_key) or session

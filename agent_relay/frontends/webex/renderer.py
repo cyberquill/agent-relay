@@ -47,6 +47,11 @@ APPROVAL_OUTCOME = {
     "deny": "❌ Denied",
     "desk": "🖥️ Away mode off; answer it at the desk",
 }
+CLOSED_OUTCOME = {
+    "ended": "🏁 The session ended; request closed",
+    "stopped": "⏹️ Stopped; request closed",
+    "abandoned": "🔌 The agent went away; request closed",
+}
 
 
 def chunk_text(text: str, max_bytes: int) -> list[str]:
@@ -198,7 +203,7 @@ class WebexRenderer:
         await self._pacer.wait("root")
         markdown = cards.root_markdown(session)
         message = await self.outbox.post(markdown)
-        await self._registry.set_session_fields(session.session_key, webex_thread_id=message.id)
+        await self._registry.update_session_fields(session.session_key, webex_thread_id=message.id)
         self._threads[session.session_key] = _Thread(session.session_key, message.id, last_root=markdown)
         return message.id
 
@@ -290,9 +295,17 @@ class WebexRenderer:
                 posted = await self.post_in_thread(session, f"Question: {question}", card=card)
                 await self._registry.set_pending_message(request_id, posted.id)
             case ApprovalResolved(request_id=request_id, decision=decision, by=by):
-                await self._close_card(request_id, APPROVAL_OUTCOME[decision], by)
-            case QuestionAnswered(request_id=request_id, answer=answer):
-                await self._close_card(request_id, f"💬 Answered: {answer}" if answer else "⏭️ Skipped", None)
+                if by in CLOSED_OUTCOME:
+                    await self._close_card(request_id, CLOSED_OUTCOME[by], None)
+                else:
+                    await self._close_card(request_id, APPROVAL_OUTCOME[decision], by)
+            case QuestionAnswered(request_id=request_id, answer=answer, by=by):
+                if by in CLOSED_OUTCOME:
+                    await self._close_card(request_id, CLOSED_OUTCOME[by], None)
+                else:
+                    await self._close_card(
+                        request_id, f"💬 Answered: {answer}" if answer else "⏭️ Skipped", None
+                    )
 
     async def _flush(self, session: SessionRecord, thread: _Thread, final: bool) -> None:
         cfg = self._config

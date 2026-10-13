@@ -10,7 +10,7 @@ import asyncio
 import contextlib
 from typing import Protocol
 
-from agent_relay.adapters.base import Adapter
+from agent_relay.adapters.base import Adapter, StatusReporter
 from agent_relay.log import get_logger
 from agent_relay.models.events import ErrorEvent, Event, Harness
 
@@ -33,6 +33,7 @@ class Router:
         self._idle_worker_s = idle_worker_s
         self._backoff_min, self._backoff_max = restart_backoff
         self.adapter_failures: dict[Harness, int] = {}
+        self._lifecycle: StatusReporter | None = None
 
     def subscribe(self, sink: EventSink) -> None:
         self._sinks.append(sink)
@@ -79,7 +80,15 @@ class Router:
     def adapters(self) -> dict[Harness, Adapter]:
         return dict(self._adapters)
 
+    def bind_lifecycle(self, lifecycle: StatusReporter) -> None:
+        """Route the status changes adapters report through the session lifecycle."""
+        self._lifecycle = lifecycle
+        for adapter in self._adapters.values():
+            adapter.lifecycle = lifecycle
+
     def add_adapter(self, adapter: Adapter) -> None:
+        if self._lifecycle is not None:
+            adapter.lifecycle = self._lifecycle
         self._adapters[adapter.harness] = adapter
         self._adapter_tasks[adapter.harness] = asyncio.create_task(
             self._supervise(adapter), name=f"adapter:{adapter.harness.value}"

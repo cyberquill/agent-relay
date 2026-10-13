@@ -330,6 +330,18 @@ async def test_models_select_cancel_and_wake(rig: Rig) -> None:
     assert body["parts"] == [{"type": "text", "text": "and now the docs"}]
 
 
+async def test_attached_files_reach_opencode_as_path_lines(rig: Rig) -> None:
+    from agent_relay.models.attachments import Attachment
+
+    session = await rig.start()
+    rig.fake.ok_turn(session.harness_id, "done")
+    await until(lambda: rig.rec.of(TurnCompleted))
+    shot = Attachment(name="a.png", mime="image/png", size=1, local_path="/tmp/relay/a.png", sha256="0" * 64)
+    assert await rig.core.service.prompt(session.session_key, "see this", (shot,)) == "sent"
+    _, body, _ = rig.fake.prompts[-1]
+    assert body["parts"] == [{"type": "text", "text": "see this\n\nAttached file: /tmp/relay/a.png"}]
+
+
 async def test_server_down_reports_unhealthy_and_start_fails_clearly(rig: Rig) -> None:
     assert await rig.adapter.health() == (True, f"opencode serve at {PRIMARY}")
     rig.fake.up = False

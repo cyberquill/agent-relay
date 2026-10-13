@@ -25,6 +25,7 @@ from agent_relay.adapters.vscode.hub import BridgeEvent, BridgeHub, BridgeWindow
 from agent_relay.core.claims import UNCLAIMED_PREFIX, make_claim
 from agent_relay.core.registry import Registry
 from agent_relay.log import get_logger
+from agent_relay.models.attachments import Attachment
 from agent_relay.models.capabilities import Capabilities
 from agent_relay.models.events import ErrorEvent, Harness, Origin
 from agent_relay.models.sessions import SessionRecord, SessionStatus
@@ -97,7 +98,7 @@ class VsCodeAdapter(Adapter):
             )
         )
         if session.status is SessionStatus.RUNNING:
-            await self._registry.set_session_fields(session.session_key, status=SessionStatus.IDLE.value)
+            await self.report_status(session.session_key, SessionStatus.IDLE, "adapter report")
 
     async def _session_in(self, window_id: str) -> SessionRecord | None:
         sessions = [
@@ -129,7 +130,10 @@ class VsCodeAdapter(Adapter):
                 models.append(ModelInfo(id=model_id, label=str(item.get("label") or model_id)))
         return models
 
-    async def start_session(self, request: StartRequest) -> SessionRecord:
+    async def start_session(
+        self, request: StartRequest, attachments: Sequence[Attachment] = ()
+    ) -> SessionRecord:
+        request = request.model_copy(update={"prompt": self.prompt_with_files(request.prompt, attachments)})
         workspace = request.workspace
         find = self._finder(request)
         window = find()
@@ -139,7 +143,7 @@ class VsCodeAdapter(Adapter):
         local_id = uuid.uuid4().hex
         session_key = f"{self.harness.value}:phone-{local_id}"
         extra = {WINDOW_KEY: window.window_id, VIA_KEY: VIA_BRIDGE} if window else {VIA_KEY: VIA_CLI}
-        await self._registry.upsert_session(
+        await self._registry.create_session(
             SessionRecord(
                 session_key=session_key,
                 harness=self.harness,
@@ -159,7 +163,7 @@ class VsCodeAdapter(Adapter):
             else:
                 await self._cli_chat(workspace, request.prompt, request.model)
         except Exception:
-            await self._registry.set_session_fields(session_key, status=SessionStatus.ENDED.value)
+            await self.report_status(session_key, SessionStatus.ENDED, "adapter report")
             raise
         record = await self._registry.get_session(session_key)
         if record is None:
@@ -167,7 +171,10 @@ class VsCodeAdapter(Adapter):
         log.info(f"opened a VS Code chat for {session_key} via {extra[VIA_KEY]}")
         return record
 
-    async def send_prompt(self, session: SessionRecord, text: str) -> None:
+    async def send_prompt(
+        self, session: SessionRecord, text: str, attachments: Sequence[Attachment] = ()
+    ) -> None:
+        text = self.prompt_with_files(text, attachments)
         if session.status is SessionStatus.RUNNING:
             raise UnsupportedError(self.harness, "steering a running VS Code chat")
         await self._deliver(session, text)
@@ -179,7 +186,7 @@ class VsCodeAdapter(Adapter):
         return session.extra.get(VIA_KEY) in (VIA_BRIDGE, VIA_CLI)
 
     async def set_model(self, session: SessionRecord, model: str) -> None:
-        await self._registry.set_session_fields(session.session_key, model=model)
+        await self._registry.update_session_fields(session.session_key, model=model)
 
     async def cancel(self, session: SessionRecord) -> None:
         if not self._phone_opened(session):

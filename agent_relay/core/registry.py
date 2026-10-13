@@ -17,6 +17,7 @@ from pathlib import Path
 
 from pydantic import JsonValue
 
+from agent_relay.log import get_logger
 from agent_relay.models.events import Harness, Origin, utcnow
 from agent_relay.models.sessions import (
     PendingKind,
@@ -27,6 +28,8 @@ from agent_relay.models.sessions import (
     SessionRecord,
     SessionStatus,
 )
+
+log = get_logger(__name__)
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS sessions (
@@ -75,12 +78,59 @@ CREATE TABLE IF NOT EXISTS kv (
 """
 
 GLOBAL_SCOPE = "*"
-# "Allow for session" grants live under this prefix; they are dropped when the session ends.
+# Per-session grants live under these prefixes, followed by `{session_key}:`; the lifecycle drops them.
 ALLOW_SESSION_PREFIX = "allow_session:"
+RECENT_APPROVAL_PREFIX = "approved_recent:"
+# Processed Webex message ids, valued with the time they were seen so they can be pruned.
+SEEN_PREFIX = "webex.seen:"
+
+
+def _add_pending_status_index(conn: sqlite3.Connection) -> None:
+    conn.execute("CREATE INDEX IF NOT EXISTS pending_status ON pending (status)")
+
+
+def _drop_bogus_sticky_models(conn: sqlite3.Connection) -> None:
+    # `model:vscode_local` predates the harness rename; a sticky "Run" came from a mis-parsed /new.
+    conn.execute(
+        "DELETE FROM kv WHERE key IN ('model:vscode_local', 'model:vscode') AND value IN ('Run', '')"
+    )
+
+
+def _stamp_seen_keys(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        "UPDATE kv SET value=? WHERE substr(key, 1, ?) = ? AND value = '1'",
+        (_ts(utcnow()), len(SEEN_PREFIX), SEEN_PREFIX),
+    )
+
+
+# Ordered and append-only: entry N moves the schema from version N-1 to N (`PRAGMA user_version`).
+MIGRATIONS: tuple[Callable[[sqlite3.Connection], None], ...] = (
+    _add_pending_status_index,
+    _drop_bogus_sticky_models,
+    _stamp_seen_keys,
+)
 
 
 def _ts(value: datetime) -> str:
     return value.isoformat()
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    version = int(conn.execute("PRAGMA user_version").fetchone()[0])
+    if version > len(MIGRATIONS):
+        log.warning(f"registry schema v{version} is newer than this build (v{len(MIGRATIONS)})")
+        return
+    for target, migration in enumerate(MIGRATIONS, start=1):
+        if target <= version:
+            continue
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            migration(conn)
+            conn.execute(f"PRAGMA user_version = {target}")
+            conn.execute("COMMIT")
+        except BaseException:
+            conn.execute("ROLLBACK")
+            raise
 
 
 def _session_from_row(row: sqlite3.Row) -> SessionRecord:
@@ -98,6 +148,17 @@ def _session_from_row(row: sqlite3.Row) -> SessionRecord:
         created=datetime.fromisoformat(row["created"]),
         updated=datetime.fromisoformat(row["updated"]),
     )
+
+
+def _readable(rows: list[sqlite3.Row]) -> list[SessionRecord]:
+    """Rows this build can read; one the schema does not know (a newer build wrote it) is skipped."""
+    found: list[SessionRecord] = []
+    for row in rows:
+        try:
+            found.append(_session_from_row(row))
+        except ValueError as exc:
+            log.warning(f"skipping unreadable session row {row['session_key']}: {exc}")
+    return found
 
 
 def _pending_from_row(row: sqlite3.Row) -> PendingRequest:
@@ -131,6 +192,7 @@ class Registry:
         conn.execute("PRAGMA synchronous=NORMAL")
         conn.execute("PRAGMA busy_timeout=30000")
         conn.executescript(_SCHEMA)
+        _migrate(conn)
         self._conn = conn
         self.db_file.chmod(0o600)
 
@@ -172,16 +234,17 @@ class Registry:
 
     # sessions
 
-    async def upsert_session(self, record: SessionRecord) -> SessionRecord:
+    async def create_session(self, record: SessionRecord) -> SessionRecord:
+        """Insert a session. If its key or its `(harness, harness_id)` already exists, adopt that row.
+
+        Returns the stored row, which is untouched when it already existed.
+        """
         now = utcnow()
         sql = """
         INSERT INTO sessions (session_key, harness, harness_id, workspace, model, origin, status,
                               webex_thread_id, title, extra, created, updated)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(session_key) DO UPDATE SET
-            harness_id=excluded.harness_id, workspace=excluded.workspace, model=excluded.model,
-            status=excluded.status, webex_thread_id=excluded.webex_thread_id, title=excluded.title,
-            extra=excluded.extra, updated=excluded.updated
+        ON CONFLICT DO NOTHING
         """
         params = (
             record.session_key,
@@ -197,13 +260,30 @@ class Registry:
             _ts(record.created),
             _ts(now),
         )
-        await self._run(lambda: self._write(sql, params))
-        return record.model_copy(update={"updated": now})
+
+        def _create() -> SessionRecord:
+            db = self._db()
+            db.execute("BEGIN IMMEDIATE")
+            try:
+                db.execute(sql, params)
+                row = db.execute(
+                    "SELECT * FROM sessions WHERE session_key=? OR (harness=? AND harness_id=?)",
+                    (record.session_key, record.harness.value, record.harness_id),
+                ).fetchone()
+                db.execute("COMMIT")
+            except BaseException:
+                db.execute("ROLLBACK")
+                raise
+            found = _readable([row]) if row else []
+            return found[0] if found else record.model_copy(update={"updated": now})
+
+        return await self._run(_create)
 
     async def get_session(self, session_key: str) -> SessionRecord | None:
         def _get() -> SessionRecord | None:
             row = self._db().execute("SELECT * FROM sessions WHERE session_key=?", (session_key,)).fetchone()
-            return _session_from_row(row) if row else None
+            found = _readable([row]) if row else []
+            return found[0] if found else None
 
         return await self._run(_get)
 
@@ -216,7 +296,8 @@ class Registry:
                 )
                 .fetchone()
             )
-            return _session_from_row(row) if row else None
+            found = _readable([row]) if row else []
+            return found[0] if found else None
 
         return await self._run(_get)
 
@@ -225,7 +306,8 @@ class Registry:
             row = (
                 self._db().execute("SELECT * FROM sessions WHERE webex_thread_id=?", (thread_id,)).fetchone()
             )
-            return _session_from_row(row) if row else None
+            found = _readable([row]) if row else []
+            return found[0] if found else None
 
         return await self._run(_get)
 
@@ -235,12 +317,13 @@ class Registry:
             if not include_ended:
                 sql += " WHERE status != 'ended'"
             sql += " ORDER BY updated DESC"
-            return [_session_from_row(r) for r in self._db().execute(sql).fetchall()]
+            return _readable(self._db().execute(sql).fetchall())
 
         return await self._run(_list)
 
-    async def set_session_fields(self, session_key: str, **fields: str | None) -> None:
-        allowed = {"status", "model", "webex_thread_id", "title", "workspace", "harness", "harness_id"}
+    async def update_session_fields(self, session_key: str, **fields: str | None) -> None:
+        """Set just the named columns. `status` is not one of them: only the lifecycle changes it."""
+        allowed = {"model", "webex_thread_id", "title", "workspace", "harness", "harness_id"}
         unknown = set(fields) - allowed
         if unknown:
             raise ValueError(f"unknown session fields: {sorted(unknown)}")
@@ -250,12 +333,32 @@ class Registry:
         params = (*fields.values(), _ts(utcnow()), session_key)
         sql = f"UPDATE sessions SET {assignments}, updated=? WHERE session_key=?"
         await self._run(lambda: self._write(sql, params))
-        if fields.get("status") == "ended":
-            prefix = f"{ALLOW_SESSION_PREFIX}{session_key}:"
-            drop = "DELETE FROM kv WHERE substr(key, 1, ?) = ?"
-            await self._run(lambda: self._write(drop, (len(prefix), prefix)))
+
+    async def set_session_status(self, session_key: str, status: SessionStatus) -> None:
+        """Write the status column. Only `core.lifecycle` calls this; everything else goes through it."""
+        sql = "UPDATE sessions SET status=?, updated=? WHERE session_key=?"
+        await self._run(lambda: self._write(sql, (status.value, _ts(utcnow()), session_key)))
+
+    async def drop_session_grants(self, session_key: str) -> None:
+        """Forget the "allow for session" and recent-approval flags that belong to one session."""
+
+        def _drop() -> None:
+            db = self._db()
+            db.execute("BEGIN IMMEDIATE")
+            try:
+                for prefix in (ALLOW_SESSION_PREFIX, RECENT_APPROVAL_PREFIX):
+                    scoped = f"{prefix}{session_key}:"
+                    db.execute("DELETE FROM kv WHERE substr(key, 1, ?) = ?", (len(scoped), scoped))
+                db.execute("COMMIT")
+            except BaseException:
+                db.execute("ROLLBACK")
+                raise
+
+        await self._run(_drop)
 
     async def set_session_extra(self, session_key: str, key: str, value: JsonValue) -> None:
+        """Set one key of the session's `extra` JSON, leaving the rest as it is."""
+
         def _update() -> None:
             db = self._db()
             db.execute("BEGIN IMMEDIATE")
@@ -438,3 +541,12 @@ class Registry:
             return str(row["value"]) if row else None
 
         return await self._run(_pop)
+
+    async def prune_seen(self, older_than: datetime) -> int:
+        """Delete processed-message markers last written before `older_than`. Returns how many."""
+        sql = "DELETE FROM kv WHERE substr(key, 1, ?) = ? AND value < ?"
+        params = (len(SEEN_PREFIX), SEEN_PREFIX, _ts(older_than))
+        return await self._run(lambda: self._write(sql, params))
+
+    async def schema_version(self) -> int:
+        return await self._run(lambda: int(self._db().execute("PRAGMA user_version").fetchone()[0]))

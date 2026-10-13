@@ -16,6 +16,7 @@ class Capability(StrEnum):
     CANCEL = "cancel"
     PARK = "park"
     WAKE_IDLE = "wake_idle"
+    ATTACH_FILES = "attach_files"
 
 
 class Capabilities(BaseModel):
@@ -29,6 +30,7 @@ class Capabilities(BaseModel):
     cancel: bool = False
     park: bool = False
     wake_idle: bool = False
+    attach_files: bool = False
 
     def has(self, capability: Capability) -> bool:
         return bool(getattr(self, capability.value))

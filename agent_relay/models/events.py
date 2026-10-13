@@ -71,11 +71,14 @@ class ApprovalRequested(_Base):
     detail: str = ""
 
 
+type ResolvedBy = Literal["phone", "deadline", "panic", "desk", "ended", "stopped", "abandoned"]
+
+
 class ApprovalResolved(_Base):
     type: Literal["approval.resolved"] = "approval.resolved"
     request_id: str
     decision: Literal["allow", "allow_session", "deny", "desk"]
-    by: Literal["phone", "deadline", "panic", "desk"] = "phone"
+    by: ResolvedBy = "phone"
 
 
 class QuestionAsked(_Base):
@@ -89,6 +92,7 @@ class QuestionAnswered(_Base):
     type: Literal["question.answered"] = "question.answered"
     request_id: str
     answer: str | None
+    by: ResolvedBy = "phone"
 
 
 class TurnCompleted(_Base):

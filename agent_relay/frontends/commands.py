@@ -1,38 +1,14 @@
-"""Parse a chat message into a relay command. Shared by the Webex and PWA front ends."""
+"""Parse a chat message into a relay command. Shared by the Webex and PWA front ends.
+
+The command names, their argument rules and their scopes come from `frontends.registry`.
+"""
 
 from __future__ import annotations
 
-import re
 import shlex
 from dataclasses import dataclass, field
-from enum import StrEnum
 
-
-class CommandName(StrEnum):
-    NEW = "new"
-    SESSIONS = "sessions"
-    APPS = "apps"
-    WS = "ws"
-    MODELS = "models"
-    MODEL = "model"
-    STOP = "stop"
-    STATUS = "status"
-    DIFF = "diff"
-    AWAY = "away"
-    BACK = "back"
-    DOCTOR = "doctor"
-    PANIC = "panic"
-    HELP = "help"
-
-
-THREAD_ONLY = frozenset({CommandName.MODEL, CommandName.STOP, CommandName.STATUS, CommandName.DIFF})
-
-HELP_TEXT = """**agent-relay commands**
-- `/new [app] [ws] [model] ["prompt"]` start a session (missing pieces are asked for)
-- `/sessions` list sessions · `/apps` list apps · `/ws` list workspaces · `/models <app>` list models
-- In a session thread: `/model [m]` · `/stop` · `/status` · `/diff` · `/back` · plain text is a prompt
-- `/away [on|off]` in a thread or globally (bare `/away` is on)
-- `/doctor` health · `/panic` cancel everything and pause · `/help` this list"""
+from agent_relay.frontends import registry
 
 HELP_HINT = (
     "Reply inside a session thread to talk to it, or send `/new` to start one. `/help` lists commands."
@@ -41,7 +17,7 @@ HELP_HINT = (
 
 @dataclass(frozen=True)
 class Command:
-    name: CommandName
+    name: str
     args: tuple[str, ...] = ()
     prompt: str | None = None
 
@@ -63,7 +39,7 @@ class Unknown:
 
 @dataclass(frozen=True)
 class Invalid:
-    name: CommandName
+    name: str
     reason: str
     args: tuple[str, ...] = field(default_factory=tuple)
 
@@ -71,30 +47,28 @@ class Invalid:
 type Parsed = Command | Prompt | HelpHint | Unknown | Invalid
 
 _SMART_QUOTES = str.maketrans({"\u201c": '"', "\u201d": '"', "\u2018": "'", "\u2019": "'"})
-_QUOTED = re.compile(r"""(?P<q>["'])(?P<body>.*?)(?P=q)""", re.DOTALL)
-_ALIASES = {"workspaces": CommandName.WS, "session": CommandName.SESSIONS, "?": CommandName.HELP}
 
 
-def _split(text: str) -> list[str]:
+def split_args(text: str) -> list[str]:
     try:
         return shlex.split(text)
     except ValueError:
         return text.split()
 
 
-def _parse_new(rest: str) -> Command | Invalid:
-    prompt: str | None = None
-    match = _QUOTED.search(rest)
-    if match:
-        prompt = match.group("body").strip() or None
-        rest = rest[: match.start()] + " " + rest[match.end() :]
-    tokens = _split(rest)
-    positional, extra = tokens[:3], tokens[3:]
-    if extra:
-        if prompt is not None:
-            return Invalid(CommandName.NEW, "too many arguments: put the prompt in quotes", tuple(tokens))
-        prompt = " ".join(extra)
-    return Command(CommandName.NEW, tuple(positional), prompt)
+def _usage(spec: registry.CommandSpec) -> str:
+    if spec.max_args == 0:
+        return f"`/{spec.name}` takes no arguments"
+    return f"usage: `{spec.usage or f'/{spec.name}'}`"
+
+
+def _check_args(spec: registry.CommandSpec, args: tuple[str, ...]) -> Command | Invalid:
+    lowered = tuple(a.lower() for a in args) if spec.choices else args
+    if spec.choices and lowered and lowered[0] not in spec.choices:
+        return Invalid(spec.name, _usage(spec), args)
+    if len(lowered) < spec.min_args or (spec.max_args is not None and len(lowered) > spec.max_args):
+        return Invalid(spec.name, _usage(spec), args)
+    return Command(spec.name, lowered)
 
 
 def parse(text: str, in_thread: bool) -> Parsed:
@@ -107,28 +81,16 @@ def parse(text: str, in_thread: bool) -> Parsed:
     if not head:
         return Prompt(stripped) if in_thread else HelpHint()
     word = head.lower()
-    name = _ALIASES.get(word)
-    if name is None:
-        try:
-            name = CommandName(word)
-        except ValueError:
-            if "/" in word or "." in word:
-                return Prompt(stripped) if in_thread else HelpHint()
-            return Unknown(word)
+    spec = registry.lookup(word)
+    if spec is None:
+        if "/" in word or "." in word:
+            return Prompt(stripped) if in_thread else HelpHint()
+        return Unknown(word)
+    if spec.scope == "thread" and not in_thread:
+        return Invalid(spec.name, f"`/{spec.name}` only works inside a session thread")
+    if spec.scope == "top" and in_thread:
+        return Invalid(spec.name, f"`/{spec.name}` only works outside a session thread")
     rest = rest.strip()
-    if name is CommandName.NEW:
-        return _parse_new(rest)
-    if name in THREAD_ONLY and not in_thread:
-        return Invalid(name, f"`/{name.value}` only works inside a session thread")
-    args = tuple(_split(rest))
-    if name is CommandName.MODELS and len(args) != 1:
-        return Invalid(name, "usage: `/models <app>`", args)
-    if name is CommandName.MODEL and len(args) > 1:
-        return Invalid(name, "usage: `/model [model]`", args)
-    if name is CommandName.AWAY:
-        if len(args) > 1 or (args and args[0].lower() not in ("on", "off")):
-            return Invalid(name, "usage: `/away [on|off]`", args)
-        return Command(name, tuple(a.lower() for a in args))
-    if name in (CommandName.SESSIONS, CommandName.APPS, CommandName.WS) and args:
-        return Invalid(name, f"`/{name.value}` takes no arguments", args)
-    return Command(name, args)
+    if spec.parse is not None:
+        return spec.parse(rest)
+    return _check_args(spec, tuple(split_args(rest)))

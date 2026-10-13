@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Sequence
 
 from agent_relay.adapters.base import Adapter, Decision, EventPublisher, ModelInfo, StartRequest
+from agent_relay.models.attachments import Attachment
 from agent_relay.models.capabilities import Capabilities
 from agent_relay.models.events import Harness, Origin, TextDelta
 from agent_relay.models.sessions import SessionRecord
@@ -32,7 +34,9 @@ class EmittingAdapter(Adapter):
     def __init__(self, count: int = 5) -> None:
         self.count = count
         self.started: list[StartRequest] = []
+        self.start_attachments: list[Sequence[Attachment]] = []
         self.prompts: list[tuple[str, str]] = []
+        self.prompt_attachments: list[Sequence[Attachment]] = []
         self.cancelled: list[str] = []
         self.approvals: list[tuple[str, Decision]] = []
         self.answers: list[tuple[str, str | None]] = []
@@ -49,8 +53,11 @@ class EmittingAdapter(Adapter):
     async def list_models(self) -> list[ModelInfo]:
         return [ModelInfo(id="m1", label="Model One", default=True), ModelInfo(id="m2", label="Model Two")]
 
-    async def start_session(self, request: StartRequest) -> SessionRecord:
+    async def start_session(
+        self, request: StartRequest, attachments: Sequence[Attachment] = ()
+    ) -> SessionRecord:
         self.started.append(request)
+        self.start_attachments.append(attachments)
         return SessionRecord(
             session_key=f"opencode:fake{len(self.started)}",
             harness=self.harness,
@@ -60,8 +67,11 @@ class EmittingAdapter(Adapter):
             origin=Origin.PHONE,
         )
 
-    async def send_prompt(self, session: SessionRecord, text: str) -> None:
+    async def send_prompt(
+        self, session: SessionRecord, text: str, attachments: Sequence[Attachment] = ()
+    ) -> None:
         self.prompts.append((session.session_key, text))
+        self.prompt_attachments.append(attachments)
 
     async def set_model(self, session: SessionRecord, model: str) -> None:
         self.models.append((session.session_key, model))

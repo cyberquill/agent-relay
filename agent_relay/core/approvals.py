@@ -35,6 +35,10 @@ log = get_logger(__name__)
 
 ALLOW_SESSION_KEY = f"{ALLOW_SESSION_PREFIX}{{session_key}}:{{tool}}"
 DEADLINE_REASON = "No answer from the phone before the relay's deadline; denied."
+CLOSED_REASONS = {
+    "ended": "The session ended before it was answered; denied.",
+    "stopped": "The session was stopped from the phone; denied.",
+}
 
 
 @dataclass(frozen=True)
@@ -116,7 +120,7 @@ class ApprovalBroker:
                 detail=detail,
             )
         )
-        resolved = await self._wait(request_id, deadline)
+        resolved = await self._wait_or_abandon(request_id, deadline)
         if resolved is None:
             return await self._expire_approval(request_id)
         decision = resolved.get("decision")
@@ -168,7 +172,7 @@ class ApprovalBroker:
                 options=options,
             )
         )
-        resolved = await self._wait(request_id, deadline)
+        resolved = await self._wait_or_abandon(request_id, deadline)
         if resolved is None:
             if await self._service.answer_question(request_id, None, by="deadline"):
                 return None, "deadline"
@@ -176,6 +180,55 @@ class ApprovalBroker:
             resolved = request.answer if request and request.answer else {}
         answer = resolved.get("answer")
         return (answer if isinstance(answer, str) else None), str(resolved.get("by", "phone"))
+
+    async def _wait_or_abandon(self, request_id: str, deadline: datetime) -> dict[str, JsonValue] | None:
+        """`_wait`, but if the hook goes away, close the request so its card stops being answerable."""
+        try:
+            return await self._wait(request_id, deadline)
+        except asyncio.CancelledError:
+            await asyncio.shield(self.abandon(request_id))
+            raise
+
+    async def abandon(self, request_id: str) -> bool:
+        """Close an open request whose agent is gone. False when it was already answered."""
+        request = await self._registry.get_pending(request_id)
+        if request is None:
+            return False
+        answer: dict[str, JsonValue] = (
+            {"decision": "deny", "by": "abandoned"}
+            if request.kind == "approval"
+            else {"answer": None, "by": "abandoned"}
+        )
+        if not await self._registry.resolve_pending(request_id, answer, status="expired"):
+            return False
+        log.info(f"{request_id}: the agent went away; closed")
+        session = await self._registry.get_session(request.session_key)
+        if session is None:
+            return True
+        harness, key, workspace = session.harness, session.session_key, session.workspace
+        if request.kind == "approval":
+            await self._router.publish(
+                ApprovalResolved(
+                    harness=harness,
+                    session_key=key,
+                    workspace=workspace,
+                    request_id=request_id,
+                    decision="deny",
+                    by="abandoned",
+                )
+            )
+        else:
+            await self._router.publish(
+                QuestionAnswered(
+                    harness=harness,
+                    session_key=key,
+                    workspace=workspace,
+                    request_id=request_id,
+                    answer=None,
+                    by="abandoned",
+                )
+            )
+        return True
 
     async def _wait(self, request_id: str, deadline: datetime) -> dict[str, JsonValue] | None:
         while True:

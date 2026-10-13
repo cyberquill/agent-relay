@@ -8,7 +8,7 @@ from collections.abc import Awaitable, Callable
 
 import httpx
 
-from agent_relay.core.registry import Registry
+from agent_relay.core.registry import SEEN_PREFIX, Registry
 from agent_relay.core.service import RelayService
 from agent_relay.frontends import actions
 from agent_relay.frontends.webex.access import AccessControl
@@ -18,11 +18,11 @@ from agent_relay.frontends.webex.renderer import Outbox, WebexRenderer
 from agent_relay.frontends.webex.ws_client import Activity, Connector, WebexWsClient, default_connector
 from agent_relay.log import get_logger, log_body
 from agent_relay.models.config import RelayConfig
+from agent_relay.models.events import utcnow
 
 log = get_logger(__name__)
 
 LAST_SEEN_KEY = "webex.last_seen"
-SEEN_PREFIX = "webex.seen:"
 CATCH_UP_PAGES = 10
 
 
@@ -53,7 +53,7 @@ class WebexFrontend:
         async with self._lock:
             if await self._registry.kv_get(f"{SEEN_PREFIX}{message_id}") is not None:
                 return False
-            await self._registry.kv_set(f"{SEEN_PREFIX}{message_id}", "1")
+            await self._registry.kv_set(f"{SEEN_PREFIX}{message_id}", utcnow().isoformat())
             return True
 
     async def _remember_last(self, message: Message) -> None:

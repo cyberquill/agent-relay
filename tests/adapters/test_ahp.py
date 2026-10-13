@@ -372,7 +372,7 @@ async def test_cancel_sends_turn_cancelled(rig: Rig) -> None:
 
 
 async def hook_session(rig: Rig, sid: str) -> SessionRecord:
-    return await rig.registry.upsert_session(
+    return await rig.registry.create_session(
         SessionRecord(
             session_key=f"copilot_cli:{sid}",
             harness=Harness.COPILOT_CLI,

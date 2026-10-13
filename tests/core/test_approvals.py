@@ -25,7 +25,7 @@ async def setup(registry: Registry) -> AsyncIterator[tuple[Core, EmittingAdapter
     core = Core(RelayConfig(), registry)
     adapter = EmittingAdapter(count=0)
     core.router.add_adapter(adapter)
-    await registry.upsert_session(SESSION)
+    await registry.create_session(SESSION)
     yield core, adapter
     await core.router.stop()
 

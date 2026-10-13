@@ -195,8 +195,8 @@ async def test_away_off_over_ipc_releases_parked_sessions(registry: Registry) ->
     session = SessionRecord(
         session_key="cursor:K1", harness=Harness.CURSOR, harness_id="K1", workspace="/w", origin=Origin.DESK
     )
-    await registry.upsert_session(session)
-    await registry.set_session_fields(session.session_key, status=SessionStatus.PARKED.value)
+    await registry.create_session(session)
+    await registry.set_session_status(session.session_key, SessionStatus.PARKED)
     assert await core.handle_ipc({"op": "away", "enabled": True, "workspace": "/w"}) == {"away": True}
     assert await core.handle_ipc({"op": "away", "enabled": False, "workspace": "/w"}) == {"away": False}
     assert await registry.kv_get("release:cursor:K1") == "away mode off"

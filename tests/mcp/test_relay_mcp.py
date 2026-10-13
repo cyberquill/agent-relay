@@ -43,7 +43,7 @@ class Relayd:
     async def session(
         self, origin: Origin = Origin.PHONE, status: SessionStatus = SessionStatus.RUNNING
     ) -> SessionRecord:
-        return await self.registry.upsert_session(
+        return await self.registry.create_session(
             SessionRecord(
                 session_key=f"cursor:{origin.value}-{status.value}",
                 harness=Harness.CURSOR,

@@ -8,7 +8,13 @@ from datetime import UTC, datetime, timedelta
 from pydantic import JsonValue
 
 from agent_relay.frontends.webex import cards
-from agent_relay.models.events import ApprovalRequested, Harness, QuestionAsked
+from agent_relay.models.events import (
+    ApprovalRequested,
+    ApprovalResolved,
+    Harness,
+    QuestionAnswered,
+    QuestionAsked,
+)
 from agent_relay.models.sessions import PendingRequest, SessionRecord
 from tests.frontends.conftest import Relay
 
@@ -50,7 +56,7 @@ def test_choose_carries_previous_answers() -> None:
 
 
 async def _pending(relay: Relay, kind: str, request_id: str) -> SessionRecord:
-    session = await relay.registry.upsert_session(
+    session = await relay.registry.create_session(
         SessionRecord(session_key="opencode:c1", harness=H, harness_id="c1", workspace="/w/p")
     )
     await relay.registry.add_pending(
@@ -119,3 +125,37 @@ async def test_question_custom_text_wins_and_skip_sends_none(relay: Relay) -> No
     )
     await relay.click("m", {"relay": "question", "request_id": "q3", "op": "skip"})
     assert relay.adapter.answers == [("q2", "mysql"), ("q3", None)]
+
+
+async def test_cards_of_a_dead_agent_or_ended_session_say_so(relay: Relay) -> None:
+    session = await _pending(relay, "approval", "r1")
+    await relay.frontend.renderer.handle(
+        ApprovalRequested(
+            harness=H, session_key=session.session_key, request_id="r1", tool="bash", detail="git push"
+        )
+    )
+    card_msg, _ = relay.webex.last_card()
+    await relay.frontend.renderer.handle(
+        ApprovalResolved(
+            harness=H, session_key=session.session_key, request_id="r1", decision="deny", by="abandoned"
+        )
+    )
+    assert relay.webex.messages[card_msg.id].markdown == "🔌 The agent went away; request closed"
+
+    await relay.registry.add_pending(
+        PendingRequest(
+            request_id="q1",
+            kind="question",
+            session_key=session.session_key,
+            payload={"source": "adapter"},
+            deadline=datetime.now(UTC) + timedelta(minutes=10),
+        )
+    )
+    await relay.frontend.renderer.handle(
+        QuestionAsked(harness=H, session_key=session.session_key, request_id="q1", question="Which?")
+    )
+    question_msg, _ = relay.webex.last_card()
+    await relay.frontend.renderer.handle(
+        QuestionAnswered(harness=H, session_key=session.session_key, request_id="q1", answer=None, by="ended")
+    )
+    assert relay.webex.messages[question_msg.id].markdown == "🏁 The session ended; request closed"

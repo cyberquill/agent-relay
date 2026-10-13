@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 
 from playwright.async_api import Error as PlaywrightError
@@ -27,6 +28,7 @@ from agent_relay.adapters.cursor_cdp.selectors import SelectorSet, load_selector
 from agent_relay.adapters.cursor_cdp.selftest import gate, last_report
 from agent_relay.core.registry import Registry
 from agent_relay.log import get_logger
+from agent_relay.models.attachments import Attachment
 from agent_relay.models.capabilities import Capabilities
 from agent_relay.models.config import CdpConfig
 from agent_relay.models.events import ErrorEvent, Event, Harness, Origin, TextDelta, TurnCompleted
@@ -170,12 +172,12 @@ class CursorCdpAdapter(Adapter):
             self._chosen[id(composer.page)] = session.model
         baseline = await composer.snapshot()
         self._turn = _Turn(session.session_key, session.workspace, composer, TurnTracker(baseline))
-        await self._registry.set_session_fields(session.session_key, status=SessionStatus.RUNNING.value)
+        await self.report_status(session.session_key, SessionStatus.RUNNING, "adapter report")
         try:
             await composer.submit(text)
         except (PlaywrightError, AdapterUnavailableError):
             self._turn = None
-            await self._registry.set_session_fields(session.session_key, status=SessionStatus.IDLE.value)
+            await self.report_status(session.session_key, SessionStatus.IDLE, "adapter report")
             raise
 
     async def _finish(self, turn: _Turn) -> None:
@@ -185,7 +187,7 @@ class CursorCdpAdapter(Adapter):
             reply = turn.tracker.text.strip()
             if turn.stopped:
                 reply = f"{reply}\n\n{STOPPED_TEXT}" if reply else STOPPED_TEXT
-            await self._registry.set_session_fields(turn.session_key, status=SessionStatus.IDLE.value)
+            await self.report_status(turn.session_key, SessionStatus.IDLE, "adapter report")
             self._emit(
                 TurnCompleted(
                     harness=self.harness,
@@ -220,14 +222,17 @@ class CursorCdpAdapter(Adapter):
             labels = await (await self._ready(None)).models()
         return [ModelInfo(id=label, label=label) for label in labels]
 
-    async def start_session(self, request: StartRequest) -> SessionRecord:
+    async def start_session(
+        self, request: StartRequest, attachments: Sequence[Attachment] = ()
+    ) -> SessionRecord:
+        request = request.model_copy(update={"prompt": self.prompt_with_files(request.prompt, attachments)})
         async with self._lock:
             if self._turn is not None:
                 raise AdapterUnavailableError("Cursor's composer is busy with another phone chat.")
             composer = await self._ready(request.workspace)
             await composer.new_chat()
             key = f"{self.harness.value}:phone-{uuid.uuid4().hex}"
-            record = await self._registry.upsert_session(
+            record = await self._registry.create_session(
                 SessionRecord(
                     session_key=key,
                     harness=self.harness,
@@ -243,13 +248,16 @@ class CursorCdpAdapter(Adapter):
             try:
                 await self._begin(composer, record, request.prompt)
             except Exception:
-                await self._registry.set_session_fields(key, status=SessionStatus.ENDED.value)
+                await self.report_status(key, SessionStatus.ENDED, "adapter report")
                 raise
         log.info(f"opened a Cursor composer chat for {key}")
         stored = await self._registry.get_session(key)
         return stored or record
 
-    async def send_prompt(self, session: SessionRecord, text: str) -> None:
+    async def send_prompt(
+        self, session: SessionRecord, text: str, attachments: Sequence[Attachment] = ()
+    ) -> None:
+        text = self.prompt_with_files(text, attachments)
         async with self._lock:
             if await self._registry.kv_get(ACTIVE_KEY) != session.session_key:
                 raise AdapterUnavailableError(OLDER_CHAT)
@@ -258,7 +266,7 @@ class CursorCdpAdapter(Adapter):
             await self._begin(await self._ready(session.workspace), session, text)
 
     async def set_model(self, session: SessionRecord, model: str) -> None:
-        await self._registry.set_session_fields(session.session_key, model=model)
+        await self._registry.update_session_fields(session.session_key, model=model)
 
     async def cancel(self, session: SessionRecord) -> None:
         turn = self._turn
