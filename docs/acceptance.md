@@ -61,3 +61,29 @@ it waits for. Live tests run only with `RELAY_LIVE=1`.
 
 - [x] **AC-39** Install, uninstall, install inside `RELAY_HOME` leaves no stray files — `tests/ops/test_install.py`
 - [x] **AC-40** Security unit tests cover each control (map in [security.md](security.md)) — `tests/test_security.py`
+
+## October round (beyond the plan)
+
+Features and fixes added after the plan (deviations D72–D111). These are not plan ACs; `tests/test_acceptance.py`
+checks that the ids run from OR-1 without gaps, every box is ticked and every cited file exists.
+
+- [x] **OR-1** Uninstall restores only files unchanged since the relay's last write, else unmerges or keeps the backup; backups are private — `tests/test_fileops.py`, `tests/ops/test_install.py`
+- [x] **OR-2** An answer that cannot reach the app reopens its request — `tests/core/test_approvals_delivery.py`
+- [x] **OR-3** Approvals are scoped: recent decisions per session for 60 s, workspace grants per tool and workspace — `tests/core/test_hooks.py`, `tests/core/test_approvals_grants.py`, `tests/core/test_housekeeping.py`
+- [x] **OR-4** Parking uses the full block limit before releasing — `tests/core/test_hooks.py`
+- [x] **OR-5** The approval card offers allow once, for the session, for the workspace, deny and deny with a reason — `tests/frontends/test_approval_card.py`
+- [x] **OR-6** Question cards answer, skip or take custom text, and their notification line carries the question — `tests/frontends/test_cards.py`
+- [x] **OR-7** `/new` is one card, or two with `webex.new_card_layout = "two"` — `tests/frontends/test_new_card.py`
+- [x] **OR-8** `/sessions` is a dashboard card with a reusable nonce — `tests/frontends/test_dashboard.py`
+- [x] **OR-9** A bare `/model` in a thread sends a model picker — `tests/frontends/test_model_switch.py`
+- [x] **OR-10** A bare top-level `/away` sends a scope card — `tests/frontends/test_away_scope.py`
+- [x] **OR-11** `/panic` asks first; `/panic now` does not — `tests/frontends/test_panic_confirm.py`
+- [x] **OR-12** A turn ends with a completion card — `tests/frontends/test_completion_card.py`, `tests/frontends/test_renderer_status.py`
+- [x] **OR-13** `/queue` shows a card with the mode and removable waiting messages — `tests/frontends/test_queue_card.py`
+- [x] **OR-14** Queue modes (`queue`, `steer`, `interrupt`) and `/steer` — `tests/core/test_queue_modes.py`
+- [x] **OR-15** Away mode follows the screen lock and undoes only what it did — `tests/core/test_presence.py`, `tests/doctor/test_presence.py`
+- [x] **OR-16** Photos and files reach a thread or `/new`, natively where the app takes them — `tests/core/test_inbox.py`, `tests/frontends/test_attachments_intake.py`, `tests/adapters/test_attachments.py`
+- [x] **OR-17** `/ws` adds a folder, clones a repo on an allowed host, and adds a repo to a workspace — `tests/core/test_workspaces_phone.py`, `tests/frontends/test_ws_card.py`
+- [x] **OR-18** The `agent-relay-recall` skill ships in every bundle and install — `tests/ops/test_bundles.py`
+- [x] **OR-19** A reply in an ended session's thread revives it — `tests/core/test_lifecycle.py`
+- [x] **OR-20** One bot per app: routing by harness, per-space commands, `relay setup bot --stdin`, one websocket per bot — `tests/frontends/test_bots.py`, `tests/test_setup_bot.py`, `tests/test_daemon.py`, `tests/doctor/test_local.py`, `tests/doctor/test_daemon.py`

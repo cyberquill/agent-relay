@@ -11,13 +11,18 @@ relay uninstall --apply  # undo it
 ```
 
 Install writes the hooks for Copilot, Cursor and OpenCode, imports and syncs MCP config through
-`~/.agents/mcp.yaml`, links `~/.agents/skills/agent-relay-away`, patches `stepping-away`, moves duplicate
+`~/.agents/mcp.yaml`, links each relay skill (`agent-relay-away`, `agent-relay-recall`) into
+`~/.agents/skills`, patches `stepping-away`, moves duplicate
 skill folders, writes the launch agents and installs relay-bridge. Every touched file is backed up first
 and listed in the manifest (`$RELAY_HOME/Library/Application Support/agent-relay/install-manifest.json`).
-Running it again changes nothing. If a path it would link is a real folder, it stops before writing
-anything.
+Running it again changes nothing, and only a launch agent whose plist changed is reloaded. If a path it
+would link is a real folder, it stops before writing anything. Backups are `0600` in `0700` folders, and
+the manifest records the sha256 of every file the relay wrote.
 
-Uninstall restores every file byte for byte, moves skill folders back, boots out the launch agents and
+Uninstall restores a file only if it is still what the relay last wrote. A file changed since is
+unmerged where the relay knows how (Cursor `hooks.json` and the MCP configs lose only the relay's own
+entries) and otherwise left alone, with its backup path in the report. It then moves skill folders back,
+boots out the launch agents and
 uninstalls relay-bridge. It keeps `relay.toml`, `workspaces.toml`, the session history, the logs and the
 Keychain items (remove those with Keychain Access, service names `agent-relay*`).
 
@@ -27,8 +32,8 @@ Launch agents: `relayd` always; the OpenCode server while `adapters.opencode` is
 ## Running relayd
 
 ```bash
-relay start                # load the launch agent and (re)start relayd
-relay stop                 # unload it; it starts again at the next login
+relay start                # load the launch agents (relayd, OpenCode server) and (re)start them
+relay stop                 # unload them; they start again at the next login
 relay status [--json]      # sessions, parked turns, pending requests, adapter health
 relay away on|off [--workspace <dir>]
 ```
@@ -54,7 +59,69 @@ harnesses, and the claim that links a phone chat to its hooks, use the file's fi
 working directory VS Code reports for a multi-root window.
 
 A setting the config model rejects (an unknown key, a global auto-approve pattern such as `*`) leaves
-`relay.toml` unchanged. Restart relayd after changing a setting.
+`relay.toml` unchanged. Restart relayd (`relay start`) after changing a setting.
+
+### Settings added in the October round
+
+| Setting | Default | What it does |
+|---|---|---|
+| `queue.default_mode` | `queue` | What a message sent mid-turn does: `queue` (next turn), `steer` (nudge the turn), `interrupt` (stop, then send). `/queue` changes it per session |
+| `presence.auto_away_on_lock` | `true` | Locking the screen turns away mode on; unlocking turns it off if the relay turned it on |
+| `presence.poll_s` | `10` | How often the screen lock is checked (seconds, at least 1) |
+| `attachments.enabled` | `true` | Accept photos and files sent to a thread or `/new` |
+| `attachments.max_bytes` | `20971520` | Largest file accepted (20 MB) |
+| `attachments.hold_s` | `600` | How long a files-only message waits for its text |
+| `attachments.inbox_dir` | `.agent-relay/inbox` | Where files land, relative to the workspace; must stay inside it |
+| `ws.roots` | `[]` | Folders the phone may add workspaces under; `/ws` only lists while empty |
+| `ws.clone_hosts` | `["github.com"]` | Hosts `/ws` may clone from |
+| `ws.clone_timeout_s` | `300` | A clone that takes longer is killed and removed |
+| `ws.list_depth` | `2` | How deep `/ws` looks under each root for folders (1 to 4) |
+| `approvals.workspace_grant_s` | `14400` | How long "Allow this tool in this workspace" lasts |
+| `renderer.progress_edit_interval_s` | `30` | Least time between edits of a turn's progress message |
+| `renderer.quick_reply` | `false` | Put a reply box on the completion card |
+| `webex.new_card_layout` | `one` | `one`: `/new` is one card; `two`: app, workspace and prompt first, then the model |
+| `webex.bots` | `{}` | Bot name (`control`, `vscode`, `cursor`, `opencode`) to its Keychain account; see [One bot per app](#one-bot-per-app) |
+| `cursor_cli.idle_s` | `900` | An idle `cursor-agent` process is stopped after this long and respawned on the next prompt |
+| `cdp.start_deadline_s` | `20` | A CDP turn that has not started by then is cleared |
+
+Array values are JSON: `relay config set ws.roots '["~/code"]'`.
+
+## One bot per app
+
+Optional. Without `[webex.bots]` the single bot (`webex-bot-token`) serves every app in one space. With
+it, each listed app bot gets its own 1:1 space and the first bot becomes the control bot.
+
+| Bot | Harnesses |
+|---|---|
+| `vscode` | `vscode`, `vscode_copilot`, `copilot_cli` |
+| `cursor` | `cursor`, `cursor_cli`, `cursor_cdp` |
+| `opencode` | `opencode` |
+| `control` | every harness whose app has no bot configured |
+
+Setup, per app bot:
+
+1. Create a bot at developer.webex.com (**Create a New App → Bot**).
+2. Press **Copy Token** on its page, then `pbpaste | relay setup bot <name> --stdin`. The token goes to
+   the Keychain (service `agent-relay`, account `webex-bot-<name>`) and is never printed. The command
+   refuses a terminal on stdin, empty or multi-word input, an unknown bot, and a missing `--stdin`.
+   Overwrite the clipboard afterwards.
+3. `relay config set webex.bots.<name> webex-bot-<name>` (the setup command prints this line when it is
+   missing). Accounts must be distinct, one word, and not `pwa-token` or `opencode-password`; the
+   control bot keeps `webex-bot-token`.
+4. `relay start`. relayd runs one websocket per bot in one process, each answering only the allowed
+   person. On its first start each app bot posts a one-time hello to `webex.allowed_email`, which
+   creates its space.
+5. `relay doctor` shows one Keychain check and one websocket check per bot, for example
+   `webex-bot-vscode (vscode bot)` and `websocket (cursor)`.
+
+A configured app bot without a token stops relayd at start with exit 2 and the `pbpaste | relay setup bot
+<name> --stdin` line. A brand-new bot logs `WDM device list failed: HTTP 404` once before it registers
+its first device; that is harmless.
+
+The bot that created a thread is stored on its session (`webex_bot`), so the thread stays in that space.
+Threads from before several bots, and threads of a bot later removed from the config, use the control
+bot. Registry keys for the control bot are unchanged; app bots add `:<bot>` (room id, last seen
+message, hello marker).
 
 ## relay-bridge (`vscode` chats)
 
@@ -73,7 +140,10 @@ Protocol (length-prefixed JSON frames, as for every IPC peer):
 | window → relayd | events `{event: "folders", folders}`, `{event: "turn.done"}`, `{event: "error", message}` |
 
 Commands: `ping`, `models`, `start {query, model}` (new VS Code agent chat), `prompt {query, model}`,
-`cancel`, `acceptTool`, `skipTool`.
+`cancel`. Approvals stay on the hook path; the bridge does not answer them.
+
+A follow-up prompt goes only to the window the chat was opened in. If that window is closed, or was
+reloaded (which gives it a new id), the prompt fails with "The VS Code window for this chat is closed".
 
 Build and package:
 
@@ -82,15 +152,16 @@ cd extensions/relay-bridge && npm ci && npm run build && npm test
 uv run python -c "from pathlib import Path; from agent_relay.ops.vsix import build_vsix; build_vsix(Path('build/relay-bridge.vsix'))"
 ```
 
-Without the extension, phone chats fall back to `code chat -m agent -r "<prompt>"` in the workspace;
-`relay doctor` reports which path is active.
+Without the extension, a new phone chat falls back to `code chat -m agent -r "<prompt>"` in the
+workspace; follow-ups do not. `relay doctor` reports which path is active.
 
 ## Cursor CLI (ACP)
 
 Phone chats for Cursor run `cursor-agent --workspace <ws> [--model <m>] [--worktree] acp` and talk ACP
 over stdio. The CLI must be logged in once: `cursor-agent login`. A session survives a `relayd` restart or
 a CLI crash: the next prompt respawns the CLI and calls `session/load`. At the desk, continue it with
-`agent resume <id>` (the id is on the session card).
+`agent resume <id>` (the id is on the session card). An idle CLI process is stopped after
+`cursor_cli.idle_s` (900 s) and respawned the same way.
 
 ## Cursor desktop composer (CDP, off by default)
 
@@ -228,13 +299,14 @@ Each check is `ok`, `info`, `warn` or `fail`. The command exits with 1 when any 
 |---|---|
 | relayd | the daemon answers on its socket |
 | Adapters | each adapter's health; a degraded adapter shows the update that broke it; the Cursor CDP gate (why it is closed, or which self-test opened it) |
-| Webex | the websocket is connected, or the last error |
+| Webex | the websocket is connected, or the last error; one line per bot with `webex.bots` |
 | Away mode | global and per-workspace state, `/panic` pause, waiting requests |
+| Presence | auto away on lock: off, or on with the current screen state; a warning when the lock state cannot be read |
 | Versions | VS Code, Cursor, the Cursor CLI, OpenCode and the Copilot CLI; Cursor CLI more than 14 days older than the desktop app |
 | Hooks | Copilot hooks, Cursor hooks and the OpenCode plugin are installed and match what `relay install` would write now |
 | Config | `~/.agents/mcp.yaml` exists, and every harness file matches it |
 | Skills | duplicate skill folders, the `agent-relay-away` link, the `stepping-away` patch |
-| Keychain | the Webex bot token; the OpenCode password when that adapter is on; the PWA token when the PWA is on |
+| Keychain | the Webex bot token (one per bot with `webex.bots`); the OpenCode password when that adapter is on; the PWA token when the PWA is on; a locked Keychain is reported as locked |
 | launchd | each relay launch agent is loaded |
 
 Without relayd, `relay doctor` reports the daemon as failing and still runs the local checks.

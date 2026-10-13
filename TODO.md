@@ -1,11 +1,35 @@
 # agent-relay: status and what's left
 
-Last updated 2026-10-04, after commit `f8f5c4f` and the commit that adds the user guide.
-The plan is [`docs/PLAN.md`](docs/PLAN.md). Departures are in [`docs/deviations.md`](docs/deviations.md)
-(D1–D69), and each acceptance criterion maps to its tests in [`docs/acceptance.md`](docs/acceptance.md).
-For users, start with [`docs/user-guide.md`](docs/user-guide.md).
+Last updated 2026-10-13, after the October round (branch `feat/october-round`, P0–P4).
+The plan is [`docs/PLAN.md`](docs/PLAN.md); the October round's plan is
+`sandbox/07-october-plan-handover.md`. Departures are in [`docs/deviations.md`](docs/deviations.md)
+(D1–D111), and each acceptance criterion maps to its tests in [`docs/acceptance.md`](docs/acceptance.md)
+(AC-1–AC-40, plus OR-1–OR-20 for the October round). For users, start with
+[`docs/user-guide.md`](docs/user-guide.md).
 
-## Where things stand
+## October round (2026-10-13)
+
+| Phase | State | Commits |
+|---|---|---|
+| P0 groundwork (lifecycle, registry migrations, cancel-aware IPC, split service, cards and commands) | ✅ | `dc14985` |
+| P1 safety fixes (L1 install, L2 core, L3a AHP/OpenCode, L3b Cursor/VS Code, L4 Webex) | ✅ | `94ffb44`, `90cf39b` |
+| P2 phone UX (L5–L11: cards, queue modes, screen-lock away, attachments, `/ws`, recall skill) | ✅ | `aa28713`, `ce6712b`, `1b3f2ce`, `8936007`, `ae4de94` |
+| P3 L12 one bot per app | ✅ | `a0bde79` |
+| P3 L13 create the bots (live) | ✅ | none (live setup, D111) |
+| P4 docs and final tox | ✅ | pending the orchestrator's commit |
+
+What is left is the set of human live checks, once:
+
+- [ ] A submit inside a show-card includes the parent card's inputs on Webex Android (`/new`; if not,
+      `webex.new_card_layout = "two"`).
+- [ ] A card can be edited after a submit (D8).
+- [ ] Notifications show the bot name clearly; space sections sync to the phone.
+- [ ] Screen lock turns away mode on and off.
+- [ ] A photo reaches each app natively; an HTTPS clone works under launchd.
+- [ ] Window reload vs VS Code follow-ups (D85).
+- [ ] Regenerate the first app bot's token if the L13 transcript is ever shared (D111).
+
+## Where things stood after C15 (2026-10-04)
 
 - **Code:** checkpoints C0–C14 are built and committed. C15 (live verification) is nearly done: all
   five apps have passed the live smoke test.

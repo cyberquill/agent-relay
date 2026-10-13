@@ -61,3 +61,23 @@ def test_an_open_box_says_what_it_waits_for() -> None:
     for row in rows():
         if row["box"] == " ":
             assert "(pending C15:" in row["rest"], f"{row['ac']} is open without a reason"
+
+
+OCTOBER_ROW = re.compile(r"^- \[(?P<box>[ x])\] \*\*(?P<id>OR-\d+)\*\* (?P<rest>.+)$", re.MULTILINE)
+
+
+def test_the_october_round_rows_are_sequential_ticked_and_cite_files_that_exist() -> None:
+    text = ACCEPTANCE.read_text(encoding="utf-8")
+    section = text.split("## October round (beyond the plan)", 1)
+    assert len(section) == 2, "acceptance.md has no October round section"
+    found = list(OCTOBER_ROW.finditer(section[1]))
+    ids = [row["id"] for row in found]
+    assert ids, "the October round section lists nothing"
+    assert len(ids) == len(set(ids))
+    assert ids == [f"OR-{n}" for n in range(1, len(ids) + 1)]
+    for row in found:
+        assert row["box"] == "x", f"{row['id']} is not ticked"
+        cited = CITED.findall(row["rest"])
+        assert cited, f"{row['id']} cites no test"
+        for name in cited:
+            assert (ROOT / name).is_file(), f"{row['id']}: {name} does not exist"
