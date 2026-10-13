@@ -1,0 +1,21 @@
+tests/frontends/test_apps.py
+  s_7b806b1b8235c3::t_8a1e75223c5b1c 1-8
+agent_relay/frontends/apps.py
+  s_7b806b1b8235c3::t_6d3497b13ece5c 1-19
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ce6712bbdbb20008a65e5eef54f251b5edff2ffd",
+  "prompts": {},
+  "sessions": {
+    "s_7b806b1b8235c3": {
+      "agent_id": {
+        "tool": "github-copilot",
+        "id": "baffa963-569f-4158-ae6a-f869c671ef19",
+        "model": "copilot/claude-opus-5.5"
+      },
+      "human_author": "Brijgopal Bharadwaj <brijgopalbharadwaj1999@gmail.com>"
+    }
+  }
+}
