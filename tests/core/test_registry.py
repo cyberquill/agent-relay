@@ -194,6 +194,32 @@ async def test_migrating_an_old_database_cleans_it_up(relay_home: Path) -> None:
     await migrated.close()
 
 
+async def test_a_thread_made_before_several_bots_reads_with_no_bot(relay_home: Path) -> None:
+    db = paths.db_path()
+    reg = Registry(db)
+    await reg.open()
+    await reg.create_session(_session("old"))
+    await reg.update_session_fields("old", webex_thread_id="thread-old")
+    await reg.close()
+    raw = sqlite3.connect(db)
+    raw.execute("ALTER TABLE sessions DROP COLUMN webex_bot")
+    raw.execute(f"PRAGMA user_version = {len(MIGRATIONS) - 1}")
+    raw.commit()
+    raw.close()
+
+    migrated = Registry(db)
+    await migrated.open()
+    old = await migrated.get_session("old")
+    assert old is not None and (old.webex_thread_id, old.webex_bot) == ("thread-old", None)
+    await migrated.create_session(_session("new").model_copy(update={"webex_bot": "cursor"}))
+    await migrated.update_session_fields("old", webex_bot="control")
+    assert {(s.session_key, s.webex_bot) for s in await migrated.list_sessions()} == {
+        ("new", "cursor"),
+        ("old", "control"),
+    }
+    await migrated.close()
+
+
 async def test_rows_this_build_cannot_read_are_skipped(registry: Registry, relay_home: Path) -> None:
     await registry.create_session(_session("good"))
     await registry.create_session(_session("odd"))

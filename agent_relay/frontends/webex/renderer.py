@@ -25,11 +25,12 @@ from agent_relay.core.service.sessions import Changes, git_changes
 from agent_relay.frontends import card_state, request_cards
 from agent_relay.frontends.webex import cards
 from agent_relay.frontends.webex.api import MAX_EDITS, EditLimitError, Message, WebexApi, text_bytes
+from agent_relay.frontends.webex.bots import scoped
 from agent_relay.frontends.webex.cards import completion as completion_card
 from agent_relay.frontends.webex.links import neutralise_links
 from agent_relay.hook.shims import abbreviate
 from agent_relay.log import get_logger, log_body
-from agent_relay.models.config import QueueMode, RendererConfig
+from agent_relay.models.config import CONTROL, BotName, QueueMode, RendererConfig
 from agent_relay.models.events import (
     ApprovalRequested,
     ApprovalResolved,
@@ -122,23 +123,25 @@ class Pacer:
 
 
 class Outbox:
-    """Posts to the user's 1:1 room, learning its id from the first reply."""
+    """Posts to the user's 1:1 room with one bot, learning its id from the first reply."""
 
-    def __init__(self, api: WebexApi, registry: Registry, allowed_email: str) -> None:
+    def __init__(self, api: WebexApi, registry: Registry, allowed_email: str, bot: BotName = CONTROL) -> None:
         self.api = api
+        self.bot = bot
         self._registry = registry
         self._email = allowed_email
         self._room_id: str | None = None
+        self._room_key = scoped(ROOM_KEY, bot)
 
     async def room_id(self) -> str | None:
         if self._room_id is None:
-            self._room_id = await self._registry.kv_get(ROOM_KEY)
+            self._room_id = await self._registry.kv_get(self._room_key)
         return self._room_id
 
     async def remember_room(self, room_id: str) -> None:
         if room_id and room_id != self._room_id:
             self._room_id = room_id
-            await self._registry.kv_set(ROOM_KEY, room_id)
+            await self._registry.kv_set(self._room_key, room_id)
 
     async def post(
         self,
@@ -224,6 +227,10 @@ class WebexRenderer:
         self._creating: dict[str, asyncio.Lock] = {}
         self._locks: dict[str, asyncio.Lock] = {}
 
+    @property
+    def bot(self) -> BotName:
+        return self.outbox.bot
+
     # threads
 
     async def thread_for(self, session: SessionRecord) -> str:
@@ -252,7 +259,9 @@ class WebexRenderer:
         await self._pacer.wait("root")
         markdown = cards.root_markdown(session)
         message = await self.outbox.post(markdown)
-        await self._registry.update_session_fields(session.session_key, webex_thread_id=message.id)
+        await self._registry.update_session_fields(
+            session.session_key, webex_thread_id=message.id, webex_bot=self.bot
+        )
         self._threads[session.session_key] = _Thread(session.session_key, message.id, last_root=markdown)
         return message.id
 

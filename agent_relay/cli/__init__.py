@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import typer
 
-from agent_relay.cli import config, daemon, pwa, selftest, skills, workspaces
+from agent_relay.cli import config, daemon, pwa, selftest, setup, skills, workspaces
 from agent_relay.cli.doctor import doctor
 from agent_relay.cli.install import install, uninstall
 
@@ -14,6 +14,7 @@ app.add_typer(skills.app, name="skills")
 app.add_typer(pwa.app, name="pwa")
 app.add_typer(workspaces.app, name="ws")
 app.add_typer(selftest.app, name="selftest")
+app.add_typer(setup.app, name="setup")
 app.command("doctor")(doctor)
 app.command("install")(install)
 app.command("uninstall")(uninstall)

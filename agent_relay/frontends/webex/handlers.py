@@ -18,6 +18,8 @@ from agent_relay.frontends.card_state import InvalidInput
 from agent_relay.frontends.commands import Command, HelpHint, Invalid, Prompt, Unknown
 from agent_relay.frontends.surface import Surface
 from agent_relay.frontends.webex import cards
+from agent_relay.frontends.webex.bots import BOT_LABELS, BotScope
+from agent_relay.frontends.webex.routing import BotRenderers
 from agent_relay.log import get_logger
 from agent_relay.models.attachments import Received
 from agent_relay.models.capabilities import Capability
@@ -52,27 +54,38 @@ async def health_summary(service: RelayService) -> str:
 
 
 class Handlers:
+    """Commands and card taps for one bot's space.
+
+    `scope` says which apps this space serves; `sessions` is the router that finds a session's own bot,
+    so a reply about a session lands in that session's thread whichever space the command came from.
+    """
+
     def __init__(
         self,
         service: RelayService,
         renderer: Surface,
         doctor: Callable[[], Awaitable[str]] | None = None,
         inbox: Inbox | None = None,
+        scope: BotScope | None = None,
+        sessions: BotRenderers | None = None,
     ) -> None:
         self.service = service
         self.renderer = renderer
+        self.scope = scope or BotScope()
+        self._sessions = sessions
+        self.threads: Surface = sessions or renderer
         self.doctor = doctor or (lambda: health_summary(service))
         self.inbox = inbox
 
     async def reply(self, ctx: Context, markdown: str, file: tuple[str, bytes, str] | None = None) -> None:
         if ctx.session is not None:
-            await self.renderer.post_in_thread(ctx.session, markdown, file=file)
+            await self.threads.post_in_thread(ctx.session, markdown, file=file)
         else:
             await self.renderer.post_top(markdown)
 
     async def card(self, ctx: Context, fallback: str, card: dict[str, JsonValue]) -> None:
         if ctx.session is not None:
-            await self.renderer.post_in_thread(ctx.session, fallback, card=card)
+            await self.threads.post_in_thread(ctx.session, fallback, card=card)
         else:
             await self.renderer.post_top(fallback, card=card)
 
@@ -137,6 +150,8 @@ class Handlers:
         label = APP_LABELS.get(harness, harness.value) if harness else ""
         if harness and adapter is None:
             raise InvalidInput(f"{label} is not enabled.")
+        if harness and not self.scope.serves(harness):
+            raise InvalidInput(f"{label} has its own space; start it there.")
         if adapter and not adapter.capabilities.has(Capability.COLD_START):
             raise InvalidInput(f"{label} cannot start sessions from the phone.")
         if ws and resolve_workspace(ws, load_workspaces()) is None:
@@ -198,10 +213,19 @@ class Handlers:
             raise
         if received is not None and self.inbox is not None:
             await self.inbox.claim(session.session_key, received)
-        await self.renderer.thread_for(session)
+        await self.threads.thread_for(session)
         if received is not None:
             await self._report_files(Context(session), harness, received, True)
+        await self._say_where(session)
         return session
+
+    async def _say_where(self, session: SessionRecord) -> None:
+        """A session started from the control space lives in its app's space; say so where it was asked."""
+        if self._sessions is None:
+            return
+        owner = self._sessions.owner(session)
+        if owner != self.scope.bot:
+            await self.reply(Context(None), f"🧵 Started in the {BOT_LABELS[owner]} space.")
 
     async def _start(self, app: str, ws: str, model: str, prompt: str, *, away_on: bool = False) -> None:
         svc = self.service
@@ -223,7 +247,7 @@ class Handlers:
                     Context(session), f"⚠️ The session started, but away mode is still off: {exc}"
                 )
         await svc.registry.kv_set(LAST_WORKSPACE_KEY, target.name)
-        await self.renderer.thread_for(session)
+        await self.threads.thread_for(session)
 
     async def _app_option(self, info: AppInfo, preferred: JsonValue) -> cards.AppOption:
         """One app for the card: its listed models (utility ones hidden) and which to preselect."""
@@ -258,7 +282,11 @@ class Handlers:
         only = resolve_app(wanted) if isinstance(wanted, str) and wanted else None
         options: list[cards.AppOption] = []
         for info in await self.service.apps():
-            if Capability.COLD_START in info.capabilities and only in (None, info.harness):
+            if (
+                self.scope.serves(info.harness)
+                and Capability.COLD_START in info.capabilities
+                and only in (None, info.harness)
+            ):
                 options.append(await self._app_option(info, carry.get("model")))
         return options
 

@@ -27,10 +27,13 @@ from agent_relay.ops import launchd, stepping_away
 from agent_relay.ops.bundles import SKILL_NAME
 from agent_relay.settings import (
     KEYCHAIN_UNLOCK_COMMAND,
-    SECRET_SETUP_COMMAND,
+    Item,
     KeychainLockedError,
     Secret,
+    bot_item,
+    configured_bots,
     lookup_secret,
+    setup_command,
 )
 from agent_relay.sync.plan import plan_sync
 from agent_relay.sync.secrets import MissingMcpSecretError, Resolver, keychain_resolver
@@ -223,22 +226,36 @@ PATCH_STATUS: dict[stepping_away.PatchState, tuple[Status, str]] = {
 
 
 def keychain_checks(config: RelayConfig) -> list[Check]:
-    wanted: list[tuple[Secret, Status, str]] = [(Secret.WEBEX_BOT_TOKEN, "fail", "relayd cannot reach Webex")]
+    bots = configured_bots(config.webex)
+    several = len(bots) > 1
+    wanted: list[tuple[Item, str, Status, str]] = []
+    for bot in bots:
+        item = bot_item(config.webex, bot)
+        named = f"{item.value} ({bot} bot)" if several else item.value
+        why = f"the {bot} bot cannot reach Webex" if several else "relayd cannot reach Webex"
+        wanted.append((item, named, "fail", why))
     if config.adapters.opencode:
         wanted.append(
-            (Secret.OPENCODE_PASSWORD, "warn", "the OpenCode launch agent will not start the server")
+            (
+                Secret.OPENCODE_PASSWORD,
+                Secret.OPENCODE_PASSWORD.value,
+                "warn",
+                "the OpenCode launch agent will not start the server",
+            )
         )
     if config.pwa.enabled:
-        wanted.append((Secret.PWA_TOKEN, "fail", "the PWA cannot authenticate the phone"))
+        wanted.append(
+            (Secret.PWA_TOKEN, Secret.PWA_TOKEN.value, "fail", "the PWA cannot authenticate the phone")
+        )
     checks: list[Check] = []
-    for secret, missing, why in wanted:
+    for secret, name, missing, why in wanted:
         try:
             present = lookup_secret(secret) is not None
         except KeychainLockedError:
             checks.append(
                 Check(
                     area="Keychain",
-                    name=secret.value,
+                    name=name,
                     status=missing,
                     detail=f"the login Keychain is locked, so this cannot be read; {why}",
                     fix=KEYCHAIN_UNLOCK_COMMAND,
@@ -246,14 +263,14 @@ def keychain_checks(config: RelayConfig) -> list[Check]:
             )
             continue
         checks.append(
-            Check(area="Keychain", name=secret.value, status="ok", detail="present")
+            Check(area="Keychain", name=name, status="ok", detail="present")
             if present
             else Check(
                 area="Keychain",
-                name=secret.value,
+                name=name,
                 status=missing,
                 detail=f"missing; {why}",
-                fix=SECRET_SETUP_COMMAND[secret],
+                fix=setup_command(secret),
             )
         )
     return checks

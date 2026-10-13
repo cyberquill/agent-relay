@@ -9,7 +9,7 @@ import logging
 import os
 import signal
 import sys
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
 from typing import IO
 
@@ -36,12 +36,21 @@ from agent_relay.doctor.daemon import DaemonView, WebexLink, daemon_checks
 from agent_relay.doctor.model import Check
 from agent_relay.frontends.pwa.server import build_pwa
 from agent_relay.frontends.webex.bot import WebexFrontend, build_frontend
+from agent_relay.frontends.webex.routing import BotRenderers
 from agent_relay.frontends.webex.ws_client import Connector, WebexWsClient, default_connector
 from agent_relay.ipc import IpcServer
 from agent_relay.log import configure, default_log_file, get_logger, set_debug_bodies
-from agent_relay.models.config import RelayConfig
+from agent_relay.models.config import CONTROL, BotName, RelayConfig
 from agent_relay.models.sessions import SessionRecord
-from agent_relay.settings import KeychainLockedError, MissingSecretError, Secret, load_config, require_secret
+from agent_relay.settings import (
+    KeychainLockedError,
+    MissingSecretError,
+    Secret,
+    bot_item,
+    configured_bots,
+    load_config,
+    require_secret,
+)
 
 log = get_logger(__name__)
 
@@ -93,6 +102,8 @@ class Core:
     hooks: HookService = field(init=False)
     notify_targets: list[Callable[[SessionRecord, str], Awaitable[None]]] = field(default_factory=list)
     webex: WebexLink | None = None
+    # Every Webex bot's link by name; `webex` is the control bot's.
+    webex_bots: dict[str, WebexLink] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         self.lifecycle = Lifecycle(self.registry, self.router, self.signals, self.router.adapter)
@@ -127,7 +138,8 @@ class Core:
         }
 
     async def daemon_checks(self) -> list[Check]:
-        return await daemon_checks(DaemonView(self.service, self.registry, self.config, self.webex))
+        view = DaemonView(self.service, self.registry, self.config, self.webex, self.webex_bots)
+        return await daemon_checks(view)
 
     async def doctor_text(self) -> str:
         report = await doctor.run(self.config, sys.executable, self.daemon_checks)
@@ -225,7 +237,14 @@ async def serve(
     connector: Connector = default_connector,
     pwa_token: str | None = None,
     lock_probe: Probe = probe_lock_state,
+    bot_tokens: Mapping[BotName, str] | None = None,
+    bot_http: Mapping[BotName, httpx.AsyncClient] | None = None,
 ) -> None:
+    """Run relayd. `token` is the control bot's; `bot_tokens` holds one per app bot in `webex.bots`."""
+    bots = configured_bots(config.webex)
+    tokens: dict[BotName, str] = {CONTROL: token, **(bot_tokens or {})}
+    if missing := [bot for bot in bots if bot not in tokens]:
+        raise ConfigError(f"no Webex token for bot(s): {', '.join(missing)}")
     registry = Registry(paths.db_path())
     await registry.open()
     core = Core(config, registry)
@@ -235,14 +254,26 @@ async def serve(
     expired = await core.broker.sweep()
     if expired:
         log.info(f"expired {expired} pending request(s) left from the last run")
-    frontend: WebexFrontend
-    ws: WebexWsClient
-    frontend, ws = await build_frontend(
-        token, config, registry, core.service, http, connector, doctor=core.doctor_text
-    )
-    core.webex = ws
-    core.router.subscribe(frontend.renderer)
-    core.notify_targets.append(lambda s, text: _post(frontend, s, text))
+    renderers = BotRenderers(registry)
+    frontends: dict[BotName, WebexFrontend] = {}
+    sockets: dict[BotName, WebexWsClient] = {}
+    for bot in bots:
+        frontends[bot], sockets[bot] = await build_frontend(
+            tokens[bot],
+            config,
+            registry,
+            core.service,
+            http if bot == CONTROL else (bot_http or {}).get(bot),
+            connector,
+            doctor=core.doctor_text,
+            bot=bot,
+            renderers=renderers,
+        )
+    core.webex = sockets[CONTROL]
+    for bot, link in sockets.items():
+        core.webex_bots[bot] = link
+    core.router.subscribe(renderers)
+    core.notify_targets.append(lambda s, text: _post(renderers, s, text))
     hub = BridgeHub()
     for adapter in build_adapters(config, registry, hub):
         core.router.add_adapter(adapter)
@@ -250,16 +281,21 @@ async def serve(
     await ipc.start()
 
     async def post_top(text: str) -> None:
-        await frontend.renderer.post_top(text)
+        await renderers.post_top(text)
+
+    for bot, frontend in frontends.items():
+        await _hello(frontend, bot)
 
     watcher = UpdateWatcher(registry, build_selftests(config, registry), post_top)
     tasks = [
-        asyncio.create_task(ws.run(), name="webex-ws"),
-        asyncio.create_task(frontend.ticker(), name="renderer-tick"),
         asyncio.create_task(core.broker.sweeper(), name="pending-sweeper"),
         asyncio.create_task(housekeeper(registry), name="housekeeper"),
         asyncio.create_task(watcher.run(), name="update-watcher"),
     ]
+    for bot in bots:
+        suffix = "" if bot == CONTROL else f":{bot}"
+        tasks.append(asyncio.create_task(sockets[bot].run(), name=f"webex-ws{suffix}"))
+        tasks.append(asyncio.create_task(frontends[bot].ticker(), name=f"renderer-tick{suffix}"))
     pwa = build_pwa(config.pwa, core.service, core.router, pwa_token, core.doctor_text)
     if pwa is not None:
         tasks.append(asyncio.create_task(pwa.server.run(), name="pwa"))
@@ -307,14 +343,23 @@ async def _announce(post_top: Callable[[str], Awaitable[None]], text: str) -> No
         log.warning(f"could not post 'Mac online': {exc.__class__.__name__}")
 
 
-async def _post(frontend: WebexFrontend, session: SessionRecord, text: str) -> None:
-    await frontend.renderer.post_in_thread(session, text)
+async def _post(renderers: BotRenderers, session: SessionRecord, text: str) -> None:
+    await renderers.post_in_thread(session, text)
+
+
+async def _hello(frontend: WebexFrontend, bot: BotName) -> None:
+    """Open an app bot's space on its first start; a failure is logged and tried again next start."""
+    try:
+        if await frontend.hello():
+            log.info(f"opened the {bot} bot's space")
+    except Exception as exc:
+        log.warning(f"could not open the {bot} bot's space: {exc.__class__.__name__}")
 
 
 def preflight() -> tuple[RelayConfig, str]:
     """Load config and the bot token, or raise with the command that fixes it."""
     config = load_config()
-    token = require_secret(Secret.WEBEX_BOT_TOKEN)
+    token = require_secret(bot_item(config.webex, CONTROL))
     if not config.webex.allowed_email:
         raise ConfigError(
             "webex.allowed_email is not set. Run: relay config set webex.allowed_email you@example.com"
@@ -322,9 +367,19 @@ def preflight() -> tuple[RelayConfig, str]:
     return config, token
 
 
+def preflight_bots(config: RelayConfig) -> dict[BotName, str]:
+    """The token of every app bot in `webex.bots`, or raise with the command that stores it."""
+    return {
+        bot: require_secret(bot_item(config.webex, bot))
+        for bot in configured_bots(config.webex)
+        if bot != CONTROL
+    }
+
+
 def main() -> int:
     try:
         config, token = preflight()
+        bot_tokens = preflight_bots(config)
         pwa_token = require_secret(Secret.PWA_TOKEN) if config.pwa.enabled else None
     except (MissingSecretError, KeychainLockedError, ConfigError) as exc:
         sys.stderr.write(f"relayd: {exc}\n")
@@ -343,7 +398,7 @@ def main() -> int:
         loop = asyncio.get_running_loop()
         for sig in (signal.SIGTERM, signal.SIGINT):
             loop.add_signal_handler(sig, stop.set)
-        await serve(config, token, stop, pwa_token=pwa_token)
+        await serve(config, token, stop, pwa_token=pwa_token, bot_tokens=bot_tokens)
 
     try:
         asyncio.run(_run())

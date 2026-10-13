@@ -15,16 +15,19 @@ from agent_relay.frontends import actions, commands
 from agent_relay.frontends.webex.access import AccessControl
 from agent_relay.frontends.webex.api import AttachmentAction, Message, WebexApi, WebexError
 from agent_relay.frontends.webex.attachments import AttachmentIntake
+from agent_relay.frontends.webex.bots import APP_HARNESSES, BOT_LABELS, BotScope, scoped
 from agent_relay.frontends.webex.handlers import Context, Handlers
 from agent_relay.frontends.webex.renderer import Outbox, WebexRenderer
+from agent_relay.frontends.webex.routing import BotRenderers
 from agent_relay.frontends.webex.ws_client import Activity, Connector, WebexWsClient, default_connector
 from agent_relay.log import get_logger, log_body
-from agent_relay.models.config import AttachmentsConfig, RelayConfig
+from agent_relay.models.config import CONTROL, AttachmentsConfig, BotName, RelayConfig
 from agent_relay.models.events import utcnow
 
 log = get_logger(__name__)
 
 LAST_SEEN_KEY = "webex.last_seen"
+HELLO_KEY = "webex.hello"
 CATCH_UP_PAGES = 10
 TOP_LANE = "top"
 IMMEDIATE_COMMANDS = frozenset({"panic", "stop"})  # never queued behind a slow handler
@@ -56,6 +59,8 @@ class WebexFrontend:
             handlers.inbox = self.intake.inbox
         self._access = access
         self._bot_id = bot_person_id
+        self.bot: BotName = renderer.bot
+        self._last_seen_key = scoped(LAST_SEEN_KEY, self.bot)
         self._sleep = sleep
         self._lock = asyncio.Lock()
         self._tasks: set[asyncio.Task[None]] = set()
@@ -64,21 +69,42 @@ class WebexFrontend:
 
     # exactly-once bookkeeping
 
+    def _seen_key(self, message_id: str) -> str:
+        return scoped(f"{SEEN_PREFIX}{message_id}", self.bot)
+
     async def _claim(self, message_id: str) -> bool:
         """Mark a message processed. Returns False if it was already handled."""
         async with self._lock:
-            if await self._registry.kv_get(f"{SEEN_PREFIX}{message_id}") is not None:
+            if await self._registry.kv_get(self._seen_key(message_id)) is not None:
                 return False
-            await self._registry.kv_set(f"{SEEN_PREFIX}{message_id}", utcnow().isoformat())
+            await self._registry.kv_set(self._seen_key(message_id), utcnow().isoformat())
             return True
 
     async def _unclaim(self, message_id: str) -> None:
         """Let a message or card tap that failed before it was handled be handled when it comes again."""
         with contextlib.suppress(Exception):
-            await self._registry.kv_delete(f"{SEEN_PREFIX}{message_id}")
+            await self._registry.kv_delete(self._seen_key(message_id))
 
     async def _remember_last(self, message: Message) -> None:
-        await self._registry.kv_set(LAST_SEEN_KEY, message.id)
+        await self._registry.kv_set(self._last_seen_key, message.id)
+
+    async def hello(self) -> bool:
+        """Open this app bot's 1:1 space once: a first message to the allowed email creates it.
+
+        Skipped for the control bot (its first post does this) and for a bot that already has a space.
+        """
+        if self.bot == CONTROL:
+            return False
+        marker = scoped(HELLO_KEY, self.bot)
+        if await self.renderer.outbox.room_id() is not None or await self._registry.kv_get(marker):
+            return False
+        apps = ", ".join(f"`{h.value}`" for h in APP_HARNESSES[self.bot])
+        await self.renderer.outbox.post(
+            f"👋 **{BOT_LABELS[self.bot]}** is ready. Sessions for {apps} live in this space. "
+            "`/help` lists commands."
+        )
+        await self._registry.kv_set(marker, utcnow().isoformat())
+        return True
 
     # tasks
 
@@ -246,7 +272,7 @@ class WebexFrontend:
     async def catch_up(self) -> int:
         """Process messages that arrived while disconnected, oldest first. Returns how many."""
         room = await self.renderer.outbox.room_id()
-        last = await self._registry.kv_get(LAST_SEEN_KEY)
+        last = await self._registry.kv_get(self._last_seen_key)
         if room is None or last is None:
             return 0
         missed: list[Message] = []
@@ -267,7 +293,7 @@ class WebexFrontend:
         for message in reversed(missed):
             if message.person_id == self._bot_id:
                 continue
-            if await self._registry.kv_get(f"{SEEN_PREFIX}{message.id}") is not None:
+            if await self._registry.kv_get(self._seen_key(message.id)) is not None:
                 continue
             await self.handle_message(message)
             handled += 1
@@ -292,11 +318,15 @@ async def build_frontend(
     http: httpx.AsyncClient | None = None,
     connector: Connector = default_connector,
     doctor: Callable[[], Awaitable[str]] | None = None,
+    *,
+    bot: BotName = CONTROL,
+    renderers: BotRenderers | None = None,
 ) -> tuple[WebexFrontend, WebexWsClient]:
+    """One bot's front end and websocket client; with `renderers`, its renderer joins the router."""
     client = http or httpx.AsyncClient(headers={"Authorization": f"Bearer {token}"}, timeout=30)
     api = WebexApi(client, config.webex.api_base)
     me = await api.me()
-    outbox = Outbox(api, registry, config.webex.allowed_email)
+    outbox = Outbox(api, registry, config.webex.allowed_email, bot)
     renderer = WebexRenderer(
         outbox,
         registry,
@@ -304,8 +334,12 @@ async def build_frontend(
         config.approvals.deadline_s,
         default_queue_mode=config.queue.default_mode,
     )
+    if renderers is not None:
+        renderers.add(renderer)
     inbox = Inbox(registry, config.attachments)
-    handlers = Handlers(service, renderer, doctor=doctor, inbox=inbox)
+    handlers = Handlers(
+        service, renderer, doctor=doctor, inbox=inbox, scope=BotScope.for_bot(bot), sessions=renderers
+    )
     access = AccessControl(registry, config.webex.allowed_email, me.id)
     frontend = WebexFrontend(
         api, registry, service, renderer, handlers, access, me.id, intake=AttachmentIntake(api, inbox)

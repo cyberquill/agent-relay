@@ -159,6 +159,59 @@ async def test_serve_boots_answers_ipc_and_webex_then_stops() -> None:
     assert not paths.socket_path().exists()
 
 
+def _two_bot_config(webex: FakeWebex) -> RelayConfig:
+    return RelayConfig(
+        webex=WebexConfig(allowed_email=webex.user_email, u2c_url=U2C, bots={"vscode": "webex-bot-vscode"}),
+        adapters=AdaptersConfig(opencode=False, ahp=False, cursor_cli=False),
+    )
+
+
+def test_a_missing_app_bot_token_exits_2_with_the_stdin_setup_command(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    set_secret(Secret.WEBEX_BOT_TOKEN, "test-token")
+    save_config(_two_bot_config(FakeWebex()))
+    assert daemon.main() == daemon.EXIT_CONFIG
+    err = capsys.readouterr().err
+    assert "webex-bot-vscode" in err and "relay setup bot vscode --stdin" in err
+    assert "test-token" not in err
+
+
+async def test_serve_refuses_a_configured_bot_without_a_token() -> None:
+    webex = FakeWebex()
+    async with webex.client() as http:
+        with pytest.raises(daemon.ConfigError, match="vscode"):
+            await daemon.serve(
+                _two_bot_config(webex), "test-token", asyncio.Event(), http, lock_probe=_unlocked
+            )
+
+
+async def test_serve_runs_one_websocket_per_bot_and_each_app_bot_says_hello() -> None:
+    control, vscode = FakeWebex(), FakeWebex(name="vscode")
+    stop = asyncio.Event()
+    async with control.client() as http, vscode.client() as vscode_http:
+        server = asyncio.create_task(
+            daemon.serve(
+                _two_bot_config(control),
+                "test-token",
+                stop,
+                http,
+                IdleSocket([]).connect,
+                lock_probe=_unlocked,
+                bot_tokens={"vscode": "vscode-token"},
+                bot_http={"vscode": vscode_http},
+            )
+        )
+        await _until(lambda: paths.socket_path().exists())
+        await _until(lambda: any("VS Code" in m.text for m in vscode.bot_messages()))
+        names = {t.get_name() for t in asyncio.all_tasks()}
+        assert {"webex-ws", "webex-ws:vscode", "renderer-tick", "renderer-tick:vscode"} <= names
+        stop.set()
+        await asyncio.wait_for(server, 5)
+    assert not control.violations and not vscode.violations
+    assert len([m for m in vscode.bot_messages() if "VS Code" in m.text]) == 1
+
+
 def _presence_config(webex: FakeWebex, *, auto_away_on_lock: bool = True) -> RelayConfig:
     return RelayConfig(
         webex=WebexConfig(allowed_email=webex.user_email, u2c_url=U2C),

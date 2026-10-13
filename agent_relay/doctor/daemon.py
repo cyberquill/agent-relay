@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
-from dataclasses import dataclass
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, field
 from typing import Protocol
 
 from agent_relay import paths
@@ -38,6 +38,8 @@ class DaemonView:
     registry: Registry
     config: RelayConfig
     webex: WebexLink | None = None
+    # Every bot's link by name; empty or one entry (control) is the single-bot case.
+    webex_bots: Mapping[str, WebexLink] = field(default_factory=dict)
     apps: Sequence[WatchedApp] = DEFAULT_APPS
 
 
@@ -93,22 +95,30 @@ async def cdp_gate_check(view: DaemonView) -> list[Check]:
     return [Check(area="Adapters", name="Cursor CDP gate", status="ok", detail=detail)]
 
 
-def webex_check(view: DaemonView) -> Check:
-    link = view.webex
+def _link_check(link: WebexLink | None, name: str) -> Check:
     if link is None:
-        return Check(area="Webex", name="websocket", status="info", detail="not started in this process")
+        return Check(area="Webex", name=name, status="info", detail="not started in this process")
     if link.connected:
-        return Check(
-            area="Webex", name="websocket", status="ok", detail=f"connected ({link.connections} so far)"
-        )
+        return Check(area="Webex", name=name, status="ok", detail=f"connected ({link.connections} so far)")
     detail = f"disconnected: {link.last_error}" if link.last_error else "connecting"
     return Check(
         area="Webex",
-        name="websocket",
+        name=name,
         status="fail" if link.last_error else "warn",
         detail=detail,
         fix="relayd reconnects on its own; check the network and the bot token",
     )
+
+
+def webex_check(view: DaemonView) -> Check:
+    return _link_check(view.webex, "websocket")
+
+
+def webex_checks(view: DaemonView) -> list[Check]:
+    """One check for the single bot, or one per bot, named with the bot, when there are several."""
+    if len(view.webex_bots) <= 1:
+        return [webex_check(view)]
+    return [_link_check(link, f"websocket ({bot})") for bot, link in view.webex_bots.items()]
 
 
 async def away_checks(view: DaemonView) -> list[Check]:
@@ -142,6 +152,6 @@ async def away_checks(view: DaemonView) -> list[Check]:
 async def daemon_checks(view: DaemonView) -> list[Check]:
     checks = await adapter_checks(view)
     checks += await cdp_gate_check(view)
-    checks.append(webex_check(view))
+    checks += webex_checks(view)
     checks += await away_checks(view)
     return checks

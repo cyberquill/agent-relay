@@ -65,6 +65,10 @@ def parse_value(raw: str) -> JsonValue:
     return value
 
 
+# Settings that are a name -> value map: `relay config set webex.bots.vscode <account>` adds an entry.
+MAP_SETTINGS = frozenset({"webex.bots"})
+
+
 def with_setting(config: RelayConfig, key: str, raw: str) -> RelayConfig:
     data: dict[str, JsonValue] = config.model_dump(mode="json")
     *sections, leaf = key.split(".")
@@ -74,7 +78,7 @@ def with_setting(config: RelayConfig, key: str, raw: str) -> RelayConfig:
         if not isinstance(child, dict):
             raise ValueError(f"unknown section {section!r} in {key!r}")
         node = child
-    if leaf not in node:
+    if leaf not in node and ".".join(sections) not in MAP_SETTINGS:
         raise ValueError(f"unknown setting {key!r}")
     node[leaf] = parse_value(raw)
     return RelayConfig.model_validate(data)

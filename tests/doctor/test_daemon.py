@@ -17,7 +17,14 @@ from agent_relay.core.service import RelayService
 from agent_relay.core.signals import Signals
 from agent_relay.core.updates import WatchedApp
 from agent_relay.daemon import Core
-from agent_relay.doctor.daemon import DaemonView, adapter_checks, away_checks, cdp_gate_check, webex_check
+from agent_relay.doctor.daemon import (
+    DaemonView,
+    adapter_checks,
+    away_checks,
+    cdp_gate_check,
+    webex_check,
+    webex_checks,
+)
 from agent_relay.doctor.model import Check, Report
 from agent_relay.models.config import CdpConfig, RelayConfig
 from agent_relay.models.events import Harness
@@ -86,6 +93,19 @@ def test_webex_check_tracks_the_link(registry: Registry) -> None:
     assert webex_check(view(registry, webex=Link())).status == "warn"
     dropped = webex_check(view(registry, webex=Link(last_error="websocket dropped (ConnectionClosed)")))
     assert dropped.status == "fail" and "ConnectionClosed" in dropped.detail
+
+
+def test_webex_checks_one_websocket_per_bot_when_there_are_several(registry: Registry) -> None:
+    control = Link(connected=True, connections=1)
+    single = webex_checks(view(registry, webex=control, webex_bots={"control": control}))
+    assert [(c.name, c.status) for c in single] == [("websocket", "ok")]
+    several = webex_checks(
+        view(registry, webex=control, webex_bots={"control": control, "cursor": Link(last_error="401")})
+    )
+    assert [(c.name, c.status) for c in several] == [
+        ("websocket (control)", "ok"),
+        ("websocket (cursor)", "fail"),
+    ]
 
 
 async def test_away_checks_show_scopes_and_panic(registry: Registry, tmp_path: Path) -> None:

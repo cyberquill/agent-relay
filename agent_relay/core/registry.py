@@ -107,11 +107,18 @@ def _stamp_seen_keys(conn: sqlite3.Connection) -> None:
     )
 
 
+def _add_session_bot(conn: sqlite3.Connection) -> None:
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(sessions)")}
+    if "webex_bot" not in columns:
+        conn.execute("ALTER TABLE sessions ADD COLUMN webex_bot TEXT")
+
+
 # Ordered and append-only: entry N moves the schema from version N-1 to N (`PRAGMA user_version`).
 MIGRATIONS: tuple[Callable[[sqlite3.Connection], None], ...] = (
     _add_pending_status_index,
     _drop_bogus_sticky_models,
     _stamp_seen_keys,
+    _add_session_bot,
 )
 
 
@@ -147,6 +154,7 @@ def _session_from_row(row: sqlite3.Row) -> SessionRecord:
         origin=Origin(row["origin"]),
         status=SessionStatus(row["status"]),
         webex_thread_id=row["webex_thread_id"],
+        webex_bot=row["webex_bot"],
         title=row["title"],
         extra=json.loads(row["extra"]),
         created=datetime.fromisoformat(row["created"]),
@@ -261,8 +269,8 @@ class Registry:
         now = utcnow()
         sql = """
         INSERT INTO sessions (session_key, harness, harness_id, workspace, model, origin, status,
-                              webex_thread_id, title, extra, created, updated)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                              webex_thread_id, webex_bot, title, extra, created, updated)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT DO NOTHING
         """
         params = (
@@ -274,6 +282,7 @@ class Registry:
             record.origin.value,
             record.status.value,
             record.webex_thread_id,
+            record.webex_bot,
             record.title,
             json.dumps(record.extra),
             _ts(record.created),
@@ -342,7 +351,7 @@ class Registry:
 
     async def update_session_fields(self, session_key: str, **fields: str | None) -> None:
         """Set just the named columns. `status` is not one of them: only the lifecycle changes it."""
-        allowed = {"model", "webex_thread_id", "title", "workspace", "harness", "harness_id"}
+        allowed = {"model", "webex_thread_id", "webex_bot", "title", "workspace", "harness", "harness_id"}
         unknown = set(fields) - allowed
         if unknown:
             raise ValueError(f"unknown session fields: {sorted(unknown)}")

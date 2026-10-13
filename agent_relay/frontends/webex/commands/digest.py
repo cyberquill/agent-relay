@@ -51,7 +51,7 @@ async def _digest(h: Handlers, ctx: Context, cmd: Command) -> None:
         waiting.setdefault(request.session_key, []).append(request.kind)
     now = utcnow()
     groups: dict[str, list[str]] = {"blocked": [], "running": [], "parked": [], "idle": [], "ended": []}
-    for session in await registry.list_sessions(include_ended=True):
+    for session in h.scope.keep(await registry.list_sessions(include_ended=True)):
         kinds = waiting.get(session.session_key)
         if kinds:
             parts = [

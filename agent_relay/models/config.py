@@ -2,13 +2,21 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Literal, get_args
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class _Section(BaseModel):
     model_config = ConfigDict(extra="forbid")
+
+
+BotName = Literal["control", "vscode", "cursor", "opencode"]
+BOT_NAMES: tuple[BotName, ...] = get_args(BotName)
+CONTROL: BotName = "control"
+# Keychain accounts of other secrets, which no bot may claim (a test keeps this equal to `settings.Secret`).
+OTHER_SECRET_ACCOUNTS = frozenset({"pwa-token", "opencode-password"})
+CONTROL_ACCOUNT = "webex-bot-token"
 
 
 class WebexConfig(_Section):
@@ -18,6 +26,23 @@ class WebexConfig(_Section):
     u2c_url: str = "https://u2c.wbx2.com/u2c/api/v1/catalog"
     # "two" splits `/new` into app + workspace + prompt, then model, if a phone mishandles ShowCard.
     new_card_layout: Literal["one", "two"] = "one"
+    # One bot, so one 1:1 space, per app: bot name -> the Keychain account that holds its token.
+    # Empty means the single bot (`webex-bot-token`) serves every app. `control` may be left out.
+    bots: dict[BotName, str] = Field(default_factory=dict)
+
+    @field_validator("bots")
+    @classmethod
+    def _accounts(cls, bots: dict[BotName, str]) -> dict[BotName, str]:
+        seen: dict[str, BotName] = {}
+        for bot, account in bots.items():
+            if not account or account != account.strip() or len(account.split()) != 1:
+                raise ValueError(f"webex.bots.{bot} must be a Keychain account name with no spaces")
+            if account in OTHER_SECRET_ACCOUNTS or (account == CONTROL_ACCOUNT and bot != CONTROL):
+                raise ValueError(f"webex.bots.{bot}: {account!r} holds another secret; pick its own name")
+            if account in seen:
+                raise ValueError(f"webex.bots.{bot} and {seen[account]} use the same Keychain account")
+            seen[account] = bot
+        return bots
 
 
 READ_ONLY_TOOLS: tuple[str, ...] = (

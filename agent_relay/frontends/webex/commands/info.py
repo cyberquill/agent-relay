@@ -17,7 +17,7 @@ async def _help(h: Handlers, ctx: Context, cmd: Command) -> None:
 
 
 async def _apps(h: Handlers, ctx: Context, cmd: Command) -> None:
-    apps = await h.service.apps()
+    apps = [a for a in await h.service.apps() if h.scope.serves(a.harness)]
     lines = [
         f"- {'✅' if a.healthy else '❌'} **{a.label}** (`{a.harness.value}`): "
         f"{', '.join(c.value for c in a.capabilities) or 'observe only'}"

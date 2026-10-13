@@ -94,11 +94,14 @@ def _multipart_fields(request: httpx.Request) -> tuple[dict[str, str], dict[str,
 
 
 class FakeWebex:
-    def __init__(self, user_email: str = "me@example.com") -> None:
-        self.bot_id = "bot-person"
+    def __init__(self, user_email: str = "me@example.com", name: str = "") -> None:
+        """`name` makes a second bot: its own person, 1:1 room and message ids, the same user."""
+        tag = f"-{name}" if name else ""
+        self._prefix = f"{name}-" if name else ""
+        self.bot_id = f"bot-person{tag}"
         self.user_id = "user-person"
         self.user_email = user_email
-        self.direct_room = "room-direct"
+        self.direct_room = f"room-direct{tag}"
         self.rooms: dict[str, str] = {self.direct_room: "direct", "room-group": "group"}
         self.messages: dict[str, FakeMessage] = {}
         self.order: list[str] = []
@@ -121,7 +124,7 @@ class FakeWebex:
         return httpx.AsyncClient(transport=self.transport(), headers={"Authorization": "Bearer test-token"})
 
     def _next(self, prefix: str) -> str:
-        return f"{prefix}-{next(self._ids)}"
+        return f"{self._prefix}{prefix}-{next(self._ids)}"
 
     # scenario helpers
 

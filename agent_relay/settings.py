@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import tomllib
+from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
 
@@ -11,7 +12,16 @@ import keyring.errors
 import tomli_w
 
 from agent_relay import paths
-from agent_relay.models.config import RelayConfig, Workspace, WorkspacesConfig
+from agent_relay.models.config import (
+    BOT_NAMES,
+    CONTROL,
+    CONTROL_ACCOUNT,
+    BotName,
+    RelayConfig,
+    WebexConfig,
+    Workspace,
+    WorkspacesConfig,
+)
 from agent_relay.sync import jsonc
 
 CODE_WORKSPACE_SUFFIX = ".code-workspace"
@@ -26,25 +36,66 @@ class Secret(StrEnum):
     OPENCODE_PASSWORD = "opencode-password"
 
 
+@dataclass(frozen=True)
+class BotItem:
+    """The Keychain item of a Webex bot other than the default control bot's `webex-bot-token`."""
+
+    bot: BotName
+    account: str
+
+    @property
+    def value(self) -> str:
+        return self.account
+
+
+type Item = Secret | BotItem
+
 SECRET_SETUP_COMMAND: dict[Secret, str] = {
     secret: f"security add-generic-password -U -s {KEYCHAIN_SERVICE} -a {secret.value} -w"
     for secret in Secret
 }
 
 
+def setup_command(item: Item) -> str:
+    """The command that stores `item`; a bot token is piped in so it never sits in argv or history."""
+    if isinstance(item, Secret):
+        return SECRET_SETUP_COMMAND[item]
+    return f"pbpaste | relay setup bot {item.bot} --stdin"
+
+
+def bot_account(webex: WebexConfig, bot: BotName) -> str:
+    """The Keychain account for `bot`: its `webex.bots` entry, else the default name."""
+    configured = webex.bots.get(bot)
+    if configured:
+        return configured
+    return CONTROL_ACCOUNT if bot == CONTROL else f"webex-bot-{bot}"
+
+
+def bot_item(webex: WebexConfig, bot: BotName) -> Item:
+    account = bot_account(webex, bot)
+    if bot == CONTROL and account == Secret.WEBEX_BOT_TOKEN.value:
+        return Secret.WEBEX_BOT_TOKEN
+    return BotItem(bot, account)
+
+
+def configured_bots(webex: WebexConfig) -> list[BotName]:
+    """The bots relayd runs: control always, then each app bot named in `webex.bots`."""
+    return [CONTROL, *(b for b in BOT_NAMES if b != CONTROL and b in webex.bots)]
+
+
 class MissingSecretError(RuntimeError):
-    def __init__(self, secret: Secret) -> None:
+    def __init__(self, secret: Item) -> None:
         self.secret = secret
         super().__init__(
             f"Keychain item '{secret.value}' (service '{KEYCHAIN_SERVICE}') is missing. "
-            f"Add it with: {SECRET_SETUP_COMMAND[secret]}"
+            f"Add it with: {setup_command(secret)}"
         )
 
 
 class KeychainLockedError(RuntimeError):
     """The Keychain refused to answer because it is locked or needs a user prompt."""
 
-    def __init__(self, secret: Secret | None = None) -> None:
+    def __init__(self, secret: Item | None = None) -> None:
         self.secret = secret
         what = f"'{secret.value}'" if secret else "the relay's secrets"
         super().__init__(
@@ -64,7 +115,7 @@ def _is_locked(exc: keyring.errors.KeyringError) -> bool:
     return any(marker in text for marker in _LOCKED_MARKERS)
 
 
-def lookup_secret(secret: Secret) -> str | None:
+def lookup_secret(secret: Item) -> str | None:
     """The stored value, None when absent or unreadable. Raises KeychainLockedError when locked."""
     try:
         value = keyring.get_password(KEYCHAIN_SERVICE, secret.value)
@@ -75,7 +126,7 @@ def lookup_secret(secret: Secret) -> str | None:
     return value or None
 
 
-def get_secret(secret: Secret) -> str | None:
+def get_secret(secret: Item) -> str | None:
     """Like lookup_secret, but a locked Keychain reads as absent. Use lookup_secret to tell them apart."""
     try:
         return lookup_secret(secret)
@@ -83,15 +134,26 @@ def get_secret(secret: Secret) -> str | None:
         return None
 
 
-def require_secret(secret: Secret) -> str:
+def require_secret(secret: Item) -> str:
     value = lookup_secret(secret)
     if value is None:
         raise MissingSecretError(secret)
     return value
 
 
-def set_secret(secret: Secret, value: str) -> None:
+def set_secret(secret: Item, value: str) -> None:
     keyring.set_password(KEYCHAIN_SERVICE, secret.value, value)
+
+
+def require_bot_token(webex: WebexConfig, bot: BotName) -> str:
+    return require_secret(bot_item(webex, bot))
+
+
+def set_bot_token(webex: WebexConfig, bot: BotName, token: str) -> Item:
+    """Store `bot`'s token in the Keychain; returns the item it went into."""
+    item = bot_item(webex, bot)
+    set_secret(item, token)
+    return item
 
 
 def load_config(file: Path | None = None) -> RelayConfig:

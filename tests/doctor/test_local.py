@@ -20,7 +20,7 @@ from agent_relay.fileops import Manifest, apply_writes
 from agent_relay.hook.installers import copilot as copilot_hooks
 from agent_relay.hook.installers import cursor as cursor_hooks
 from agent_relay.hook.installers import opencode as opencode_plugin
-from agent_relay.models.config import ApprovalConfig, PwaConfig, RelayConfig
+from agent_relay.models.config import ApprovalConfig, PwaConfig, RelayConfig, WebexConfig
 from agent_relay.ops import stepping_away
 from agent_relay.settings import KEYCHAIN_SERVICE, Secret
 from agent_relay.sync.plan import plan_import, plan_sync
@@ -171,6 +171,18 @@ def test_keychain_checks_follow_the_config() -> None:
     assert with_pwa["webex-bot-token"].status == "ok"
     assert with_pwa["pwa-token"].status == "fail"
     assert all("fake-bot-value" not in c.detail for c in with_pwa.values())
+
+
+def test_keychain_checks_one_per_bot_when_there_are_several() -> None:
+    config = RelayConfig(webex=WebexConfig(bots={"vscode": "webex-bot-vscode"}))
+    keyring.set_password(KEYCHAIN_SERVICE, Secret.WEBEX_BOT_TOKEN.value, "fake-bot-value-0000")
+    checks = by_name(local.keychain_checks(config))
+    assert checks["webex-bot-token (control bot)"].status == "ok"
+    vscode = checks["webex-bot-vscode (vscode bot)"]
+    assert vscode.status == "fail" and "vscode bot" in vscode.detail
+    assert vscode.fix == "pbpaste | relay setup bot vscode --stdin"
+    keyring.set_password(KEYCHAIN_SERVICE, "webex-bot-vscode", "fake-bot-value-1111")
+    assert by_name(local.keychain_checks(config))["webex-bot-vscode (vscode bot)"].status == "ok"
 
 
 def test_keychain_checks_say_locked_rather_than_missing(monkeypatch: pytest.MonkeyPatch) -> None:

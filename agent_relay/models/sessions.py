@@ -30,6 +30,8 @@ class SessionRecord(BaseModel):
     origin: Origin = Origin.DESK
     status: SessionStatus = SessionStatus.ACTIVE
     webex_thread_id: str | None = None
+    # The Webex bot whose space holds the thread; None on a thread made before there were several.
+    webex_bot: str | None = None
     title: str | None = None
     extra: dict[str, JsonValue] = Field(default_factory=dict)
     created: datetime = Field(default_factory=utcnow)

@@ -73,7 +73,7 @@ async def _new(h: Handlers, ctx: Context, cmd: Command) -> None:
 
 
 async def _sessions(h: Handlers, ctx: Context, cmd: Command) -> None:
-    sessions = await h.service.sessions()
+    sessions = h.scope.keep(await h.service.sessions())
     if not sessions:
         await h.reply(ctx, "No active sessions.")
         return
@@ -94,7 +94,7 @@ async def _models(h: Handlers, ctx: Context, cmd: Command) -> None:
 async def _apply_model(h: Handlers, ctx: Context, session: SessionRecord, model: str) -> None:
     await h.service.set_model(session.session_key, model)
     await h.reply(ctx, f"Model set to `{model}`.")
-    await h.renderer.refresh_root(await h.service.session(session.session_key))
+    await h.threads.refresh_root(await h.service.session(session.session_key))
 
 
 async def _model(h: Handlers, ctx: Context, cmd: Command) -> None:
