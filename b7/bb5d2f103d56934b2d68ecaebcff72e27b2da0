@@ -1,0 +1,47 @@
+agent_relay/core/service/away.py
+  s_0d44b4a2f559de::t_d30cb47b4cd09a 19-20,43,47,51-69,83,121-123,125,127
+agent_relay/core/hooks.py
+  s_0d44b4a2f559de::t_d30cb47b4cd09a 126
+tests/core/test_hooks.py
+  s_0d44b4a2f559de::t_121241495622cf 239-292
+docs/deviations.md
+  s_0d44b4a2f559de::t_7f7c385fde5dd6 119
+  s_0d44b4a2f559de::t_33efc459dec274 20
+agent_relay/adapters/vscode/adapter.py
+  s_0d44b4a2f559de::t_0c079f43108127 27,143-144,152-154,165,207,209,211,214-217
+  s_0d44b4a2f559de::t_9ed1a0f118a769 15-16
+agent_relay/core/phone.py
+  s_0d44b4a2f559de::t_d30cb47b4cd09a 50
+agent_relay/core/away.py
+  s_0d44b4a2f559de::t_d30cb47b4cd09a 9-16,25-45
+  s_4f3b957a1a2d20::t_536d9d0e895b0e 46-47
+docs/user-guide.md
+  s_0d44b4a2f559de::t_33efc459dec274 275,312-315
+  s_4f3b957a1a2d20::t_5de5c687a0abad 316
+tests/adapters/test_vscode.py
+  s_0d44b4a2f559de::t_99c7f126335d2d 18,278
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b7bb5d2f103d56934b2d68ecaebcff72e27b2da0",
+  "prompts": {},
+  "sessions": {
+    "s_0d44b4a2f559de": {
+      "agent_id": {
+        "tool": "github-copilot",
+        "id": "e1d49f56-5350-4690-96c6-88171ca1a2e1",
+        "model": "copilot/claude-opus-5.5"
+      },
+      "human_author": "Brijgopal Bharadwaj <brijgopalbharadwaj1999@gmail.com>"
+    },
+    "s_4f3b957a1a2d20": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "d9ec7f04-c1f7-4c00-81b7-08806856b4ff",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Brijgopal Bharadwaj <brijgopalbharadwaj1999@gmail.com>"
+    }
+  }
+}
