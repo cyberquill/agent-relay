@@ -96,6 +96,15 @@ def service_target(agent: LaunchAgent) -> str:
     return f"gui/{os.getuid()}/{agent.label}"
 
 
+def enable_command(agent: LaunchAgent) -> list[str]:
+    return ["launchctl", "enable", service_target(agent)]
+
+
+def disable_command(agent: LaunchAgent) -> list[str]:
+    """A persistent override: launchd skips the agent at login, plist or not, until it is enabled."""
+    return ["launchctl", "disable", service_target(agent)]
+
+
 def is_loaded(agent: LaunchAgent, runner: Callable[[Sequence[str]], tuple[int, str]]) -> bool:
     return runner(["launchctl", "print", service_target(agent)])[0] == 0
 

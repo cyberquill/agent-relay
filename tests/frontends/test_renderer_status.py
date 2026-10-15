@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import asyncio
+
 from agent_relay.frontends.webex.api import MAX_EDITS
 from agent_relay.frontends.webex.bot import build_frontend
 from agent_relay.frontends.webex.renderer import PROGRESS_EDITS, ROOT_POLL_S
-from agent_relay.models.events import Harness, SessionStarted, ToolStarted, TurnCompleted
+from agent_relay.models.events import Harness, SessionStarted, TextDelta, ToolStarted, TurnCompleted
 from agent_relay.models.sessions import SessionRecord, SessionStatus
 from tests.frontends.conftest import Relay
 
@@ -105,6 +107,54 @@ async def test_a_status_change_nobody_announced_reaches_the_root_on_a_tick(relay
     relay.clock.now += ROOT_POLL_S
     await renderer.tick()
     assert "⚫ ended" in _root(relay)
+
+
+async def _threads_wanted(relay: Relay) -> bool:
+    waiter = asyncio.create_task(relay.frontend.renderer.wait_for_threads())
+    await asyncio.sleep(0)
+    wanted = waiter.done()
+    waiter.cancel()
+    return wanted
+
+
+async def test_the_ticker_waits_until_a_thread_opens(relay: Relay) -> None:
+    session = await _session(relay)
+    assert not await _threads_wanted(relay)
+    await relay.frontend.renderer.handle(SessionStarted(harness=H, session_key=session.session_key))
+    assert await _threads_wanted(relay)
+
+
+async def test_an_ended_thread_is_forgotten_once_its_root_shows_it(relay: Relay) -> None:
+    session = await _session(relay)
+    renderer = relay.frontend.renderer
+    await renderer.handle(SessionStarted(harness=H, session_key=session.session_key))
+    await renderer.tick()
+    await _status(relay, session, SessionStatus.ENDED)
+    relay.clock.now += ROOT_POLL_S
+    await renderer.tick()
+    assert "⚫ ended" in _root(relay)
+    assert not await _threads_wanted(relay)
+    posts = len(relay.webex.bot_messages())
+    await renderer.handle(ToolStarted(harness=H, session_key=session.session_key, tool_id="0", name="bash"))
+    assert await _threads_wanted(relay)
+    assert relay.webex.bot_messages()[-1].parent_id == relay.webex.bot_messages()[0].id
+    assert len(relay.webex.bot_messages()) == posts + 1
+
+
+async def test_an_ended_thread_with_text_waiting_is_kept(relay: Relay) -> None:
+    session = await _session(relay)
+    renderer = relay.frontend.renderer
+    await renderer.handle(TextDelta(harness=H, session_key=session.session_key, text="still to send"))
+    await _status(relay, session, SessionStatus.ENDED)
+    relay.clock.now += ROOT_POLL_S
+    await renderer.tick()
+    assert await _threads_wanted(relay)
+    relay.clock.now += relay.config.renderer.flush_idle_s
+    await renderer.tick()
+    assert relay.bot_texts()[-1] == "still to send"
+    relay.clock.now += ROOT_POLL_S
+    await renderer.tick()
+    assert not await _threads_wanted(relay)
 
 
 async def test_the_last_root_edits_are_kept_for_idle_and_ended(relay: Relay) -> None:

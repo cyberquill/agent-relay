@@ -210,7 +210,9 @@ def test_apply_runs_launchctl_and_installs_the_extension(seed: Seed) -> None:
     for agent in (paths.launch_agents_dir() / f"{label}" for label in labels):
         assert agent.is_file()
     launchctl = [a[1] for a in commands.seen if a[0] == "launchctl"]
-    assert launchctl == ["print", "bootstrap"] * 3, "a fresh install only bootstraps what is not loaded"
+    assert launchctl == ["print", "enable", "bootstrap"] * 3, (
+        "a fresh install only bootstraps what is not loaded"
+    )
 
 
 RELAYD = "io.github.cyberquill.agent-relay.relayd"

@@ -224,6 +224,7 @@ class WebexRenderer:
         self._clock = clock
         self._pacer = Pacer(config.pace_s, clock, sleep)
         self._threads: dict[str, _Thread] = {}
+        self._has_threads = asyncio.Event()
         self._creating: dict[str, asyncio.Lock] = {}
         self._locks: dict[str, asyncio.Lock] = {}
 
@@ -249,11 +250,13 @@ class WebexRenderer:
         if session.webex_thread_id:
             root_id = session.webex_thread_id
             edits = session.extra.get("root_edits")
-            self._threads[session.session_key] = _Thread(
-                session.session_key,
-                root_id,
-                root_edits=edits if isinstance(edits, int) else 0,
-                last_root=cards.root_markdown(session),
+            self._track(
+                _Thread(
+                    session.session_key,
+                    root_id,
+                    root_edits=edits if isinstance(edits, int) else 0,
+                    last_root=cards.root_markdown(session),
+                )
             )
             return root_id
         await self._pacer.wait("root")
@@ -262,8 +265,12 @@ class WebexRenderer:
         await self._registry.update_session_fields(
             session.session_key, webex_thread_id=message.id, webex_bot=self.bot
         )
-        self._threads[session.session_key] = _Thread(session.session_key, message.id, last_root=markdown)
+        self._track(_Thread(session.session_key, message.id, last_root=markdown))
         return message.id
+
+    def _track(self, thread: _Thread) -> None:
+        self._threads[thread.session_key] = thread
+        self._has_threads.set()
 
     async def refresh_root(self, session: SessionRecord) -> None:
         """Edit the root status line, within the edit budget. Unchanged lines cost nothing.
@@ -538,3 +545,20 @@ class WebexRenderer:
                 if has_text and now - thread.last_activity >= self._config.flush_idle_s:
                     await self._flush(session, thread, final=True)
                     thread.streamed = True
+                if polled and self._settled(session, thread):
+                    self._threads.pop(key, None)
+        if not self._threads:
+            self._has_threads.clear()
+
+    async def wait_for_threads(self) -> None:
+        """Return once there is a thread for `tick` to look after."""
+        await self._has_threads.wait()
+
+    def _settled(self, session: SessionRecord, thread: _Thread) -> bool:
+        """An ended session with nothing left to show; a later event reopens its thread from the record."""
+        if session.status is not SessionStatus.ENDED or thread.text.strip() or thread.progress_dirty:
+            return False
+        remaining = self._config.root_edit_budget - thread.root_edits
+        return thread.last_root == cards.root_markdown(session) or not _worth_root_edit(
+            session.status, remaining
+        )

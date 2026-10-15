@@ -293,15 +293,22 @@ async def presence_check(config: RelayConfig, probe: Probe = probe_lock_state) -
             area="Presence",
             name=name,
             status="warn",
-            detail="on, but the lock state cannot be read (`ioreg` failed); away will not follow the lock",
+            detail=(
+                "on, but the lock state cannot be read (neither CoreGraphics nor `ioreg` answered); "
+                "away will not follow the lock"
+            ),
         )
     return Check(area="Presence", name=name, status="ok", detail=f"on; the screen is {state}")
 
 
-async def launchd_checks(python: str, runner: Runner = run_cli) -> list[Check]:
+async def launchd_checks(python: str, runner: Runner = run_cli, opencode: bool = True) -> list[Check]:
     checks: list[Check] = []
     domain = f"gui/{os.getuid()}"
     for agent in launchd.agents(python):
+        if agent.name == "opencode" and not opencode:
+            detail = "off (adapters.opencode is false); `relay start` keeps it disabled"
+            checks.append(Check(area="launchd", name=agent.name, status="info", detail=detail))
+            continue
         try:
             rc, _, _ = await runner(["launchctl", "print", f"{domain}/{agent.label}"])
         except OSError:

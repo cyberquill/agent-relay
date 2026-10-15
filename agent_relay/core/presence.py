@@ -1,12 +1,15 @@
 """Away mode that follows the screen lock: lock turns it on, unlock turns it off, only if the relay did it.
 
-The lock state comes from `ioreg` (no shell, no extra permission). A probe that fails or shows
-nothing is "unknown" and never changes anything.
+The lock state comes from CoreGraphics' session dictionary, read in-process (no extra permission).
+When this session is not on the console, or CoreGraphics gives nothing, `ioreg` is asked instead (no
+shell). A probe that fails or shows nothing is "unknown" and never changes anything.
 """
 
 from __future__ import annotations
 
 import asyncio
+import ctypes
+import functools
 import plistlib
 from collections.abc import Awaitable, Callable
 from typing import Literal, Protocol
@@ -25,6 +28,11 @@ type Post = Callable[[str], Awaitable[None]]
 
 IOREG = ("/usr/sbin/ioreg", "-n", "Root", "-d1", "-a")
 PROBE_TIMEOUT_S = 5.0
+CF_PATH = "/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation"
+CG_PATH = "/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics"
+CF_UTF8 = 0x08000100
+ON_CONSOLE = "kCGSSessionOnConsoleKey"
+SCREEN_LOCKED = "CGSSessionScreenIsLocked"
 # kv marker: present only while away is on because the screen locked, not because the user asked.
 AUTO_KEY = "away.auto"
 AUTO_LOCK = "lock"
@@ -55,7 +63,64 @@ def parse_lock_state(raw: bytes) -> LockState:
     return "unlocked" if users else "unknown"
 
 
+@functools.cache
+def _frameworks() -> tuple[ctypes.CDLL, ctypes.CDLL] | None:
+    try:
+        cf, cg = ctypes.CDLL(CF_PATH), ctypes.CDLL(CG_PATH)
+    except OSError:
+        return None
+    ref = ctypes.c_void_p
+    cg.CGSessionCopyCurrentDictionary.argtypes, cg.CGSessionCopyCurrentDictionary.restype = [], ref
+    cf.CFStringCreateWithCString.argtypes = [ref, ctypes.c_char_p, ctypes.c_uint32]
+    cf.CFStringCreateWithCString.restype = ref
+    cf.CFDictionaryGetValue.argtypes, cf.CFDictionaryGetValue.restype = [ref, ref], ref
+    cf.CFGetTypeID.argtypes, cf.CFGetTypeID.restype = [ref], ctypes.c_ulong
+    cf.CFBooleanGetTypeID.argtypes, cf.CFBooleanGetTypeID.restype = [], ctypes.c_ulong
+    cf.CFBooleanGetValue.argtypes, cf.CFBooleanGetValue.restype = [ref], ctypes.c_bool
+    cf.CFRelease.argtypes, cf.CFRelease.restype = [ref], None
+    return cf, cg
+
+
+def read_session() -> dict[str, bool] | None:
+    """The boolean flags of this process's login session, or None when there is no session to read."""
+    frameworks = _frameworks()
+    if frameworks is None:
+        return None
+    cf, cg = frameworks
+    session = cg.CGSessionCopyCurrentDictionary()
+    if not session:
+        return None
+    flags: dict[str, bool] = {}
+    try:
+        for name in (ON_CONSOLE, SCREEN_LOCKED):
+            key = cf.CFStringCreateWithCString(None, name.encode(), CF_UTF8)
+            if not key:
+                continue
+            try:
+                value = cf.CFDictionaryGetValue(session, key)
+                if value and cf.CFGetTypeID(value) == cf.CFBooleanGetTypeID():
+                    flags[name] = bool(cf.CFBooleanGetValue(value))
+            finally:
+                cf.CFRelease(key)
+    finally:
+        cf.CFRelease(session)
+    return flags
+
+
+def session_lock_state(flags: dict[str, bool] | None) -> LockState:
+    """Locked or unlocked only for a session on the console; anything else is for `ioreg` to judge."""
+    if not flags or flags.get(ON_CONSOLE) is not True:
+        return "unknown"
+    return "locked" if flags.get(SCREEN_LOCKED) is True else "unlocked"
+
+
 async def probe_lock_state() -> LockState:
+    # About 30 µs in-process, against about 30 ms of CPU for an `ioreg` run and its 200 KB plist.
+    state = session_lock_state(read_session())
+    return state if state != "unknown" else await probe_ioreg()
+
+
+async def probe_ioreg() -> LockState:
     try:
         proc = await asyncio.create_subprocess_exec(
             *IOREG, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL

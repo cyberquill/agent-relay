@@ -227,6 +227,7 @@ def _load(
     if loaded:
         _command(launchd.bootout_command(agent), runner, outcome, required=False)
         launchd.wait_unloaded(agent, runner, sleep)
+    _command(launchd.enable_command(agent), runner, outcome, required=False)
     _command(launchd.bootstrap_command(agent), runner, outcome)
 
 

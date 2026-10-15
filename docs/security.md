@@ -96,8 +96,10 @@ be regenerated at developer.webex.com.
 
 ### The screen-lock probe
 
-Auto away (`presence.auto_away_on_lock`) runs `/usr/sbin/ioreg -n Root -d1 -a` directly (no shell, no
-extra macOS permission) every `presence.poll_s`, with a 5 s timeout; a hung probe is killed. Its output
+Auto away (`presence.auto_away_on_lock`) reads this login session's flags from CoreGraphics
+(`CGSessionCopyCurrentDictionary`, in-process, no extra macOS permission) every `presence.poll_s`. Only
+when that gives no answer for a session on the console does it run `/usr/sbin/ioreg -n Root -d1 -a`
+directly (no shell), with a 5 s timeout; a hung probe is killed. Its output
 is parsed and never logged. A probe that fails or reads nothing changes nothing, and a lock while paused
 by `/panic` never turns the relay back on.
 

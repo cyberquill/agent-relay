@@ -303,6 +303,7 @@ class WebexFrontend:
 
     async def ticker(self, interval: float = 1.0) -> None:
         while True:
+            await self.renderer.wait_for_threads()
             await asyncio.sleep(interval)
             try:
                 await self.renderer.tick()

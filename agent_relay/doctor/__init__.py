@@ -32,7 +32,7 @@ async def local_checks(config: RelayConfig, python: str, runner: local.Runner | 
     runner = runner or run_cli
     checks = await local.version_checks(runner)
     checks += await asyncio.to_thread(_sync_checks, config, python)
-    checks += await local.launchd_checks(python, runner)
+    checks += await local.launchd_checks(python, runner, opencode=config.adapters.opencode)
     checks.append(await local.presence_check(config))
     return checks
 

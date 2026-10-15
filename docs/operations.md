@@ -28,6 +28,9 @@ Keychain items (remove those with Keychain Access, service names `agent-relay*`)
 
 Launch agents: `relayd` always; the OpenCode server while `adapters.opencode` is on; a weekly
 `cursor-agent update` when `cursor-agent` is installed. Logs are in `~/Library/Logs/agent-relay/`.
+With `adapters.opencode` off, `relay start` boots an installed OpenCode server out and runs
+`launchctl disable` on it, so it no longer starts at login; turning the adapter on and running
+`relay start` enables it again.
 
 ## Running relayd
 

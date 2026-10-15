@@ -204,3 +204,10 @@ async def test_launchd_checks_tell_loaded_from_missing() -> None:
     assert checks["opencode"].status == "warn"
     assert checks["opencode"].fix == "relay install --apply"
     assert all(call[:2] == ["launchctl", "print"] for call in runner.calls)
+
+
+async def test_launchd_checks_report_opencode_off_without_asking_launchd() -> None:
+    runner = Runner({"io.github.cyberquill.agent-relay.relayd": (0, "state = running")})
+    checks = by_name(await local.launchd_checks(PYTHON, runner, opencode=False))
+    assert checks["opencode"].status == "info" and "adapters.opencode" in checks["opencode"].detail
+    assert not any("opencode" in call[-1] for call in runner.calls)

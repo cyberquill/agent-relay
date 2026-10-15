@@ -66,23 +66,61 @@ def fake_ioreg(monkeypatch: pytest.MonkeyPatch, script: str) -> None:
 
 async def test_probe_reads_the_plist_the_command_prints(monkeypatch: pytest.MonkeyPatch) -> None:
     fake_ioreg(monkeypatch, f"import sys; sys.stdout.buffer.write({ioreg(LOCKED_USER)!r})")
-    assert await presence.probe_lock_state() == "locked"
+    assert await presence.probe_ioreg() == "locked"
 
 
 async def test_probe_is_unknown_when_the_command_fails(monkeypatch: pytest.MonkeyPatch) -> None:
     fake_ioreg(monkeypatch, f"import sys; sys.stdout.buffer.write({ioreg(LOCKED_USER)!r}); sys.exit(1)")
-    assert await presence.probe_lock_state() == "unknown"
+    assert await presence.probe_ioreg() == "unknown"
 
 
 async def test_probe_is_unknown_when_the_binary_is_missing(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(presence, "IOREG", ("/nonexistent/ioreg",))
-    assert await presence.probe_lock_state() == "unknown"
+    assert await presence.probe_ioreg() == "unknown"
 
 
 async def test_probe_gives_up_on_a_hung_command(monkeypatch: pytest.MonkeyPatch) -> None:
     fake_ioreg(monkeypatch, "import time; time.sleep(30)")
     monkeypatch.setattr(presence, "PROBE_TIMEOUT_S", 0.3)
-    assert await presence.probe_lock_state() == "unknown"
+    assert await presence.probe_ioreg() == "unknown"
+
+
+@pytest.mark.parametrize(
+    ("flags", "expected"),
+    [
+        ({presence.ON_CONSOLE: True}, "unlocked"),
+        ({presence.ON_CONSOLE: True, presence.SCREEN_LOCKED: False}, "unlocked"),
+        ({presence.ON_CONSOLE: True, presence.SCREEN_LOCKED: True}, "locked"),
+        ({presence.ON_CONSOLE: False, presence.SCREEN_LOCKED: True}, "unknown"),
+        ({presence.SCREEN_LOCKED: True}, "unknown"),
+        ({}, "unknown"),
+        (None, "unknown"),
+    ],
+)
+def test_session_lock_state(flags: dict[str, bool] | None, expected: LockState) -> None:
+    assert presence.session_lock_state(flags) == expected
+
+
+def test_this_session_is_read_in_process() -> None:
+    flags = presence.read_session()
+    assert flags is not None and flags.get(presence.ON_CONSOLE) is not None
+
+
+async def test_probe_answers_from_the_session_without_running_ioreg(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        presence, "read_session", lambda: {presence.ON_CONSOLE: True, presence.SCREEN_LOCKED: True}
+    )
+    monkeypatch.setattr(presence, "IOREG", ("/nonexistent/ioreg",))
+    assert await presence.probe_lock_state() == "locked"
+
+
+@pytest.mark.parametrize("flags", [None, {presence.ON_CONSOLE: False}])
+async def test_probe_falls_back_to_ioreg(
+    monkeypatch: pytest.MonkeyPatch, flags: dict[str, bool] | None
+) -> None:
+    monkeypatch.setattr(presence, "read_session", lambda: flags)
+    fake_ioreg(monkeypatch, f"import sys; sys.stdout.buffer.write({ioreg(LOCKED_USER)!r})")
+    assert await presence.probe_lock_state() == "locked"
 
 
 class Screen:

@@ -15,7 +15,7 @@ from agent_relay.cli import daemon as cli_daemon
 from agent_relay.core.registry import Registry
 from agent_relay.daemon import Core, online_message
 from agent_relay.ipc import JsonObj
-from agent_relay.models.config import RelayConfig
+from agent_relay.models.config import AdaptersConfig, RelayConfig
 from agent_relay.models.events import Harness, Origin
 from agent_relay.models.sessions import SessionRecord, SessionStatus
 from agent_relay.ops import launchd
@@ -173,7 +173,7 @@ def test_start_bootstraps_when_unloaded_then_kickstarts() -> None:
     agent.path.write_bytes(b"<plist/>")
     calls = Launchctl(loaded=False)
     cli_daemon.start_daemon(calls)
-    assert [c[1] for c in calls.seen] == ["print", "bootstrap", "kickstart"]
+    assert [c[1] for c in calls.seen] == ["print", "enable", "bootstrap", "kickstart"]
     loaded = Launchctl(loaded=True)
     cli_daemon.start_daemon(loaded)
     assert [c[1] for c in loaded.seen] == ["print", "kickstart"]
@@ -275,6 +275,27 @@ def test_start_without_the_opencode_agent_starts_relayd_alone() -> None:
     calls = PerLabel(set())
     cli_daemon.start_daemon(calls)
     assert calls.verbs("kickstart") == [RELAYD]
+
+
+def test_start_stops_and_disables_opencode_while_its_adapter_is_off() -> None:
+    _install_plists("relayd", "opencode")
+    calls = PerLabel({RELAYD, OPENCODE})
+    config = RelayConfig(adapters=AdaptersConfig(opencode=False))
+    message = cli_daemon.start_daemon(calls, config, sleep=lambda _: None)
+    assert calls.verbs("bootout") == [OPENCODE] and calls.verbs("disable") == [OPENCODE]
+    assert calls.verbs("kickstart") == [RELAYD] and calls.loaded == {RELAYD}
+    assert f"stopped and disabled {OPENCODE}" in message
+    again = PerLabel({RELAYD})
+    cli_daemon.start_daemon(again, config, sleep=lambda _: None)
+    assert again.verbs("bootout") == [] and again.verbs("disable") == [OPENCODE]
+
+
+def test_start_enables_opencode_again_before_bootstrapping_it() -> None:
+    _install_plists("relayd", "opencode")
+    calls = PerLabel({RELAYD})
+    cli_daemon.start_daemon(calls, RelayConfig())
+    verbs = [c[1] for c in calls.seen if calls.label(c) == OPENCODE]
+    assert verbs == ["print", "enable", "bootstrap", "kickstart"]
 
 
 def test_cdp_selftest_refuses_while_the_adapter_is_off() -> None:

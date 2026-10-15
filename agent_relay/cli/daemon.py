@@ -13,8 +13,10 @@ import typer
 from agent_relay import paths
 from agent_relay.cli.output import fail, note, out
 from agent_relay.ipc import FrameError, JsonObj, request
+from agent_relay.models.config import RelayConfig
 from agent_relay.ops import launchd
 from agent_relay.ops.install import Runner, run
+from agent_relay.settings import load_config
 
 IPC_TIMEOUT_S = 10.0
 NOT_RUNNING = "relayd is not running; start it with `relay start`"
@@ -44,6 +46,7 @@ def keep_alive_agents() -> list[launchd.LaunchAgent]:
 def _start_agent(agent: launchd.LaunchAgent, runner: Runner) -> None:
     target = launchd.service_target(agent)
     if not launchd.is_loaded(agent, runner):
+        runner(launchd.enable_command(agent))
         code, output = runner(launchd.bootstrap_command(agent))
         if code != 0:
             raise fail(f"launchctl bootstrap failed ({code}): {output[:300]}")
@@ -52,17 +55,37 @@ def _start_agent(agent: launchd.LaunchAgent, runner: Runner) -> None:
         raise fail(f"launchctl kickstart failed ({code}): {output[:300]}")
 
 
-def start_daemon(runner: Runner = run) -> str:
+def _retire_agent(agent: launchd.LaunchAgent, runner: Runner, sleep: Callable[[float], None]) -> None:
+    """Stop an agent whose adapter is off, and keep launchd from starting it again at login."""
+    if launchd.is_loaded(agent, runner):
+        runner(launchd.bootout_command(agent))
+        launchd.wait_unloaded(agent, runner, sleep)
+    code, output = runner(launchd.disable_command(agent))
+    if code != 0:
+        note(f"launchctl disable {agent.label} failed ({code}): {output[:200]}")
+
+
+def start_daemon(
+    runner: Runner = run, config: RelayConfig | None = None, sleep: Callable[[float], None] = time.sleep
+) -> str:
     agent = relayd_agent()
     if not agent.path.is_file():
         raise fail(
             "relayd is not installed as a launch agent. Run `relay install --apply`, "
             "or run `python -m agent_relay.daemon` in a terminal."
         )
-    started = [a for a in keep_alive_agents() if a is agent or a.path.is_file()]
+    off = set() if (config or load_config()).adapters.opencode else {"opencode"}
+    installed = [a for a in keep_alive_agents() if a is agent or a.path.is_file()]
+    retired = [a for a in installed if a.name in off]
+    started = [a for a in installed if a.name not in off]
+    for each in retired:
+        _retire_agent(each, runner, sleep)
     for each in started:
         _start_agent(each, runner)
-    return f"started {', '.join(a.label for a in started)}; logs in {paths.logs_dir()}"
+    message = f"started {', '.join(a.label for a in started)}"
+    if retired:
+        message += f"; stopped and disabled {', '.join(a.label for a in retired)} (its adapter is off)"
+    return f"{message}; logs in {paths.logs_dir()}"
 
 
 def stop_daemon(runner: Runner = run, sleep: Callable[[float], None] = time.sleep) -> str:
@@ -86,7 +109,7 @@ def stop_daemon(runner: Runner = run, sleep: Callable[[float], None] = time.slee
 
 
 def start() -> None:
-    """Start (or restart) relayd and the OpenCode server under launchd."""
+    """Start (or restart) relayd, and the OpenCode server while its adapter is on, under launchd."""
     out(start_daemon())
 
 
