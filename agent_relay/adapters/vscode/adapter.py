@@ -12,6 +12,8 @@ import uuid
 from collections.abc import Awaitable, Callable, Sequence
 from pathlib import Path
 
+from pydantic import JsonValue
+
 from agent_relay import paths
 from agent_relay.adapters.base import (
     Adapter,
@@ -22,6 +24,7 @@ from agent_relay.adapters.base import (
     UnsupportedError,
 )
 from agent_relay.adapters.vscode.hub import BridgeEvent, BridgeHub, BridgeWindow
+from agent_relay.core import away
 from agent_relay.core.claims import UNCLAIMED_PREFIX, make_claim
 from agent_relay.core.registry import Registry
 from agent_relay.log import get_logger
@@ -137,7 +140,8 @@ class VsCodeAdapter(Adapter):
     ) -> SessionRecord:
         request = request.model_copy(update={"prompt": self.prompt_with_files(request.prompt, attachments)})
         workspace = request.workspace
-        find = self._finder(request)
+        folders = self._folders(request)
+        find = self._finder(request, folders)
         window = find()
         if window is None:
             await self._open_workspace(request.workspace_file or workspace, Path(workspace))
@@ -145,6 +149,9 @@ class VsCodeAdapter(Adapter):
         local_id = uuid.uuid4().hex
         session_key = f"{self.harness.value}:phone-{local_id}"
         extra = {WINDOW_KEY: window.window_id, VIA_KEY: VIA_BRIDGE} if window else {VIA_KEY: VIA_CLI}
+        record_extra: dict[str, JsonValue] = dict(extra)
+        if folders:
+            record_extra[away.FOLDERS] = [str(folder) for folder in folders]
         await self._registry.create_session(
             SessionRecord(
                 session_key=session_key,
@@ -155,7 +162,7 @@ class VsCodeAdapter(Adapter):
                 origin=Origin.PHONE,
                 status=SessionStatus.RUNNING,
                 title=request.prompt[:80] or None,
-                extra=dict(extra),
+                extra=record_extra,
             )
         )
         await make_claim(self._registry, workspace, session_key)
@@ -197,13 +204,17 @@ class VsCodeAdapter(Adapter):
 
     # helpers
 
-    def _finder(self, request: StartRequest) -> Callable[[], BridgeWindow | None]:
+    def _folders(self, request: StartRequest) -> list[Path]:
         if request.workspace_file is None:
-            return lambda: self._hub.window_for(request.workspace)
+            return []
         try:
-            folders = code_workspace_folders(Path(request.workspace_file))
+            return code_workspace_folders(Path(request.workspace_file))
         except ValueError as exc:
             raise AdapterUnavailableError(str(exc)) from exc
+
+    def _finder(self, request: StartRequest, folders: list[Path]) -> Callable[[], BridgeWindow | None]:
+        if request.workspace_file is None:
+            return lambda: self._hub.window_for(request.workspace)
         return lambda: self._hub.window_holding(folders)
 
     def _window(self, session: SessionRecord) -> BridgeWindow | None:

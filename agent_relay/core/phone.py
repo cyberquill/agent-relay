@@ -9,7 +9,6 @@ from __future__ import annotations
 from agent_relay import paths
 from agent_relay.core import away
 from agent_relay.core.registry import Registry
-from agent_relay.models.events import Origin
 from agent_relay.models.sessions import SessionRecord, SessionStatus
 
 BUSY = (SessionStatus.RUNNING, SessionStatus.PARKED)
@@ -48,6 +47,6 @@ async def reachable(registry: Registry, workspace: str) -> tuple[SessionRecord |
     session = await session_for(registry, workspace)
     if session is None:
         return None, NO_SESSION
-    if session.origin is not Origin.PHONE and not await away.is_away(registry, session.workspace):
+    if not away.phone_held(session) and not await away.is_away(registry, session.workspace):
         return None, AWAY_OFF
     return session, ""

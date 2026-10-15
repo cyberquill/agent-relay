@@ -236,6 +236,60 @@ async def test_away_off_keeps_a_phone_session_approval_on_the_phone(
     assert rec.of(ApprovalResolved)[-1].by == "deadline"
 
 
+async def _phone_session(built: Core, harness: Harness, sid: str, **fields: JsonValue) -> str:
+    record = SessionRecord(
+        session_key=f"{harness.value}:{sid}",
+        harness=harness,
+        harness_id=sid,
+        workspace="/w/proj",
+        origin=Origin.PHONE,
+        status=SessionStatus.RUNNING,
+    )
+    await built.registry.create_session(record.model_copy(update=fields))
+    return record.session_key
+
+
+async def test_away_off_hands_a_vscode_phone_session_and_its_approval_to_the_desk(
+    core: tuple[Core, Recorder, list[str]],
+) -> None:
+    built, rec, _ = core
+    key = await _phone_session(built, Harness.VSCODE, "L1")
+    task = asyncio.create_task(hook(built, "copilot", "PreToolUse", LOCAL_PRE))
+    request_id = await _when_asked(rec)
+    assert "Handed 1 phone session(s) to the desk" in await built.service.set_away(False)
+    assert await asyncio.wait_for(task, 1) == {}
+    assert [(r.request_id, r.by) for r in rec.of(ApprovalResolved)] == [(request_id, "desk")]
+    session = await _session(built, key)
+    assert session.extra[away.AT_DESK] is True and not away.phone_held(session)
+    assert await hook(built, "copilot", "PreToolUse", {**LOCAL_PRE, "tool_use_id": "t2"}) == {}
+    assert "Handed" not in await built.service.set_away(False)
+
+
+async def test_back_in_a_thread_hands_only_a_desk_visible_phone_session_to_the_desk(
+    core: tuple[Core, Recorder, list[str]],
+) -> None:
+    built, _, _ = core
+    visible = await _phone_session(built, Harness.VSCODE_COPILOT, "A1")
+    headless = await _phone_session(built, Harness.OPENCODE, "ses_p")
+    assert await built.service.back(visible) == "Handed to the desk."
+    assert await built.service.back(headless) == "That session is not parked."
+    assert not away.phone_held(await _session(built, visible))
+    assert away.phone_held(await _session(built, headless))
+
+
+async def test_a_workspace_away_off_reaches_any_folder_of_a_multi_root_phone_session(
+    core: tuple[Core, Recorder, list[str]],
+) -> None:
+    built, _, _ = core
+    multi = await _phone_session(
+        built, Harness.VSCODE, "M1", workspace="/w/one", extra={away.FOLDERS: ["/w/one", "/w/two"]}
+    )
+    other = await _phone_session(built, Harness.VSCODE, "O1", workspace="/w/three")
+    assert "Handed 1 phone session(s)" in await built.service.set_away_for(False, "/w/two")
+    assert not away.phone_held(await _session(built, multi))
+    assert away.phone_held(await _session(built, other))
+
+
 async def _answer_deny_with(built: Core, rec: Recorder, reason: str | None) -> None:
     request_id = await _when_asked(rec)
     await built.service.answer_approval(request_id, "deny", reason=reason)

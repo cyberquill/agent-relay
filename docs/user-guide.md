@@ -272,7 +272,7 @@ Links in an agent's text arrive as plain code, never as tappable links.
 | `/ws` | Lists the workspaces; with `ws.roots` set, a menu to add one (see below) |
 | `/models <app>` | Lists the models an app offers |
 | `/away [on\|off]` | Turns away mode on or off (see below). A bare `/away` sends a card at the top level (all workspaces or one, then On or Off) and means on in a thread |
-| `/back` | In a thread: releases that parked session |
+| `/back` | In a thread: releases that parked session, and hands a VS Code or Cursor desktop chat started from the phone to the desk |
 | `/queue`, `/steer` | In a thread: see [Messages sent while a turn runs](#messages-sent-while-a-turn-runs-queue-and-steer) |
 | `/doctor` | The same health report as `relay doctor` |
 | `/panic` | Asks first with a card (good for 60 s), then cancels every running turn, denies every open card, releases parked turns, turns away mode off and pauses the relay. `/panic now` skips the question |
@@ -308,6 +308,11 @@ Names are letters, digits, `.`, `_` and `-`, up to 40 characters. The card can t
 Sessions started from the phone always report to the phone. Sessions you started **at the desk** stay at
 the desk until you turn away mode on for their workspace. Then each one gets its own thread on the phone,
 its approvals go to the phone instead of the desk prompt, and its finished turns park.
+
+A chat you started from the phone in VS Code (or Cursor over CDP) also opens on the desktop. Turning away
+mode off, or `/back` in its thread, hands it to the desk: its open approvals move to the desk prompt, and
+from then on it behaves like a desk session. OpenCode and Cursor CLI sessions have no desk window, so they
+stay with the phone.
 
 Turn it on just before you leave, in any of these ways:
 

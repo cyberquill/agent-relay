@@ -123,7 +123,7 @@ class HookService:
         session = await self._existing(hook)
         if session is not None and session.harness in ACP_OWNED:
             return {}
-        phone_session = session is not None and session.origin is Origin.PHONE
+        phone_session = session is not None and away.phone_held(session)
         workspace = hook.workspace or (session.workspace if session else None)
         if not phone_session and not await away.is_away(self._registry, workspace):
             if session is not None and hook.kind is HookKind.PROMPT_SUBMIT:

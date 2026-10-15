@@ -15,6 +15,7 @@ from agent_relay import paths
 from agent_relay.adapters.base import AdapterUnavailableError, UnsupportedError
 from agent_relay.adapters.vscode.adapter import VIA_CLI, VIA_KEY, WINDOW_KEY, VsCodeAdapter
 from agent_relay.adapters.vscode.hub import BridgeCommandError, BridgeGoneError, BridgeHub
+from agent_relay.core import away
 from agent_relay.core.claims import UNCLAIMED_PREFIX, claim_key
 from agent_relay.core.registry import Registry
 from agent_relay.daemon import Core
@@ -274,6 +275,7 @@ async def test_multi_root_start_opens_the_workspace_file(rig: Rig, tmp_path: Pat
     record = await rig.start()
     assert rig.launcher.calls == [([str(rig.cli), str(file)], Path(WORKSPACE))]
     assert record.extra[WINDOW_KEY] == "multi"
+    assert record.extra[away.FOLDERS] == [str(Path(f).resolve()) for f in ("/w/proj", "/w/two")]
 
 
 async def test_multi_root_start_with_an_unreadable_file_fails(rig: Rig, tmp_path: Path) -> None:

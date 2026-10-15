@@ -16,8 +16,8 @@ from agent_relay.core.service.common import DESK_DECISION, Deps
 from agent_relay.core.service.discovery import Discovery
 from agent_relay.log import get_logger
 from agent_relay.models.capabilities import Capability
-from agent_relay.models.events import ApprovalResolved, Origin
-from agent_relay.models.sessions import SessionStatus
+from agent_relay.models.events import ApprovalResolved
+from agent_relay.models.sessions import SessionRecord, SessionStatus
 
 log = get_logger(__name__)
 
@@ -40,13 +40,33 @@ class AwayControl:
         if workspace is None:
             # A hand-made change to global away is no longer the lock's to undo.
             await self._deps.registry.kv_delete(AUTO_KEY)
+        handed = 0
         if enabled:
             paths.pause_flag().unlink(missing_ok=True)
         else:
+            handed = await self._hand_matching(workspace)
             await self._release_matching(workspace, "away mode off")
             await self._return_to_desk()
         scope = f"`{workspace}`" if workspace else "all workspaces"
-        return f"Away mode {'on' if enabled else 'off'} for {scope}."
+        reply = f"Away mode {'on' if enabled else 'off'} for {scope}."
+        if handed:
+            reply += f" Handed {handed} phone session(s) to the desk."
+        return reply
+
+    async def _hand_matching(self, workspace: str | None) -> int:
+        count = 0
+        for session in await self._deps.registry.list_sessions():
+            if away.covers(workspace, session) and await self._hand_to_desk(session):
+                count += 1
+        return count
+
+    async def _hand_to_desk(self, session: SessionRecord) -> bool:
+        """A phone chat the desk can also see becomes a desk session: away mode decides for it from now on."""
+        if session.harness not in away.DESK_VISIBLE or not away.phone_held(session):
+            return False
+        await self._deps.registry.set_session_extra(session.session_key, away.AT_DESK, True)
+        log.info(f"handed {session.session_key} to the desk")
+        return True
 
     async def _return_to_desk(self) -> int:
         """Hand hook-held approvals of desk sessions that are no longer away back to the desk.
@@ -60,7 +80,7 @@ class AwayControl:
             if request.kind != "approval" or request.payload.get("source") == "adapter":
                 continue
             session = await deps.registry.get_session(request.session_key)
-            if session is None or session.origin is Origin.PHONE:
+            if session is None or away.phone_held(session):
                 continue
             if await away.is_away(deps.registry, session.workspace):
                 continue
@@ -98,10 +118,13 @@ class AwayControl:
     async def back(self, session_key: str | None = None) -> str:
         if session_key is not None:
             session = await self._discovery.session(session_key)
+            handed = await self._hand_to_desk(session)
+            if handed:
+                await self._return_to_desk()
             if session.status is not SessionStatus.PARKED:
-                return "That session is not parked."
+                return "Handed to the desk." if handed else "That session is not parked."
             await self.release(session_key, "/back")
-            return "Released."
+            return "Released and handed to the desk." if handed else "Released."
         count = await self._release_matching(None, "/back")
         return f"Released {count} parked session(s)."
 
