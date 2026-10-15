@@ -1,0 +1,64 @@
+agent_relay/ops/launchd.py
+  s_daef34be91e102::t_651b5411ce7f3a 99-107
+docs/security.md
+  s_daef34be91e102::t_aee46c66e30a8c 99-102
+agent_relay/frontends/webex/renderer.py
+  s_daef34be91e102::t_9d3a705b561c6d 253-259,268,271-273
+  s_daef34be91e102::t_100986791b72a8 227,548,550-564
+  s_daef34be91e102::t_82fe52b664916e 549
+  s_daef34be91e102::t_d429f816152e62 274
+agent_relay/doctor/local.py
+  s_daef34be91e102::t_651b5411ce7f3a 304,308-311
+  s_daef34be91e102::t_f08dc5e549bc18 296-299
+agent_relay/ops/install.py
+  s_daef34be91e102::t_651b5411ce7f3a 230
+agent_relay/frontends/webex/bot.py
+  s_daef34be91e102::t_82fe52b664916e 306
+docs/operations.md
+  s_daef34be91e102::t_3c5b8bb82abc9b 31-33
+tests/frontends/test_renderer_status.py
+  s_daef34be91e102::t_363a49d5290e73 112-159
+  s_daef34be91e102::t_4b299d81e9489b 5-6,10
+docs/deviations.md
+  s_daef34be91e102::t_6ffae195b064c0 121
+  s_daef34be91e102::t_37fdc6de576b50 120
+  s_daef34be91e102::t_aee46c66e30a8c 100
+tests/core/test_presence.py
+  s_daef34be91e102::t_5e5a51536cac66 69,74,79,85-123
+agent_relay/core/presence.py
+  s_daef34be91e102::t_2e17dfa1f9ecb0 3-5,11-12,31-35,66-116,118-123
+agent_relay/doctor/__init__.py
+  s_daef34be91e102::t_651b5411ce7f3a 35
+tests/ops/test_install.py
+  h_ed7d05665a8f05 213,215
+  s_daef34be91e102::t_7fc952730906cf 214
+tests/test_cli_ops.py
+  s_daef34be91e102::t_7d7f5f0e5190af 18
+  s_daef34be91e102::t_7fc952730906cf 176,280-298
+  s_daef34be91e102::t_3308416f6e430f 299-300
+tests/doctor/test_local.py
+  s_daef34be91e102::t_7fc952730906cf 207-213
+agent_relay/cli/daemon.py
+  s_daef34be91e102::t_651b5411ce7f3a 16,19,49,58-70,77-82,85-88,112
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e1e46d35dd61aa6cdcff68a6116e710863a430e3",
+  "prompts": {},
+  "humans": {
+    "h_ed7d05665a8f05": {
+      "author": "Brijgopal Bharadwaj <brijgopalbharadwaj1999@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_daef34be91e102": {
+      "agent_id": {
+        "tool": "github-copilot",
+        "id": "9ddb26c6-cddd-41e9-b4bc-620d3ac5712d",
+        "model": "copilot/claude-opus-5.5"
+      },
+      "human_author": "Brijgopal Bharadwaj <brijgopalbharadwaj1999@gmail.com>"
+    }
+  }
+}
