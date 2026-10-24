@@ -12,7 +12,7 @@ from pydantic import JsonValue
 from agent_relay.adapters.base import AdapterUnavailableError
 from agent_relay.adapters.cursor_cli import mapping as m
 from agent_relay.adapters.cursor_cli.adapter import CursorCliAdapter
-from agent_relay.adapters.cursor_cli.catalog import CursorCli, needs_login, parse_models
+from agent_relay.adapters.cursor_cli.catalog import CursorCli, needs_login, parse_models, rank_models
 from agent_relay.adapters.cursor_cli.rpc import (
     AcpExitedError,
     AcpProcess,
@@ -36,6 +36,36 @@ def test_parse_models_handles_the_common_shapes() -> None:
         ("gpt-5", "GPT-5", False),
         ("sonnet-4.5-thinking", "sonnet-4.5-thinking", False),
     ]
+
+
+def test_rank_models_puts_the_newest_of_each_family_inside_the_picker() -> None:
+    """Webex cards show 25 choices, and one is "Default", so only 24 CLI models fit."""
+    older = [f"claude-opus-4-8-{effort}" for effort in ("low", "medium", "high", "xhigh", "max")]
+    older += [f"claude-sonnet-5-{effort}" for effort in ("low", "medium", "high", "xhigh", "max")]
+    older += [f"gpt-5.2-{effort}" for effort in ("low", "low-fast", "high", "high-fast", "xhigh")]
+    buried = (
+        "auto - Auto (default)\n"
+        + "\n".join(f"{model_id} - {model_id}" for model_id in older)
+        + "\nclaude-opus-5-5-low - Opus 5.5 Low"
+        + "\nclaude-opus-5-5-medium - Opus 5.5"
+        + "\nclaude-opus-5-5-high-fast - Opus 5.5 High Fast"
+        + "\nclaude-sonnet-5-5-high - Sonnet 5.5"
+        + "\n"
+    )
+    parsed = parse_models(buried)
+    ranked = rank_models(parsed)
+    shown = [model.id for model in ranked[:24]]
+    assert [model.id for model in ranked[:4]] == [
+        "auto",
+        "gpt-5.2-high",
+        "claude-opus-5-5-medium",
+        "claude-sonnet-5-5-high",
+    ]
+    assert "claude-opus-5-5-medium" in shown
+    assert "claude-sonnet-5-5-high" in shown
+    assert {model.id for model in ranked} == {model.id for model in parsed}
+    opus = [model.id for model in ranked if model.id.startswith("claude-opus")]
+    assert opus.index("claude-opus-5-5-high-fast") < opus.index("claude-opus-4-8-medium")
 
 
 def test_parse_models_skips_prose_and_duplicates() -> None:

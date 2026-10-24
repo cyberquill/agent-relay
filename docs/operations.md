@@ -318,7 +318,7 @@ Without relayd, `relay doctor` reports the daemon as failing and still runs the 
 ## App updates
 
 relayd checks VS Code's and Cursor's `Info.plist` every 10 minutes. When a version changes, it re-runs
-that adapter's self-test (AHP protocol discovery for VS Code; selector checks for Cursor CDP, only if
+that adapter's self-test (an AHP `initialize` handshake for VS Code; selector checks for Cursor CDP, only if
 Cursor is already running with its debug port) and posts the result.
 
 - **Fail:** VS Code's agent host adapter is *paused* and Cursor CDP is *disabled*. New sessions, model

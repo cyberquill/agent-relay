@@ -45,11 +45,16 @@ def _turn_replay() -> list[dict[str, JsonValue]]:
     return [msg for msg in TRACE_MESSAGES[start + 1 :] if msg.get("method") == "action"]
 
 
+class UnsupportedVersionError(Exception):
+    """`initialize` offered no version the fake accepts; args[0] is what it does accept."""
+
+
 @dataclass
 class FakeAgentHost:
     socket_path: str
     token: str = "fake-connection-token"
     protocol_version: str = "0.10.0"
+    accepts: tuple[str, ...] | None = None
     auto_reply: bool = True
     page_size: int | None = None
     endless_cursor: bool = False
@@ -141,6 +146,12 @@ class FakeAgentHost:
                 reply: dict[str, JsonValue] = {"jsonrpc": "2.0", "id": message["id"]}
                 try:
                     reply["result"] = self._answer(method, params)
+                except UnsupportedVersionError as exc:
+                    reply["error"] = {
+                        "code": -32005,
+                        "message": "unsupported protocol version",
+                        "data": {"supportedVersions": list(exc.args[0])},
+                    }
                 except KeyError as exc:
                     reply["error"] = {"code": -32601, "message": str(exc)}
                 await connection.send(json.dumps(reply))
@@ -149,11 +160,21 @@ class FakeAgentHost:
         finally:
             self.clients.discard(connection)
 
+    def _negotiate(self, params: dict[str, JsonValue]) -> JsonValue:
+        offered = params.get("protocolVersions")
+        offers = [v for v in offered if isinstance(v, str)] if isinstance(offered, list) else []
+        picked = next((v for v in offers if self.accepts is None or v in self.accepts), None)
+        if picked is None:
+            raise UnsupportedVersionError(self.accepts or ())
+        result = _initialize_result()
+        assert isinstance(result, dict)
+        return {**result, "protocolVersion": picked}
+
     def _answer(self, method: str, params: dict[str, JsonValue]) -> JsonValue:
         channel = params.get("channel")
         match method:
             case "initialize":
-                return _initialize_result()
+                return self._negotiate(params)
             case "listSessions":
                 items: list[JsonValue] = list(self.sessions.values())
                 if self.page_size is None:

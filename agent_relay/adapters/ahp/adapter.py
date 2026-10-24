@@ -23,8 +23,8 @@ from agent_relay import __version__
 from agent_relay.adapters.ahp import mapping as mp
 from agent_relay.adapters.ahp import models as m
 from agent_relay.adapters.ahp import uris
-from agent_relay.adapters.ahp.endpoints import AhpUnavailableError, Endpoint, discover
-from agent_relay.adapters.ahp.rpc import AhpRpcError, Connection, Notification
+from agent_relay.adapters.ahp.endpoints import SUPPORTED_VERSIONS, AhpUnavailableError, Endpoint, discover
+from agent_relay.adapters.ahp.rpc import AhpRpcError, Connection, Notification, initialize
 from agent_relay.adapters.base import (
     Adapter,
     AdapterUnavailableError,
@@ -177,12 +177,12 @@ class AhpAdapter(Adapter):
         self._conn = conn
         params = m.InitializeParams(
             channel=uris.ROOT,
-            protocol_versions=[endpoint.protocol_version],
+            protocol_versions=list(SUPPORTED_VERSIONS),
             client_id=self._client_id,
             client_info=m.Implementation(name=CLIENT_NAME, version=__version__),
             initial_subscriptions=[uris.ROOT],
         )
-        result = m.InitializeResult.model_validate(await conn.request("initialize", params))
+        result = await initialize(conn, endpoint, params)
         self._version = result.protocol_version
         for snapshot in result.snapshots:
             if isinstance(snapshot.state, m.RootState):

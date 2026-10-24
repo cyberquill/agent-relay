@@ -1,6 +1,8 @@
 """Find the editor's Agent Host socket with `code agent endpoints`.
 
-The output carries the connection token, so it is parsed in memory and never logged.
+The output carries the connection token, so it is parsed in memory and never logged. Its
+`protocolVersion` is the newest version the host speaks, not the only one: the host also accepts older
+compatible versions, so the version is settled by `initialize`, not here.
 """
 
 from __future__ import annotations
@@ -17,6 +19,7 @@ from agent_relay.adapters.base import AdapterUnavailableError
 from agent_relay.scrub import scrub_text
 
 SUPPORTED_VERSIONS: tuple[str, ...] = (PROTOCOL_VERSION,)
+UNSUPPORTED_PROTOCOL_VERSION = -32005
 CLI_TIMEOUT_S = 20.0
 
 type Runner = Callable[[Sequence[str]], Awaitable[tuple[int, str, str]]]
@@ -27,7 +30,14 @@ class AhpUnavailableError(AdapterUnavailableError):
 
 
 class ProtocolMismatchError(AhpUnavailableError):
-    """VS Code runs an Agent Host, but only with protocol versions the relay does not speak."""
+    """VS Code runs an Agent Host, but `initialize` found no protocol version both sides speak."""
+
+
+def mismatch_message(advertised: str, selected: str | None = None) -> str:
+    relay = ", ".join(SUPPORTED_VERSIONS)
+    if selected is not None:
+        return f"VS Code (AHP {advertised}) picked AHP {selected}; the relay supports {relay}"
+    return f"VS Code (AHP {advertised}) refused AHP {relay}, the versions the relay supports"
 
 
 @dataclass(frozen=True)
@@ -55,7 +65,6 @@ def parse_endpoints(raw: str) -> Endpoint:
         document: object = json.loads(raw)
     except json.JSONDecodeError as exc:
         raise AhpUnavailableError("`code agent endpoints` did not print JSON") from exc
-    seen: list[str] = []
     for entry in _candidates(document):
         target = entry.get("endpoint")
         if not isinstance(target, dict) or target.get("type") != "socket":
@@ -64,15 +73,8 @@ def parse_endpoints(raw: str) -> Endpoint:
         version = entry.get("protocolVersion")
         if not isinstance(socket_path, str) or not isinstance(token, str) or not isinstance(version, str):
             continue
-        if version not in SUPPORTED_VERSIONS:
-            seen.append(version)
-            continue
         pid = entry.get("pid")
         return Endpoint(socket_path, version, token, pid if isinstance(pid, int) else None)
-    if seen:
-        raise ProtocolMismatchError(
-            f"VS Code speaks AHP {', '.join(seen)}; the relay supports {', '.join(SUPPORTED_VERSIONS)}"
-        )
     raise AhpUnavailableError("VS Code is not running an Agent Host (open VS Code)")
 
 

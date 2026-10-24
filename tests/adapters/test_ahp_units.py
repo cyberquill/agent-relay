@@ -43,9 +43,11 @@ def test_parse_endpoints_picks_the_socket() -> None:
     assert "tok" not in repr(endpoint)
 
 
-def test_parse_endpoints_rejects_unsupported_versions_and_bad_output() -> None:
-    with pytest.raises(AhpUnavailableError, match=r"speaks AHP 0\.9\.0"):
-        parse_endpoints(endpoints_doc("0.9.0"))
+def test_parse_endpoints_leaves_the_version_to_initialize() -> None:
+    assert parse_endpoints(endpoints_doc("1.1.0")).protocol_version == "1.1.0"
+
+
+def test_parse_endpoints_rejects_bad_output() -> None:
     with pytest.raises(AhpUnavailableError, match="not running an Agent Host"):
         parse_endpoints(endpoints_doc(kind="pipe"))
     with pytest.raises(AhpUnavailableError, match="did not print JSON"):

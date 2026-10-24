@@ -13,7 +13,7 @@ from pydantic import JsonValue
 
 from agent_relay.adapters.ahp import uris
 from agent_relay.adapters.ahp.adapter import CHAT_EXTRA, TURN_EXTRA, AhpAdapter
-from agent_relay.adapters.ahp.endpoints import Endpoint
+from agent_relay.adapters.ahp.endpoints import SUPPORTED_VERSIONS, Endpoint
 from agent_relay.adapters.ahp.rpc import AhpConnectionError, AhpRpcError, Connection
 from agent_relay.adapters.base import UnsupportedError
 from agent_relay.core import away
@@ -165,6 +165,48 @@ async def test_wrong_token_never_connects(registry: Registry, relay_home: Path) 
     task.cancel()
     await asyncio.gather(task, return_exceptions=True)
     await host.stop()
+
+
+async def test_a_newer_host_negotiates_the_version_the_relay_speaks(
+    registry: Registry, relay_home: Path
+) -> None:
+    host = await FakeAgentHost(str(relay_home / "ah.sock"), protocol_version="1.1.0").start()
+
+    async def found() -> Endpoint:
+        return host.endpoint
+
+    adapter = AhpAdapter(registry, discover_endpoint=found, sleep=fast_sleep, backoff=(0.01, 0.02))
+    task = asyncio.create_task(adapter.run(Sink()))
+    try:
+        await until(lambda: adapter.connected)
+        offered = dict(host.requests)["initialize"]["protocolVersions"]
+        assert offered == list(SUPPORTED_VERSIONS)
+    finally:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+        await host.stop()
+
+
+async def test_a_host_that_refuses_every_offered_version_never_connects(
+    registry: Registry, relay_home: Path
+) -> None:
+    host = await FakeAgentHost(
+        str(relay_home / "ah.sock"), protocol_version="2.0.0", accepts=("2.0.0",)
+    ).start()
+
+    async def found() -> Endpoint:
+        return host.endpoint
+
+    adapter = AhpAdapter(registry, discover_endpoint=found, sleep=fast_sleep, backoff=(0.01, 0.02))
+    task = asyncio.create_task(adapter.run(Sink()))
+    try:
+        await until(lambda: host.methods().count("initialize") >= 2)
+        assert not adapter.connected
+        assert "listSessions" not in host.methods()
+    finally:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+        await host.stop()
 
 
 async def test_models_come_from_the_root_snapshot(rig: Rig) -> None:

@@ -14,8 +14,15 @@ from pydantic import JsonValue
 from websockets.asyncio.client import ClientConnection, unix_connect
 from websockets.exceptions import ConnectionClosed, InvalidHandshake
 
-from agent_relay.adapters.ahp.endpoints import AhpUnavailableError, Endpoint
-from agent_relay.adapters.ahp.models import AhpModel
+from agent_relay.adapters.ahp.endpoints import (
+    SUPPORTED_VERSIONS,
+    UNSUPPORTED_PROTOCOL_VERSION,
+    AhpUnavailableError,
+    Endpoint,
+    ProtocolMismatchError,
+    mismatch_message,
+)
+from agent_relay.adapters.ahp.models import AhpModel, InitializeParams, InitializeResult
 from agent_relay.log import get_logger
 
 log = get_logger(__name__)
@@ -163,3 +170,17 @@ class Connection:
         self._reader.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await self._reader
+
+
+async def initialize(conn: Connection, endpoint: Endpoint, params: InitializeParams) -> InitializeResult:
+    """Send `initialize` and check the host picked a version the relay speaks."""
+    try:
+        raw = await conn.request("initialize", params)
+    except AhpRpcError as exc:
+        if exc.code == UNSUPPORTED_PROTOCOL_VERSION:
+            raise ProtocolMismatchError(mismatch_message(endpoint.protocol_version)) from exc
+        raise
+    result = InitializeResult.model_validate(raw)
+    if result.protocol_version not in SUPPORTED_VERSIONS:
+        raise ProtocolMismatchError(mismatch_message(endpoint.protocol_version, result.protocol_version))
+    return result

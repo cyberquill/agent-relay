@@ -22,6 +22,10 @@ _MODEL_LINE = re.compile(
 )
 _MARKER = re.compile(r"\s*\((?P<mark>current|default)\)\s*$", re.IGNORECASE)
 _NOT_LOGGED_IN = ("not logged in", "authentication required", "please log in", "agent login")
+_VERSION = re.compile(r"\d+(?:\.\d+)*")
+# A family's representative prefers Cursor's unsuffixed id, then these effort levels.
+_PICK_ORDER = ("", "medium", "high", "low", "xhigh", "extra", "max", "none")
+_VARIANT_TOKENS = frozenset({*_PICK_ORDER[1:], "fast", "thinking"})
 
 
 async def run_cli(argv: Sequence[str]) -> tuple[int, str]:
@@ -77,6 +81,57 @@ def parse_models(text: str) -> list[ModelInfo]:
     return models
 
 
+def _shape(model_id: str) -> tuple[str, tuple[int, ...], tuple[str, ...]]:
+    """`claude-opus-5-5-high-fast` -> (`claude-opus`, (5, 5), (`high`, `fast`))."""
+    family: list[str] = []
+    version: list[int] = []
+    variant: list[str] = []
+    for token in model_id.lower().split("-"):
+        if _VERSION.fullmatch(token):
+            version.extend(int(part) for part in token.split("."))
+        elif token in _VARIANT_TOKENS:
+            variant.append(token)
+        else:
+            family.append(token)
+    return "-".join(family), tuple(version), tuple(variant)
+
+
+def _pick_rank(variant: tuple[str, ...]) -> int:
+    effort = next((token for token in variant if token in _PICK_ORDER), "")
+    return _PICK_ORDER.index(effort) + 2 * ("fast" in variant) + 2 * ("thinking" in variant)
+
+
+def rank_models(models: list[ModelInfo]) -> list[ModelInfo]:
+    """Order models so a picker capped at a few dozen shows the useful ones first.
+
+    The default comes first, then one model per family at its newest version, then that
+    version's other variants, then older versions. Each tier keeps the CLI's own order.
+    Nothing is dropped: a capped card can still be overridden with `/model <id>`.
+    """
+    shapes = {model.id: _shape(model.id) for model in models}
+    newest: dict[str, tuple[int, ...]] = {}
+    for family, version, _variant in shapes.values():
+        newest[family] = max(newest.get(family, version), version)
+    picks: dict[str, ModelInfo] = {}
+    for model in models:
+        family, version, variant = shapes[model.id]
+        held = picks.get(family)
+        better = held is None or _pick_rank(variant) < _pick_rank(shapes[held.id][2])
+        if version == newest[family] and better:
+            picks[family] = model
+    chosen = {model.id for model in picks.values()}
+
+    def tier(model: ModelInfo) -> int:
+        family, version, _variant = shapes[model.id]
+        if model.default:
+            return 0
+        if model.id in chosen:
+            return 1
+        return 2 if version == newest[family] else 3
+
+    return sorted(models, key=tier)
+
+
 class CursorCli:
     def __init__(
         self,
@@ -124,7 +179,7 @@ class CursorCli:
                 raise AdapterUnavailableError(LOGIN_HINT)
             first = next((line.strip() for line in output.splitlines() if line.strip()), f"exit {code}")
             raise AdapterUnavailableError(f"`cursor-agent models` failed: {first}")
-        models = parse_models(output)
+        models = rank_models(parse_models(output))
         self._models = (self._clock(), models)
         return list(models)
 
