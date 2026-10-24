@@ -1,0 +1,68 @@
+agent_relay/adapters/cursor_cli/catalog.py
+  s_daf15caa86690b::t_3325456107f0dc 25-28
+  s_daf15caa86690b::t_bbc26e0936d3ed 84-134
+  s_daf15caa86690b::t_31bed4c2227ee7 182
+tests/adapters/test_ahp_units.py
+  s_459f41b9be1baf::t_4699a8be89e7f9 46-50
+agent_relay/adapters/ahp/rpc.py
+  s_459f41b9be1baf::t_3c4035977e8dac 173-186
+  s_459f41b9be1baf::t_96551662a424d7 17-25
+tests/adapters/test_ahp.py
+  s_459f41b9be1baf::t_5c3149063dfd52 170-207
+  s_459f41b9be1baf::t_45182f8f92c3c9 16
+  s_459f41b9be1baf::t_6f7f74b9154749 208-211
+tests/live/test_ahp_live.py
+  s_459f41b9be1baf::t_71ed05570888d4 8-9
+  s_459f41b9be1baf::t_ea1815cef77956 37
+  s_459f41b9be1baf::t_03472a390242e9 12-13,24-32,34
+agent_relay/adapters/selftests.py
+  s_459f41b9be1baf::t_25386c15a8982c 5,8-18,25,28-44,48,53-57
+tests/fakes/ahp.py
+  s_459f41b9be1baf::t_8d014edc78b09e 149-154
+  s_459f41b9be1baf::t_6156e7dad5de10 48-51
+  s_459f41b9be1baf::t_095d7f86132a1b 163-172,177
+  s_459f41b9be1baf::t_72d31b8167bc81 57
+agent_relay/adapters/ahp/endpoints.py
+  s_459f41b9be1baf::t_93f7d1d776aa2a 3-5
+  s_459f41b9be1baf::t_247a8fb3bc48b3 22
+  s_459f41b9be1baf::t_307963ed51a6da 33-40
+tests/adapters/test_cursor_cli_units.py
+  s_daf15caa86690b::t_4ffd126e3a365e 41-59,61-70
+  s_daf15caa86690b::t_0713efb2315fd1 60
+  s_daf15caa86690b::t_d36f26547b8722 15
+tests/adapters/test_selftests.py
+  s_459f41b9be1baf::t_f84bedb5bbb06b 5
+  s_459f41b9be1baf::t_2425901d892ab7 7,9-10,15,25-26,28-29,34-44,49-52
+  s_459f41b9be1baf::t_a6fd944ab6888a 45-48
+agent_relay/adapters/ahp/adapter.py
+  s_459f41b9be1baf::t_4a6fc0bf40a636 26-27
+  s_459f41b9be1baf::t_a22001596aa85a 180,185
+docs/deviations.md
+  s_459f41b9be1baf::t_1e0d441eab9cce 122
+docs/operations.md
+  s_459f41b9be1baf::t_ef4bc75a81ac1d 321
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c7bea85a52af4cfeb7e6eca2c8d1e462290d9754",
+  "prompts": {},
+  "sessions": {
+    "s_459f41b9be1baf": {
+      "agent_id": {
+        "tool": "github-copilot-cli",
+        "id": "5babce0d-d0b5-4247-b025-f40e3c2bbc0b",
+        "model": "unknown"
+      },
+      "human_author": "Brijgopal Bharadwaj <brijgopalbharadwaj1999@gmail.com>"
+    },
+    "s_daf15caa86690b": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "c0976dce-7777-4787-ba12-753758b5f523",
+        "model": "auto-smart"
+      },
+      "human_author": "Brijgopal Bharadwaj <brijgopalbharadwaj1999@gmail.com>"
+    }
+  }
+}
