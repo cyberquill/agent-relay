@@ -27,6 +27,7 @@ from agent_relay.adapters.cursor_cdp.connect import Connection, Connector, Launc
 from agent_relay.adapters.cursor_cdp.driver import Composer, Snapshot, TurnTracker
 from agent_relay.adapters.cursor_cdp.selectors import SelectorSet, load_selectors
 from agent_relay.adapters.cursor_cdp.selftest import gate, last_report
+from agent_relay.core.claims import CURSOR_SCOPE, make_claim, take_claim
 from agent_relay.core.registry import Registry
 from agent_relay.log import get_logger
 from agent_relay.models.attachments import Attachment
@@ -256,6 +257,10 @@ class CursorCdpAdapter(Adapter):
             labels = await (await self._ready(None)).models()
         return [ModelInfo(id=label, label=label) for label in labels]
 
+    async def _drop_claim(self, workspace: str | None) -> None:
+        if workspace:
+            await take_claim(self._registry, workspace, scope=CURSOR_SCOPE)
+
     async def start_session(
         self, request: StartRequest, attachments: Sequence[Attachment] = ()
     ) -> SessionRecord:
@@ -264,8 +269,16 @@ class CursorCdpAdapter(Adapter):
             if self._turn is not None:
                 raise AdapterUnavailableError("Cursor's composer is busy with another phone chat.")
             composer = await self._ready(request.workspace)
-            await composer.new_chat()
             key = f"{self.harness.value}:phone-{uuid.uuid4().hex}"
+            if request.workspace:
+                # Cursor's hooks fire for this chat too, the first one as the chat opens: claim the
+                # workspace before the click so that hook binds to this session (core/claims.py).
+                await make_claim(self._registry, request.workspace, key, scope=CURSOR_SCOPE)
+            try:
+                await composer.new_chat()
+            except Exception:
+                await self._drop_claim(request.workspace)
+                raise
             record = await self._registry.create_session(
                 SessionRecord(
                     session_key=key,

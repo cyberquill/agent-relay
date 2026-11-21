@@ -130,3 +130,20 @@ def test_a_model_option_is_named_by_its_first_line() -> None:
     assert option_label("Claude Sonnet 5.5 High\n\nEdit") == "Claude Sonnet 5.5 High"
     assert option_label("  Auto Balance  ") == "Auto Balance"
     assert option_label("\n  \n") == ""
+
+
+def test_a_reply_is_new_by_its_message_id_when_older_rows_leave_the_page() -> None:
+    """Cursor unmounts old rows, so the count can fall while a new reply arrives (seen live, D134)."""
+    old = frozenset({"c/s:1", "c/s:4", "c/s:7"})
+    tracker = TurnTracker(Snapshot(3, "old answer", False, "c/s:7", old))
+    assert tracker.feed(Snapshot(3, "old answer", True, "c/s:7", old)) == ""
+    assert tracker.feed(Snapshot(2, "relay", True, "c/s:12", frozenset({"c/s:7", "c/s:12"}))) == "relay"
+    assert tracker.feed(Snapshot(2, "relay-e2e-42", False, "c/s:12", frozenset({"c/s:7", "c/s:12"}))) == (
+        "-e2e-42"
+    )
+    assert tracker.done and tracker.text == "relay-e2e-42"
+
+
+def test_snapshots_parse_message_ids() -> None:
+    parsed = Snapshot.parse({"count": 2, "text": "x", "busy": False, "lastId": "a", "ids": ["a", "", 3, "b"]})
+    assert parsed == Snapshot(2, "x", False, "a", frozenset({"a", "b"}))

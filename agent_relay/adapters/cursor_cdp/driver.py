@@ -28,6 +28,8 @@ OBSERVER_JS = """
       count: replies.length,
       text: last ? (last.innerText || last.textContent || "") : "",
       busy: document.querySelector(stopCss) !== null,
+      lastId: last ? (last.getAttribute("data-message-id") || "") : "",
+      ids: Array.from(replies, (el) => el.getAttribute("data-message-id") || ""),
     });
   };
   const schedule = () => { if (timer === null) { timer = setTimeout(report, 50); } };
@@ -46,6 +48,8 @@ SNAPSHOT_JS = """
     count: replies.length,
     text: last ? (last.innerText || last.textContent || "") : "",
     busy: document.querySelector(stopCss) !== null,
+    lastId: last ? (last.getAttribute("data-message-id") || "") : "",
+    ids: Array.from(replies, (el) => el.getAttribute("data-message-id") || ""),
   };
 }
 """
@@ -68,9 +72,15 @@ async def press(target: Locator) -> None:
 
 @dataclass(frozen=True)
 class Snapshot:
+    """The reply area at one moment. Cursor keeps only the rows near the viewport in the page, so older
+    replies disappear as new ones appear: a reply is new by its message id, and by the count only when
+    the page gives no ids."""
+
     count: int
     text: str
     busy: bool
+    last_id: str = ""
+    ids: frozenset[str] = frozenset()
 
     @classmethod
     def parse(cls, raw: object) -> Snapshot:
@@ -78,18 +88,23 @@ class Snapshot:
             return cls(0, "", False)
         count = raw.get("count")
         text = raw.get("text")
+        last_id = raw.get("lastId")
+        ids = raw.get("ids")
         return cls(
             count if isinstance(count, int) else 0,
             text if isinstance(text, str) else "",
             bool(raw.get("busy")),
+            last_id if isinstance(last_id, str) else "",
+            frozenset(i for i in ids if isinstance(i, str) and i) if isinstance(ids, list) else frozenset(),
         )
 
 
 class TurnTracker:
-    """Follows one turn: the reply is the first assistant message added after `baseline`."""
+    """Follows one turn: the reply is the last assistant message that was not there at `baseline`."""
 
     def __init__(self, baseline: Snapshot) -> None:
         self._base_count = baseline.count
+        self._base_ids = baseline.ids
         self._text = ""
         self._seen_busy = False
         self.done = False
@@ -98,15 +113,20 @@ class TurnTracker:
     def text(self) -> str:
         return self._text
 
+    def _fresh(self, snap: Snapshot) -> bool:
+        if snap.last_id:
+            return snap.last_id not in self._base_ids
+        return snap.count > self._base_count
+
     def began(self, snap: Snapshot) -> bool:
         """Whether Cursor acted on the send: a stop button was seen, or a new assistant message exists."""
-        return self._seen_busy or snap.busy or snap.count > self._base_count
+        return self._seen_busy or snap.busy or self._fresh(snap)
 
     def feed(self, snap: Snapshot) -> str:
         """Returns the new reply text since the last snapshot; sets `done` when the turn ends."""
         if self.done:
             return ""
-        text = snap.text if snap.count > self._base_count else ""
+        text = snap.text if self._fresh(snap) else ""
         delta = text[len(self._text) :] if text.startswith(self._text) else ""
         self._text = text
         if snap.busy:
@@ -144,6 +164,7 @@ class Composer:
                 "css => document.querySelectorAll(css).length === 0",
                 arg=self._selectors.css("assistant_message"),
                 timeout=NEW_CHAT_WAIT_MS,
+                polling=100,  # not "raf": a hidden or occluded window never fires animation frames
             )
         except PlaywrightError:
             raise AdapterUnavailableError(

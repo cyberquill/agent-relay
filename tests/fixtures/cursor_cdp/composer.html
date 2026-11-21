@@ -86,6 +86,7 @@ sendButton.addEventListener("click", () => {
   const ai = document.createElement("div");
   ai.setAttribute("data-message-role", "ai");
   ai.setAttribute("data-message-kind", "assistant");
+  ai.setAttribute("data-message-id", `chat/s:${conversations.children.length}`);
   conversations.append(ai);
   const stop = document.createElement("span");
   stop.className = "codicon codicon-debug-stop";

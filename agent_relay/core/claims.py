@@ -16,7 +16,9 @@ from dataclasses import dataclass
 from agent_relay import paths
 from agent_relay.core.registry import Registry
 
-CLAIM_KEY = "vscode_claim:{workspace}"
+CLAIM_KEY = "{scope}_claim:{workspace}"
+CURSOR_SCOPE = "cursor"
+VSCODE_SCOPE = "vscode"
 ALIAS_KEY = "hook_alias:{hook_session_id}"
 CLAIM_TTL_S = 120.0
 UNCLAIMED_PREFIX = "unclaimed-"
@@ -28,8 +30,8 @@ class Claim:
     expires: float
 
 
-def claim_key(workspace: str) -> str:
-    return CLAIM_KEY.format(workspace=paths.expand_user(workspace).resolve())
+def claim_key(workspace: str, scope: str = VSCODE_SCOPE) -> str:
+    return CLAIM_KEY.format(scope=scope, workspace=paths.expand_user(workspace).resolve())
 
 
 async def make_claim(
@@ -38,18 +40,22 @@ async def make_claim(
     session_key: str,
     ttl: float = CLAIM_TTL_S,
     clock: Callable[[], float] = time.time,
+    scope: str = VSCODE_SCOPE,
 ) -> None:
     value = json.dumps({"session_key": session_key, "expires": clock() + ttl})
-    await registry.kv_set(claim_key(workspace), value)
+    await registry.kv_set(claim_key(workspace, scope), value)
 
 
 async def take_claim(
-    registry: Registry, workspace: str | None, clock: Callable[[], float] = time.time
+    registry: Registry,
+    workspace: str | None,
+    clock: Callable[[], float] = time.time,
+    scope: str = VSCODE_SCOPE,
 ) -> Claim | None:
     """Pop the workspace's claim if it is still live. Expired or malformed claims are dropped."""
     if not workspace:
         return None
-    raw = await registry.kv_pop(claim_key(workspace))
+    raw = await registry.kv_pop(claim_key(workspace, scope))
     if raw is None:
         return None
     try:

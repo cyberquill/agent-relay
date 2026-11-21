@@ -425,44 +425,34 @@ the table is the last result per cell.
 | `scripts/card_check.py`: every card accepted by Webex (HTTP 200) | ✅ 14 of 14 |
 | 1 `/help` | ✅ |
 | 2 `/new` card, one final OK | ✅ Copilot (AHP), VS Code, Cursor CLI, OpenCode |
-| 3 reply in a thread | ✅ Cursor CLI, OpenCode, VS Code. Copilot: passed only because the reply matched `OK` inside the classifier JSON (D129); the check now needs the message to start with `OK` |
-| 4 image and PDF reach the agent | ✅ VS Code (first run), Cursor CLI (after D131), OpenCode. Copilot: ❌ open (see below) |
-| 5 long table arrives as `answer.html` (CSP, no script, no href) | ✅ VS Code, Cursor CLI, OpenCode. Copilot: ❌ the answer was the classifier JSON (D129) |
-| 6 `/model` card, next turn uses it | ✅ Copilot, Cursor CLI, OpenCode. VS Code: the model reached the session (D132), the root line was out of edits (see below) |
-| 7 shell command, no approval card | ✅ Cursor CLI (`--force`), OpenCode (`always`). Copilot: no card and the tool ran (`🔧 1`), but the text was the classifier JSON (D129). VS Code: ❌ queued behind item 1 |
+| 3 reply in a thread | ✅ VS Code, Copilot, Cursor IDE (CDP), Cursor CLI, OpenCode |
+| 4 image and PDF reach the agent | ✅ VS Code, Copilot, Cursor IDE (CDP), Cursor CLI (after D131), OpenCode |
+| 5 long table arrives as `answer.html` (CSP, no script, no href) | ✅ VS Code, Copilot, Cursor IDE (CDP), Cursor CLI, OpenCode |
+| 6 `/model` card, next turn uses it | ✅ VS Code (claude-haiku-4.5), Copilot (claude-sonnet-5.5), Cursor IDE (Grok 4.7 High), Cursor CLI, OpenCode |
+| 7 shell command, no approval card | ✅ VS Code, Copilot, Cursor IDE (CDP), Cursor CLI (`--force`), OpenCode (`always`) |
 | 8 away: desk chat reaches the phone, reply continues it, `/back` releases it | not run: it needs the owner to run a desk turn |
 | 9 `/panic` | ✅ everything stopped, `/away` resumed, away left off |
-| Cursor CDP on Cursor 3.31.15 (selectors v4, D133) | ✅ self-test passes; `/new cursor-ide scratch "Reply with exactly: OK"` made a thread and answered `OK ⏱ 2s`; `/models cursor-ide` lists the picker's models. The first attempts failed on the v3 selectors (`messages`, `send` on a window with no chat, a reply row that was a tool row, a model menu that did not open). Not run: `/model` on a CDP chat, and a desk-chat adoption |
+| Cursor CDP on Cursor 3.31.15 (selectors v4, D133, D134) | ✅ self-test passes; scenarios 2 to 7 pass (`/new cursor-ide`, reply, image and PDF, `answer.html`, `/model` Grok 4.7 High, shell). Not run: scenario 8 on a Cursor desk chat |
 | Android look of the `/new` and `/model` cards (by the owner) | not run: owner |
 
-Second VS Code and Copilot run (2026-11-21, after the VS Code reload; the owner asked to go past the
-three-session cap for these two apps):
+Later runs on 2026-11-21 (the owner lifted the three-session cap for these apps):
 
-- **VS Code**: scenario 2 ✅. The answers of 3, 5 and 7 were right (`OK`, the table, `relay-e2e-42`):
-  the empty answers of D129 are gone. The run still "failed" 3 to 7 because the driver counted the
-  relay's own `📨 delivered to the parked session` and `📨 Queued (N waiting)` receipts as extra messages;
-  the driver now ignores them, like the `📎` receipt (`scripts/e2e/cardkit.py::is_receipt`). Scenario 6's
-  model *did* reach the session (`model` column `claude-haiku-4.5`, the later turns ran), so D132 works;
-  what failed was the root line, which still read "default model": the root has a budget of 8 edits
-  (`renderer.root_edit_budget`) and a long thread spends it. The driver now falls back to the thread's
-  `/status` reply (`model: …`).
-- **Copilot (AHP)**: scenario 2 ✅, 3 ✅ (a real `OK`, not the classifier JSON). Scenario 4 left the
-  session `running` with an open question ("I received the attached image. What would you like me to do
-  with it?"): the driver sent the PNG alone, and a files-only message to a **parked** chat goes at once as
-  `Files from the phone:` plus the path (D122c), so the agent got no question to answer. Scenarios 5 to 7
-  then only queued behind that open question. The driver now sends each file together with the question.
-  **Scenarios 4 to 7 for Copilot are not re-run**: the cap of three live sessions per adapter was used up.
+- **VS Code and Copilot (AHP), scenarios 2 to 7: 12 of 12 ✅** after the driver fixes. The earlier failures
+  were the driver's: it counted the relay's `📨 delivered…` and `📨 Queued…` receipts as extra messages
+  (`scripts/e2e/cardkit.py::is_receipt`), sent a PNG alone (a files-only message to a parked chat goes at
+  once, so the agent asked what to do with it; each file now goes with its question), and read the model
+  from a root line whose 8-edit budget a long thread uses up (it falls back to `/status`).
+- **Cursor IDE (CDP) on Cursor 3.31.15, scenarios 2 to 7: 6 of 6 ✅** after selectors v4 (D133) and D134:
+  its own hooks made a second desk thread for every chat the phone opened, and the reply was missed once
+  old rows left the page.
 
 Open items for the owner:
 
-1. **Re-run after the driver fixes**: `RELAY_LIVE=1 .venv/bin/python scripts/phone_e2e.py --only 2,3,4,5,6,7
-   --apps copilot,vscode` (one new session each; both are over the cap, so this is the owner's call).
-   Close the stuck Copilot session first with `/stop` in its thread.
-2. After a restart of VS Code, a Copilot thread made before it cannot be replied to
+1. After a restart of VS Code, a Copilot thread made before it cannot be replied to
    (`Session was never created on the backend`, shown as "That failed (AhpRpcError)").
-3. Scenario 8 (away round trip) needs the owner at the desk: see `TODO.md`.
-4. Cursor CDP and Android, as in the table. The AHP `autoApprove` flag is only indirectly confirmed
-   (scenario 7 ran a tool with no card); a desk-session check of the three apps is still open.
+2. Scenario 8 (away round trip) needs the owner at the desk: see `TODO.md`.
+3. Android, as in the table. The AHP `autoApprove` flag is only indirectly confirmed (scenario 7 ran a tool
+   with no card); a desk-session check of the three apps is still open.
 
 ### Live smoke 2026-10-04 06:55 UTC (October round, `scripts/smoke_live.py`, since deleted; it checked approval cards that no longer exist)
 

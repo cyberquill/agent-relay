@@ -12,7 +12,7 @@ from pydantic import JsonValue
 
 from agent_relay import paths
 from agent_relay.core import away
-from agent_relay.core.claims import make_claim
+from agent_relay.core.claims import CURSOR_SCOPE, make_claim, take_claim
 from agent_relay.core.hooks import ALLOW_REASON, HOOKED
 from agent_relay.core.parking import RENEW_TEXT
 from agent_relay.core.registry import Registry
@@ -524,6 +524,63 @@ async def test_an_agent_host_claim_is_not_taken_by_a_copilot_cli_hook(
     await hook(built, "copilot", "sessionStart", {"sessionId": "C9", "cwd": "/w/proj"})
     keys = sorted(s.session_key for s in await built.registry.list_sessions())
     assert keys == ["copilot_cli:C9", "vscode_copilot:A1"]
+
+
+async def _cdp_chat(built: Core) -> None:
+    await built.registry.create_session(
+        SessionRecord(
+            session_key="cursor_cdp:phone-1",
+            harness=Harness.CURSOR_CDP,
+            harness_id="phone-1",
+            workspace="/w/proj",
+            origin=Origin.PHONE,
+            status=SessionStatus.RUNNING,
+        )
+    )
+    await make_claim(built.registry, "/w/proj", "cursor_cdp:phone-1", scope=CURSOR_SCOPE)
+
+
+async def test_cursor_hooks_of_a_chat_the_phone_opened_join_it_and_register_no_second_session(
+    core: tuple[Core, Recorder, list[str]],
+) -> None:
+    """Cursor hooks also fire for a chat the CDP adapter drives; without the claim a desk session appeared."""
+    built, rec, _ = core
+    await away.set_away(built.registry, True)
+    await _cdp_chat(built)
+    assert await hook(built, "cursor", "stop", {**STOP_CURSOR, "conversation_id": "K9"}) == {}
+    assert await hook(built, "cursor", "stop", {**STOP_CURSOR, "conversation_id": "K9"}) == {}
+    keys = [s.session_key for s in await built.registry.list_sessions()]
+    assert keys == ["cursor_cdp:phone-1"]
+    assert not rec.of(SessionStarted) and not rec.of(SessionParked)
+
+
+async def test_a_cursor_hook_that_beats_the_cdp_session_record_still_joins_it(
+    core: tuple[Core, Recorder, list[str]],
+) -> None:
+    """The chat's first hook fires as it opens, before the adapter has stored the session."""
+    built, rec, _ = core
+    await away.set_away(built.registry, True)
+    await make_claim(built.registry, "/w/proj", "cursor_cdp:phone-1", scope=CURSOR_SCOPE)
+
+    async def store_later() -> None:
+        await asyncio.sleep(0.3)
+        await _cdp_chat(built)
+
+    later = asyncio.create_task(store_later())
+    start: dict[str, JsonValue] = {"conversation_id": "K9", "workspace_roots": ["/w/proj"]}
+    assert await hook(built, "cursor", "sessionStart", start) == {}
+    await later
+    assert [s.session_key for s in await built.registry.list_sessions()] == ["cursor_cdp:phone-1"]
+    assert not rec.of(SessionStarted)
+
+
+async def test_a_cdp_claim_is_not_taken_by_a_vscode_hook(core: tuple[Core, Recorder, list[str]]) -> None:
+    built, _, _ = core
+    await away.set_away(built.registry, True)
+    await _cdp_chat(built)
+    start: dict[str, JsonValue] = {"session_id": "H1", "cwd": "/w/proj", "source": "new"}
+    await hook(built, "copilot", "SessionStart", start)
+    assert await take_claim(built.registry, "/w/proj", scope=CURSOR_SCOPE) is not None
 
 
 async def test_a_hooked_session_is_marked_so_the_agent_host_adapter_leaves_its_tool_events_here(

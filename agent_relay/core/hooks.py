@@ -8,15 +8,17 @@ once: there are no approval cards. After a panic the relay answers nothing and t
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
+import time
 
 from pydantic import JsonValue
 
 from agent_relay import paths
 from agent_relay.core import away
 from agent_relay.core.approvals import ApprovalBroker
-from agent_relay.core.claims import UNCLAIMED_PREFIX, aliased, link_alias, take_claim
+from agent_relay.core.claims import CURSOR_SCOPE, UNCLAIMED_PREFIX, aliased, link_alias, take_claim
 from agent_relay.core.lifecycle import Lifecycle
 from agent_relay.core.parking import AWAY_OFF_REASON, ParkManager, phone_text
 from agent_relay.core.registry import Registry
@@ -53,12 +55,14 @@ APPROVAL_KINDS = frozenset(
 AFTER_KINDS = frozenset({HookKind.POST_TOOL, HookKind.SHELL_AFTER, HookKind.MCP_AFTER, HookKind.TOOL_FAILURE})
 COPILOT_FAMILY = (Harness.VSCODE_COPILOT, Harness.VSCODE, Harness.COPILOT_CLI)
 CURSOR_FAMILY = (Harness.CURSOR, Harness.CURSOR_CLI)
-ACP_OWNED = frozenset({Harness.CURSOR_CLI})
+# Sessions whose adapter reports everything itself: Cursor's hooks for these chats are ignored.
+ACP_OWNED = frozenset({Harness.CURSOR_CLI, Harness.CURSOR_CDP})
 CURSOR_GATED = ("shell", "terminal", "mcp")
 OPENCODE_SERVER_PREFIX = "opencode.server:"
 LAST_TEXT = "last_text"
 RENEWING = "renewing"
 HOOKED = "hooked"
+CLAIM_RECORD_WAIT_S = 5.0
 ALLOW_REASON = "allowed by agent-relay"
 
 
@@ -142,7 +146,7 @@ class HookService:
             found = await self._registry.find_session(harness, hook.session_id)
             if found is not None:
                 return found
-        if hook.family is HookFamily.COPILOT:
+        if hook.family in (HookFamily.COPILOT, HookFamily.CURSOR):
             key = await aliased(self._registry, hook.session_id)
             found = await self._registry.get_session(key) if key else None
             if found is not None:
@@ -151,8 +155,11 @@ class HookService:
 
     async def _claimed(self, hook: HookInput) -> SessionRecord | None:
         """Bind the first unmatched VS Code hook in a workspace to the chat the phone just opened there."""
-        vscode = hook.family is HookFamily.COPILOT and hook.event[:1].isupper()
-        if not vscode or hook.kind is HookKind.SESSION_END or hook.session_id == "unknown":
+        if hook.kind is HookKind.SESSION_END or hook.session_id == "unknown":
+            return None
+        if hook.family is HookFamily.CURSOR:
+            return await self._claimed_by_cdp(hook)
+        if not (hook.family is HookFamily.COPILOT and hook.event[:1].isupper()):
             return None
         claim = await take_claim(self._registry, hook.workspace)
         if claim is None:
@@ -169,6 +176,23 @@ class HookService:
             log.info(f"linked {session.session_key} to Agent Host hook session {hook.session_id}")
             return session
         return None
+
+    async def _claimed_by_cdp(self, hook: HookInput) -> SessionRecord | None:
+        """Bind the first unmatched Cursor hook in a workspace to the chat the phone just opened there."""
+        claim = await take_claim(self._registry, hook.workspace, scope=CURSOR_SCOPE)
+        if claim is None:
+            return None
+        # The hook of a chat the adapter is opening can beat the adapter's own session record.
+        deadline = time.monotonic() + CLAIM_RECORD_WAIT_S
+        session = await self._registry.get_session(claim.session_key)
+        while session is None and time.monotonic() < deadline:
+            await asyncio.sleep(0.1)
+            session = await self._registry.get_session(claim.session_key)
+        if session is None or session.harness is not Harness.CURSOR_CDP:
+            return None
+        await link_alias(self._registry, hook.session_id, session.session_key)
+        log.info(f"linked {session.session_key} to Cursor hook session {hook.session_id}")
+        return session
 
     async def _register(self, hook: HookInput) -> SessionRecord:
         record = await self._registry.create_session(

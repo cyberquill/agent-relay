@@ -10,7 +10,7 @@ from scripts.e2e.model import Msg, ScenarioFailed, ScenarioSkipped
 from scripts.e2e.scenarios import thread_of
 from scripts.e2e.watch import Watch
 
-MODEL_REPLY = re.compile(r"Model\s*→\s*`?([^`\s]+)`?")
+MODEL_REPLY = re.compile(r"Model\s*→\s*`?(.+?)`?\s+from the next turn")
 MODEL_LISTED = re.compile(r"^- `([^`]+)`", re.M)
 NO_MODEL_SELECT = re.compile(r"(?i)(not support|no model selection|cannot|can't|does not)")
 RUNNING_ICON = "⏳"

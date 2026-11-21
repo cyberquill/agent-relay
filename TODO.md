@@ -3,7 +3,7 @@
 Last updated 2026-11-21, after the code of the November round (branch `feat/november-round`, P0–P8).
 The plan is [`docs/PLAN.md`](docs/PLAN.md); the November round's plan is
 [`sandbox/08-usability-round.md`](sandbox/08-usability-round.md) (decisions U1–U14, phases P0–P8).
-Departures are in [`docs/deviations.md`](docs/deviations.md) (D1–D133), and each acceptance criterion maps
+Departures are in [`docs/deviations.md`](docs/deviations.md) (D1–D134), and each acceptance criterion maps
 to its tests in [`docs/acceptance.md`](docs/acceptance.md) (AC-1–AC-40, OR-1–OR-20 for the October round,
 UR-1–UR-8 for the November round). For users, start with [`docs/user-guide.md`](docs/user-guide.md).
 
@@ -39,8 +39,8 @@ orchestrator.
       on a stale tap? (Now relevant to every one-shot card, D119.)
 - [ ] Does Webex Android open `answer.html` in the app or hand it to the browser, and does the CSP survive
       either path? (D122)
-- [ ] With away on, does a Cursor CDP chat also register as a second desk session through Cursor's hooks?
-      `core/hooks.py` links `cursor` and `cursor_cli` but not `cursor_cdp`; if it does, link it.
+- [x] With away on, does a Cursor CDP chat also register as a second desk session through Cursor's hooks?
+      Yes; fixed with a claim (D134).
 - [ ] Do Copilot CLI hook payloads always carry `transcript_path`? It is the only source of the final text.
 - [ ] Does the OAuth integration behind `webex-cli` have the scope for `POST /attachment/actions`? If not,
       the driver falls back to typed commands and card taps stay a phone check. (D123)
@@ -64,7 +64,8 @@ orchestrator.
       thread with `OK` and the chat parks (🅿️); 4) reply in that thread and check the desk chat continues;
       5) send `/back` and check the root drops 🅿️/🏝️ and the desk chat is released.
 - [x] Cursor CDP live: selectors v4 (D133); self-test passes on 3.31.15, `/new cursor-ide` answers `OK`, `/models cursor-ide` lists models.
-- [ ] Cursor CDP: `/model` on a CDP chat, and a desk-chat adoption, are not checked live.
+- [x] Cursor CDP scenarios 2 to 7 pass live (D134); a CDP chat no longer registers a second desk session.
+- [x] VS Code and Copilot (AHP) scenarios 2 to 7 pass live (12 of 12).
 - [x] Full `uv run tox` green on 2026-11-21 (format, lint, mypy --strict, pytest, ts). The Playwright PWA card test
       and the live tests are not part of it.
 - [ ] `uv.lock` was edited by hand for `markdown-it-py` (D126); run `uv lock` once online.
