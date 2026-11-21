@@ -1,0 +1,35 @@
+tests/fixtures/cursor_cdp/composer.html
+  s_6e0c2c6dba0592::t_85ecefba68642f 88
+TODO.md
+  s_6e0c2c6dba0592::t_f15dc2723504f0 6,66-67
+  s_6e0c2c6dba0592::t_03f4f23ef73a49 68-69
+agent_relay/adapters/cursor_cdp/selectors.json
+  s_6e0c2c6dba0592::t_567a6a65af37a0 30,32
+  s_6e0c2c6dba0592::t_489f6b6b4dfbca 2,36-37
+  s_6e0c2c6dba0592::t_3b9f61225e4fc6 40,42
+docs/deviations.md
+  s_6e0c2c6dba0592::t_f15dc2723504f0 140
+tests/adapters/test_cursor_cdp_units.py
+  s_6e0c2c6dba0592::t_9fe7f655cd79f3 103-104
+  s_6e0c2c6dba0592::t_567a6a65af37a0 125-132
+docs/operations.md
+  s_6e0c2c6dba0592::t_f15dc2723504f0 435
+agent_relay/adapters/cursor_cdp/driver.py
+  s_6e0c2c6dba0592::t_567a6a65af37a0 54-62,164,166,171
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "be5033be871e7ac6e75fd6ce2767dbccd2345885",
+  "prompts": {},
+  "sessions": {
+    "s_6e0c2c6dba0592": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "24c9909b-1d33-42f1-9ddc-cce97bd5d739",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "Brijgopal Bharadwaj <brijgopalbharadwaj1999@gmail.com>"
+    }
+  }
+}
