@@ -432,7 +432,7 @@ the table is the last result per cell.
 | 7 shell command, no approval card | ✅ Cursor CLI (`--force`), OpenCode (`always`). Copilot: no card and the tool ran (`🔧 1`), but the text was the classifier JSON (D129). VS Code: ❌ queued behind item 1 |
 | 8 away: desk chat reaches the phone, reply continues it, `/back` releases it | not run: it needs the owner to run a desk turn |
 | 9 `/panic` | ✅ everything stopped, `/away` resumed, away left off |
-| Cursor CDP: self-test on Cursor 3.30.8; `/new cursor-ide` replies OK | not run: Cursor is running without the debug port, so the gate stays closed (`relay selftest cursor-cdp`) |
+| Cursor CDP (2026-11-21): self-test + `/models cursor-ide` + `/new cursor-ide` | ❌ self-test failed twice on Cursor 3.31.15; after opening chat (`Cmd+L`) required selectors were present except `send` (`MISSING send: 0 match(es) for .send-with-mode .anysphere-icon-button`), so gate stayed closed (`error: self-test failed; the CDP adapter stays disabled for this Cursor version`). `/models cursor-ide` replied with the parked/default card text (`🟦 vscode · .scratch · default model · 🅿️ parked · 🏝️ away`). `/new cursor-ide` failed (`root 'NO ROOT'`). |
 | Android look of the `/new` and `/model` cards (by the owner) | not run: owner |
 
 Second VS Code and Copilot run (2026-11-21, after the VS Code reload; the owner asked to go past the

@@ -63,8 +63,14 @@ orchestrator.
       chat in VS Code or a Copilot CLI session in `.scratch`, ask `Reply with exactly: OK`; 3) the phone gets a
       thread with `OK` and the chat parks (🅿️); 4) reply in that thread and check the desk chat continues;
       5) send `/back` and check the root drops 🅿️/🏝️ and the desk chat is released.
-- [ ] Cursor CDP self-test and `/new cursor-ide` live (`/tmp/nov-round/cdp-result.md` while it exists; see
-      `docs/operations.md`).
+- [ ] Cursor CDP live check recorded (2026-11-21): **failed**. Evidence from `/tmp/nov-round/cdp-result.md`:
+      self-test #1 failed with missing chat selectors (`MISSING composer`, `MISSING send`, `MISSING new_chat`,
+      `MISSING model_picker`, `MISSING messages`); after opening chat (`Cmd+L`), self-test #2 still failed on
+      `MISSING send: 0 match(es) for .send-with-mode .anysphere-icon-button`, and the adapter stayed disabled
+      (`error: self-test failed; the CDP adapter stays disabled for this Cursor version`). `/models cursor-ide`
+      returned parked/default text (`🟦 vscode · .scratch · default model · 🅿️ parked · 🏝️ away`), and
+      `/new cursor-ide` returned `root 'NO ROOT'`. If this is due to chat pane state or selector drift, update
+      selectors and rerun self-test; no code changes were made from this run.
 
 - [ ] **Full `uv run tox`** on the merged tree (ruff, `mypy --strict`, pytest, `tox -e ts`); the OpenCode
       plugin's TypeScript test and `tests/frontends/test_pwa_cards.py` (Playwright) were not run. Re-run
