@@ -1,6 +1,6 @@
 # agent-relay: status and what's left
 
-Last updated 2026-11-21 21:25, after the November round's code and its live runs (squash-merged to local `main`, never pushed).
+Last updated 2026-11-21 21:50, after the November round's code and its live runs (squash-merged to local `main`, never pushed).
 The plan is [`docs/PLAN.md`](docs/PLAN.md); the November round's plan is
 [`sandbox/08-usability-round.md`](sandbox/08-usability-round.md) (decisions U1–U14, phases P0–P8).
 Departures are in [`docs/deviations.md`](docs/deviations.md) (D1–D135), and each acceptance criterion maps
@@ -59,9 +59,10 @@ need the owner (scenario 8 at the desk, the Android look).
 
 ### Open items from the November round
 
-- [ ] **Confirm D135 live:** with away on, ask a VS Code chat in `.scratch` `Reply with exactly: OK`, reply in the
-      phone thread, and check the desk chat shows a `📱 <your message>` line and the answer on a new line. If
-      the line does not appear, the fallback is to ask the agent to echo the message.
+- [ ] **Confirm D135 / D137 live:** the Agent Host chat showed only `OKBACK` (the SDK ignores `systemMessage`),
+      so camelCase hooks now ask the agent to start its reply with the `📱 …` line (D137). With away on, ask an
+      Agent Host chat in `.scratch` `Reply with exactly: OK`, reply in the phone thread, and check the reply
+      starts with `📱 <your message>`. A VS Code chat on its own agent should show the line through `systemMessage`.
 
 - [ ] **Scenario 8, VS Code (2026-11-21 20:14, owner at the desk): works.** A VS Code Copilot chat in `.scratch`
       with away on reached the phone (`OK`), parked, took the phone's `BACK` and answered it, and `/back`

@@ -35,6 +35,17 @@ def _shown(out: HookStdout, shown: str | None) -> HookStdout:
     return {**out, "systemMessage": shown} if shown else out
 
 
+ECHO_INSTRUCTION = "Start your reply with this line, exactly as written:"
+
+
+def _echoed(text: str, shown: str | None) -> str:
+    """The Agent Host and the Copilot CLI read only the hook's `reason` or `additionalContext` and show
+    nothing else, so the agent is asked to say the line itself: that is what the desk then sees."""
+    if not shown:
+        return text
+    return f"{text}\n\n{ECHO_INSTRUCTION}\n{shown}"
+
+
 def continue_with(hook: HookInput, text: str, shown: str | None = None) -> HookStdout:
     """Keep a stopping agent going, with `text` as its next prompt. `shown` is also shown in the chat
     where the harness supports it (VS Code)."""
@@ -51,7 +62,7 @@ def continue_with(hook: HookInput, text: str, shown: str | None = None) -> HookS
         )
     if hook.format is PayloadFormat.OPENCODE:
         return {"prompt": text}
-    return _shown({"decision": "block", "reason": text}, shown)
+    return _shown({"decision": "block", "reason": _echoed(text, shown)}, shown)
 
 
 def add_context(hook: HookInput, text: str, shown: str | None = None) -> HookStdout:
@@ -62,4 +73,4 @@ def add_context(hook: HookInput, text: str, shown: str | None = None) -> HookStd
         return {"context": text}
     if hook.format is PayloadFormat.SNAKE:
         return _shown({"hookSpecificOutput": {"hookEventName": hook.event, "additionalContext": text}}, shown)
-    return _shown({"additionalContext": text}, shown)
+    return _shown({"additionalContext": _echoed(text, shown)}, shown)
