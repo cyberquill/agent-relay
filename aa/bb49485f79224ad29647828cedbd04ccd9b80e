@@ -1,0 +1,25 @@
+docs/deviations.md
+  s_6e0c2c6dba0592::t_61a1f27c3cb070 135
+  s_6e0c2c6dba0592::t_d57f951f718e44 137-138
+  s_6e0c2c6dba0592::t_781334f7cd25da 136
+TODO.md
+  s_6e0c2c6dba0592::t_a8c2ff2f9976be 192-196
+docs/operations.md
+  s_6e0c2c6dba0592::t_250a8f23cec7e2 419-421,425-455
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "aabb49485f79224ad29647828cedbd04ccd9b80e",
+  "prompts": {},
+  "sessions": {
+    "s_6e0c2c6dba0592": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "24c9909b-1d33-42f1-9ddc-cce97bd5d739",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "Brijgopal Bharadwaj <brijgopalbharadwaj1999@gmail.com>"
+    }
+  }
+}
