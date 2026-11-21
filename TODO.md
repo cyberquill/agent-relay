@@ -3,7 +3,7 @@
 Last updated 2026-11-21 20:15, after the November round's code and its live runs (squash-merged to local `main`, never pushed).
 The plan is [`docs/PLAN.md`](docs/PLAN.md); the November round's plan is
 [`sandbox/08-usability-round.md`](sandbox/08-usability-round.md) (decisions U1–U14, phases P0–P8).
-Departures are in [`docs/deviations.md`](docs/deviations.md) (D1–D134), and each acceptance criterion maps
+Departures are in [`docs/deviations.md`](docs/deviations.md) (D1–D135), and each acceptance criterion maps
 to its tests in [`docs/acceptance.md`](docs/acceptance.md) (AC-1–AC-40, OR-1–OR-20 for the October round,
 UR-1–UR-8 for the November round). For users, start with [`docs/user-guide.md`](docs/user-guide.md).
 
@@ -55,6 +55,10 @@ need the owner (scenario 8 at the desk, the Android look).
 - [ ] The owner deletes the three retired app bots at developer.webex.com.
 
 ### Open items from the November round
+
+- [ ] **Confirm D135 live:** with away on, ask a VS Code chat in `.scratch` `Reply with exactly: OK`, reply in the
+      phone thread, and check the desk chat shows a `📱 <your message>` line and the answer on a new line. If
+      the line does not appear, the fallback is to ask the agent to echo the message.
 
 - [ ] **Scenario 8, VS Code (2026-11-21 20:14, owner at the desk): works.** A VS Code Copilot chat in `.scratch`
       with away on reached the phone (`OK`), parked, took the phone's `BACK` and answered it, and `/back`

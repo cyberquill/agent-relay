@@ -390,7 +390,8 @@ async def test_steering_goes_out_on_next_post_tool(core: tuple[Core, Recorder, l
         "hookSpecificOutput": {
             "hookEventName": "PostToolUse",
             "additionalContext": f"{PHONE_PREFIX}use pytest, not unittest",
-        }
+        },
+        "systemMessage": "📱 use pytest, not unittest",
     }
     again = await hook(built, "copilot", "PostToolUse", {**LOCAL_PRE, "tool_name": "read_file"})
     assert again == {}

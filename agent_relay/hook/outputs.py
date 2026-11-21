@@ -30,27 +30,36 @@ def allow(hook: HookInput, reason: str) -> HookStdout:
     return {"permissionDecision": "allow", "permissionDecisionReason": reason}
 
 
-def continue_with(hook: HookInput, text: str) -> HookStdout:
-    """Keep a stopping agent going, with `text` as its next prompt."""
+def _shown(out: HookStdout, shown: str | None) -> HookStdout:
+    """VS Code's `systemMessage`: a line in the chat itself, so the desk sees what the phone sent."""
+    return {**out, "systemMessage": shown} if shown else out
+
+
+def continue_with(hook: HookInput, text: str, shown: str | None = None) -> HookStdout:
+    """Keep a stopping agent going, with `text` as its next prompt. `shown` is also shown in the chat
+    where the harness supports it (VS Code)."""
     if hook.format is PayloadFormat.CURSOR:
         return {"followup_message": text}
     if hook.format is PayloadFormat.SNAKE and hook.kind is HookKind.STOP:
-        return {
-            "decision": "block",
-            "reason": text,
-            "hookSpecificOutput": {"hookEventName": hook.event, "decision": "block", "reason": text},
-        }
+        return _shown(
+            {
+                "decision": "block",
+                "reason": text,
+                "hookSpecificOutput": {"hookEventName": hook.event, "decision": "block", "reason": text},
+            },
+            shown,
+        )
     if hook.format is PayloadFormat.OPENCODE:
         return {"prompt": text}
     return {"decision": "block", "reason": text}
 
 
-def add_context(hook: HookInput, text: str) -> HookStdout:
-    """Inject `text` into the conversation (steering, wake-up)."""
+def add_context(hook: HookInput, text: str, shown: str | None = None) -> HookStdout:
+    """Inject `text` into the conversation (steering, wake-up); `shown` as in `continue_with`."""
     if hook.format is PayloadFormat.CURSOR:
         return {"additional_context": text}
     if hook.format is PayloadFormat.OPENCODE:
         return {"context": text}
     if hook.format is PayloadFormat.SNAKE:
-        return {"hookSpecificOutput": {"hookEventName": hook.event, "additionalContext": text}}
+        return _shown({"hookSpecificOutput": {"hookEventName": hook.event, "additionalContext": text}}, shown)
     return {"additionalContext": text}

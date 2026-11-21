@@ -20,7 +20,7 @@ from agent_relay.core import away
 from agent_relay.core.approvals import ApprovalBroker
 from agent_relay.core.claims import CURSOR_SCOPE, UNCLAIMED_PREFIX, aliased, link_alias, take_claim
 from agent_relay.core.lifecycle import Lifecycle
-from agent_relay.core.parking import AWAY_OFF_REASON, ParkManager, phone_text
+from agent_relay.core.parking import AWAY_OFF_REASON, ParkManager, phone_notice, phone_text
 from agent_relay.core.registry import Registry
 from agent_relay.core.router import Router
 from agent_relay.hook import outputs, transcript
@@ -319,7 +319,8 @@ class HookService:
         queued = await self._registry.pop_queued(session.session_key, ("steer",))
         if not queued:
             return {}
-        return _reply(outputs.add_context(hook, phone_text([q.text for q in queued])))
+        text = phone_text([q.text for q in queued])
+        return _reply(outputs.add_context(hook, text, phone_notice(text)))
 
     async def _notification(self, session: SessionRecord, hook: HookInput) -> Reply:
         if hook.notification_type != "agent_idle":
@@ -328,7 +329,8 @@ class HookService:
         if not queued:
             return {}
         await self._lifecycle.observe(session.session_key, SessionStatus.RUNNING, f"{hook.kind.value} hook")
-        return _reply(outputs.add_context(hook, phone_text([q.text for q in queued])))
+        text = phone_text([q.text for q in queued])
+        return _reply(outputs.add_context(hook, text, phone_notice(text)))
 
     async def _final_text(self, session: SessionRecord, hook: HookInput) -> str | None:
         if hook.family is HookFamily.CURSOR:
@@ -353,7 +355,7 @@ class HookService:
         result = await self._parking.park(current, hook.stop_hook_active)
         await self._registry.set_session_extra(session.session_key, RENEWING, result.kind == "renewed")
         if result.blocks:
-            return _reply(outputs.continue_with(hook, result.text))
+            return _reply(outputs.continue_with(hook, result.text, phone_notice(result.text)))
         if result.kind == "skipped" or (result.kind == "released" and result.text == AWAY_OFF_REASON):
             return await self._deliver_waiting(session, hook)
         return {}
@@ -367,4 +369,5 @@ class HookService:
         if not queued:
             return {}
         await self._lifecycle.observe(session.session_key, SessionStatus.RUNNING, "queued message delivered")
-        return _reply(outputs.continue_with(hook, phone_text([q.text for q in queued])))
+        text = phone_text([q.text for q in queued])
+        return _reply(outputs.continue_with(hook, text, phone_notice(text)))

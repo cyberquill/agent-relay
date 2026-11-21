@@ -34,6 +34,7 @@ PHONE_PREFIX = (
     "Message from the user, sent from their phone (this chat does not show it). "
     "Start your reply on a new line:\n\n"
 )
+NOTICE_MAX = 500
 AWAY_OFF_REASON = "away mode off"
 BLOCKS_KEY = "stop_blocks"
 DEADLINE_KEY = "park_deadline"
@@ -53,6 +54,14 @@ class ParkResult:
 
 def phone_text(texts: list[str]) -> str:
     return PHONE_PREFIX + "\n\n".join(texts)
+
+
+def phone_notice(text: str) -> str | None:
+    """The line a desk chat shows for a continuation built by `phone_text` (None for any other text)."""
+    if not text.startswith(PHONE_PREFIX):
+        return None
+    body = " ".join(text[len(PHONE_PREFIX) :].split())
+    return f"📱 {body[: NOTICE_MAX - 1]}…" if len(body) > NOTICE_MAX else f"📱 {body}"
 
 
 class ParkManager:
