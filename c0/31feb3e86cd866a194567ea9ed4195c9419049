@@ -1,0 +1,21 @@
+tests/adapters/test_attachments.py
+  s_6e0c2c6dba0592::t_668fdce0b51668 272-282
+agent_relay/adapters/cursor_cli/blocks.py
+  s_6e0c2c6dba0592::t_38f849b159c3d0 43-46,49-55
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c031feb3e86cd866a194567ea9ed4195c9419049",
+  "prompts": {},
+  "sessions": {
+    "s_6e0c2c6dba0592": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "24c9909b-1d33-42f1-9ddc-cce97bd5d739",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "Brijgopal Bharadwaj <brijgopalbharadwaj1999@gmail.com>"
+    }
+  }
+}
