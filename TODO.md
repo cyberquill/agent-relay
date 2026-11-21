@@ -3,7 +3,7 @@
 Last updated 2026-11-21, after the code of the November round (branch `feat/november-round`, P0–P8).
 The plan is [`docs/PLAN.md`](docs/PLAN.md); the November round's plan is
 [`sandbox/08-usability-round.md`](sandbox/08-usability-round.md) (decisions U1–U14, phases P0–P8).
-Departures are in [`docs/deviations.md`](docs/deviations.md) (D1–D127), and each acceptance criterion maps
+Departures are in [`docs/deviations.md`](docs/deviations.md) (D1–D133), and each acceptance criterion maps
 to its tests in [`docs/acceptance.md`](docs/acceptance.md) (AC-1–AC-40, OR-1–OR-20 for the October round,
 UR-1–UR-8 for the November round). For users, start with [`docs/user-guide.md`](docs/user-guide.md).
 
@@ -63,18 +63,10 @@ orchestrator.
       chat in VS Code or a Copilot CLI session in `.scratch`, ask `Reply with exactly: OK`; 3) the phone gets a
       thread with `OK` and the chat parks (🅿️); 4) reply in that thread and check the desk chat continues;
       5) send `/back` and check the root drops 🅿️/🏝️ and the desk chat is released.
-- [ ] Cursor CDP live check recorded (2026-11-21): **failed**. Evidence from `/tmp/nov-round/cdp-result.md`:
-      self-test #1 failed with missing chat selectors (`MISSING composer`, `MISSING send`, `MISSING new_chat`,
-      `MISSING model_picker`, `MISSING messages`); after opening chat (`Cmd+L`), self-test #2 still failed on
-      `MISSING send: 0 match(es) for .send-with-mode .anysphere-icon-button`, and the adapter stayed disabled
-      (`error: self-test failed; the CDP adapter stays disabled for this Cursor version`). `/models cursor-ide`
-      returned parked/default text (`🟦 vscode · .scratch · default model · 🅿️ parked · 🏝️ away`), and
-      `/new cursor-ide` returned `root 'NO ROOT'`. If this is due to chat pane state or selector drift, update
-      selectors and rerun self-test; no code changes were made from this run.
-
-- [ ] **Full `uv run tox`** on the merged tree (ruff, `mypy --strict`, pytest, `tox -e ts`); the OpenCode
-      plugin's TypeScript test and `tests/frontends/test_pwa_cards.py` (Playwright) were not run. Re-run
-      `tests/test_e2e_driver.py` and `tests/live/test_phone_e2e.py` once the tree is quiet.
+- [x] Cursor CDP live: selectors v4 (D133); self-test passes on 3.31.15, `/new cursor-ide` answers `OK`, `/models cursor-ide` lists models.
+- [ ] Cursor CDP: `/model` on a CDP chat, and a desk-chat adoption, are not checked live.
+- [x] Full `uv run tox` green on 2026-11-21 (format, lint, mypy --strict, pytest, ts). The Playwright PWA card test
+      and the live tests are not part of it.
 - [ ] `uv.lock` was edited by hand for `markdown-it-py` (D126); run `uv lock` once online.
 - [ ] `scrub.scrub_text` is quadratic on one very long unbroken word (5,000 word characters take 0.5 s;
       60,000 take over a minute). `render_answer` scrubs three times and `validate_file` scrubs text, so a

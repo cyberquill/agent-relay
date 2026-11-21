@@ -100,7 +100,8 @@ async def test_launcher_starts_cursor_and_gives_up_when_the_port_never_opens(tmp
 
 def test_shipped_selectors_load_and_mark_the_essentials_required() -> None:
     selectors = load_selectors()
-    assert set(selectors.required()) == {"composer", "send", "new_chat", "model_picker", "messages"}
+    # `messages` is optional: Cursor 3.31 renders the list only once a chat has a message (D133)
+    assert set(selectors.required()) == {"composer", "send", "new_chat", "model_picker"}
 
 
 def test_selectors_missing_a_name_are_rejected(tmp_path: Path) -> None:
@@ -121,3 +122,11 @@ def test_gate_requires_matching_selector_version() -> None:
     )
     passing = report.model_copy(update={"selectors_version": selectors.version})
     assert gate(passing, "1.0", selectors) is None
+
+
+def test_a_model_option_is_named_by_its_first_line() -> None:
+    from agent_relay.adapters.cursor_cdp.driver import option_label
+
+    assert option_label("Claude Sonnet 5.5 High\n\nEdit") == "Claude Sonnet 5.5 High"
+    assert option_label("  Auto Balance  ") == "Auto Balance"
+    assert option_label("\n  \n") == ""

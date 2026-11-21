@@ -51,6 +51,15 @@ SNAPSHOT_JS = """
 """
 
 
+NOT_MODELS = frozenset({"more models"})
+
+
+def option_label(text: str) -> str:
+    """A model option's name: its first line (Cursor 3.31 adds an "Edit" action on the hovered row)."""
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    return lines[0] if lines else ""
+
+
 async def press(target: Locator) -> None:
     """A DOM `click()`: unlike Playwright's pointer click it needs no rendered frame, so it also works
     when the Cursor window is hidden, occluded or the screen is locked."""
@@ -152,14 +161,14 @@ class Composer:
         return await options.all()
 
     async def models(self) -> list[str]:
-        labels = [(await option.inner_text()).strip() for option in await self._open_menu()]
+        labels = [option_label(await option.inner_text()) for option in await self._open_menu()]
         await self.page.keyboard.press("Escape")
-        return [label for label in labels if label]
+        return [label for label in labels if label and label.casefold() not in NOT_MODELS]
 
     async def choose_model(self, label: str) -> None:
         wanted = label.strip().casefold()
         for option in await self._open_menu():
-            if (await option.inner_text()).strip().casefold() == wanted:
+            if option_label(await option.inner_text()).casefold() == wanted:
                 await press(option)
                 return
         await self.page.keyboard.press("Escape")

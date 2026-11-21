@@ -1,5 +1,5 @@
 {
-  "version": 3,
+  "version": 4,
   "selectors": {
     "composer": {
       "css": "div.aislash-editor-input[contenteditable='true']",
@@ -27,19 +27,19 @@
       "purpose": "Opens the model menu"
     },
     "model_option": {
-      "css": "li[data-testid^='model-item-']",
+      "css": "li[data-testid^='model-item-'], [role='listbox'] [role='option']",
       "required": false,
-      "purpose": "One model in the open model menu"
+      "purpose": "One model in the open model menu (Cursor 3.31: an option in the picker's listbox)"
     },
     "messages": {
       "css": ".conversations, [data-testid='composer-messages']",
-      "required": true,
-      "purpose": "The scrolling list of chat messages"
+      "required": false,
+      "purpose": "The scrolling list of chat messages; Cursor 3.31 renders it only once the chat has a message"
     },
     "assistant_message": {
-      "css": "[data-message-role='ai'], .composer-ai-message",
+      "css": "[data-message-role='ai'][data-message-kind='assistant']",
       "required": false,
-      "purpose": "One assistant reply inside the messages list"
+      "purpose": "One assistant text reply inside the messages list; tool and thinking rows are also role ai, with another kind"
     }
   }
 }
