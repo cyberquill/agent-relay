@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "license": "MIT",
-  "description": "OpenCode plugin that relays tool approvals to agent-relay while away mode is on",
+  "description": "OpenCode plugin that reports tool calls to agent-relay while away mode is on and registers the OpenCode server",
   "type": "module",
   "scripts": {
     "build": "tsc -p tsconfig.json",

@@ -93,3 +93,13 @@ def test_logger_scrubs(caplog: pytest.LogCaptureFixture) -> None:
         logger.info(f"bot token {SECRETS[0]}")
     assert SECRETS[0] not in caplog.text
     assert REDACTED in caplog.text
+
+
+def test_a_very_long_unbroken_word_does_not_stall_the_scrubber() -> None:
+    """Seen as quadratic: 5,000 word characters took 0.5 s and 60,000 over a minute."""
+    import time
+
+    started = time.monotonic()
+    assert scrub_text("a" * 60_000).startswith("aaa")
+    assert scrub_text("aB3" * 20_000) == REDACTED
+    assert time.monotonic() - started < 2.0

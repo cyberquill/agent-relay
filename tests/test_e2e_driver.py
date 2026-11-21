@@ -63,8 +63,10 @@ def table(report: Report) -> dict[str, str]:
 async def test_every_scenario_passes_against_a_well_behaved_relay(tmp_path: Path) -> None:
     world = World()
     report, env = await drive(world, tmp_path)
-    assert [r.label for r in report.results] == ["1", "2", "3", "4", "5", "6", "7", "8", "9"], table(report)
-    assert [r.status for r in report.results] == ["PASS"] * 9, table(report)
+    assert [r.label for r in report.results] == ["1", "2", "3", "4", "5", "6", "7", "10", "8", "9"], table(
+        report
+    )
+    assert [r.status for r in report.results] == ["PASS"] * 10, table(report)
     assert report.exit_code() == 0
     assert "Model → gpt-5" in row(report, "6").detail
     assert "answer.html" in row(report, "5").detail
@@ -97,7 +99,8 @@ async def test_each_app_gets_its_own_session_and_one_charge(tmp_path: Path) -> N
 async def test_choosing_a_later_scenario_also_runs_the_session_it_needs(tmp_path: Path) -> None:
     assert [s.number for s in plan({4})] == [2, 4]
     assert [s.number for s in plan({1, 9})] == [1, 9]
-    assert [s.number for s in plan(None)] == list(range(1, 10))
+    assert [s.number for s in plan(None)] == [1, 2, 3, 4, 5, 6, 7, 10, 8, 9]
+    assert [s.number for s in plan({10})] == [2, 10]
     assert needs_apps(plan({3})) and not needs_apps(plan({1, 8, 9}))
     report, _ = await drive(World(), tmp_path, only={4})
     assert [(r.label, r.status) for r in report.results] == [("2", "PASS"), ("4", "PASS")]
@@ -117,6 +120,7 @@ MISBEHAVIOURS = [
     ("ignore_files", {4}, "4", "did not name"),
     ("wrong_model_reply", {6}, "6", "another model"),
     ("back_keeps_parked", {8}, "8", "desk chat released"),
+    ("stop_ignored", {10}, "10", "the turn stopped"),
 ]
 
 
@@ -206,7 +210,7 @@ async def test_no_scope_skips_the_card_scenarios_and_runs_the_typed_forms(tmp_pa
     world = World(replace(Behaviour(), submit_scope=False))
     report, _ = await drive(world, tmp_path)
     labels = [r.label for r in report.results]
-    assert labels == ["1", "2", "2b", "3", "4", "5", "6", "6b", "7", "8", "9", "9b"], table(report)
+    assert labels == ["1", "2", "2b", "3", "4", "5", "6", "6b", "7", "10", "8", "9", "9b"], table(report)
     for label in ("2", "6", "9"):
         assert row(report, label).status == "SKIP" and row(report, label).detail == NO_SCOPE
     expected = {"2": "SKIP", "6": "SKIP", "9": "SKIP"}

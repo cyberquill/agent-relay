@@ -1,4 +1,4 @@
-"""Scenarios 6 (model), 8 (away round trip) and 9 (panic)."""
+"""Scenarios 6 (model), 8 (away round trip), 9 (panic) and 10 (stop)."""
 
 from __future__ import annotations
 
@@ -172,3 +172,29 @@ async def panic(env: Env, _app: str) -> str:
 async def panic_typed(env: Env, _app: str) -> str:
     await command(env, "/panic now", "the /panic reply")
     return await _after_panic(env)
+
+
+LONG_RUN_PROMPT = "Write the integers from 1 to 800, one per line, and nothing else."
+STOPPED = "Stopped"
+
+
+async def stop_turn(env: Env, app: str) -> str:
+    """`/stop` in the thread while a long turn runs, then a follow-up turn to prove the chat still works."""
+    thread = thread_of(env, app)
+    replies = await env.watch(thread.root.id).start()
+    await env.post(LONG_RUN_PROMPT, parent_id=thread.root.id)
+    try:
+        await env.root_text(thread.root, lambda text: RUNNING_ICON in text, "the turn running")
+    except ScenarioFailed as exc:
+        raise ScenarioFailed(f"the long turn was never seen running (finished too fast?): {exc}") from exc
+    await env.post("/stop", parent_id=thread.root.id)
+    await replies.wait_for(lambda m: STOPPED in m.body, env.settings.command_s, "the /stop reply")
+    await env.root_text(thread.root, lambda text: RUNNING_ICON not in text, "the turn stopped")
+
+    async def send() -> Msg:
+        return await env.post(OK_PROMPT, parent_id=thread.root.id)
+
+    result = await env.turn(thread, send)
+    if not OK_WORD.search(result.final.body):
+        raise ScenarioFailed(f"after /stop the chat did not answer OK: {env.summary(result.final)}")
+    return "the turn stopped on /stop and the chat answered the next prompt"

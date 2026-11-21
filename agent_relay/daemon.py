@@ -118,10 +118,8 @@ class Core:
             self.registry, self.router, self.signals, self.service, self.config.questions
         )
         self.router.subscribe(self.broker, desk=True)
-        self.parking = ParkManager(
-            self.registry, self.router, self.signals, self.config.park, self.notify, self.lifecycle
-        )
-        self.hooks = HookService(self.registry, self.router, self.broker, self.parking, self.lifecycle)
+        self.parking = ParkManager(self.registry, self.router, self.signals, self.config.park, self.lifecycle)
+        self.hooks = HookService(self.registry, self.router, self.parking, self.lifecycle)
 
     async def notify(self, session: SessionRecord, text: str) -> None:
         for target in self.notify_targets:

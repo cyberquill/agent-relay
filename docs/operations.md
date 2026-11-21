@@ -396,7 +396,8 @@ sends nothing. Exit code 0: no FAIL; 1: a FAIL (or nothing ran); 2: bad argument
 Rules the driver enforces: live sessions only in `scratch`, at most 3 per adapter per run, the prompt
 `Reply with exactly: OK` except three fixed prompts (D123), a room that is a 1:1 with a bot, and the
 messages it posted are deleted at the end (relay threads and cards stay). Scenario order: 1; then 2 to 7
-for each app; then 8 and 9. `--only 4` also runs 2 (it needs the session).
+for each app, with 10 (`/stop` a long turn, then a follow-up) last of those; then 8 and 9. `--only 4` or
+`--only 10` also runs 2 (they need the session).
 
 | # | Scenario | Passes when |
 |---|---|---|
@@ -431,6 +432,7 @@ the table is the last result per cell.
 | 6 `/model` card, next turn uses it | ✅ VS Code (claude-haiku-4.5), Copilot (claude-sonnet-5.5), Cursor IDE (Grok 4.7 High), Cursor CLI, OpenCode |
 | 7 shell command, no approval card | ✅ VS Code, Copilot, Cursor IDE (CDP), Cursor CLI (`--force`), OpenCode (`always`) |
 | 8 away: desk chat reaches the phone, reply continues it, `/back` releases it | ✅ VS Code Copilot chat (owner, 2026-11-21 20:14): `OK` reached the phone and parked, the reply `BACK` was delivered and answered, `/back` released it. Cosmetic: the desk shows `OKBACK` in one bubble and not the phone message; the thread root says `copilot_cli` (see `TODO.md`). Not checked: Cursor, Copilot CLI |
+| 10 `/stop` a running turn, the chat still answers | ✅ VS Code, Copilot, Cursor IDE (CDP), Cursor CLI, OpenCode (2026-11-21) |
 | 9 `/panic` | ✅ everything stopped, `/away` resumed, away left off |
 | Cursor CDP on Cursor 3.31.15 (selectors v4, D133, D134) | ✅ self-test passes; scenarios 2 to 7 pass (`/new cursor-ide`, reply, image and PDF, `answer.html`, `/model` Grok 4.7 High, shell). Not run: scenario 8 on a Cursor desk chat |
 | Android look of the `/new` and `/model` cards (by the owner) | not run: owner |

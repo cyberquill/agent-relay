@@ -15,7 +15,8 @@ type Body = Callable[[Env, str], Awaitable[str]]
 
 NO_SCOPE = "no scope: submit the card on the phone"
 BASE = 2  # the scenario that creates the session the later ones talk to
-FIRST_PER_APP, LAST_PER_APP = 2, 7
+FIRST_PER_APP = 2
+NEEDS_SESSION = frozenset({3, 4, 5, 6, 7, 10})  # the scenarios that talk to the session 2 creates
 
 
 @dataclass(frozen=True)
@@ -45,6 +46,7 @@ SCENARIOS: tuple[Scenario, ...] = (
         typed=scenarios_more.model_switch_typed,
     ),
     Scenario(7, "shell command → no approval card, it ran", scenarios.shell_without_approval),
+    Scenario(10, "/stop a running turn → stopped, the chat still answers", scenarios_more.stop_turn),
     Scenario(8, "/away → desk turn → reply continues → /back", scenarios_more.away_round_trip, per_app=False),
     Scenario(
         9,
@@ -58,9 +60,9 @@ NUMBERS = tuple(s.number for s in SCENARIOS)
 
 
 def plan(only: set[int] | None) -> list[Scenario]:
-    """The scenarios to run, in order. Choosing 3 to 7 also runs 2: they need its session."""
+    """The scenarios to run, in order. Choosing 3 to 7 or 10 also runs 2: they need its session."""
     chosen = set(NUMBERS) if not only else set(only)
-    if chosen & set(range(BASE + 1, LAST_PER_APP + 1)):
+    if chosen & NEEDS_SESSION:
         chosen.add(BASE)
     return [s for s in SCENARIOS if s.number in chosen]
 
@@ -118,7 +120,7 @@ async def _run_one(env: Env, scenario: Scenario, app: str, report: Report) -> St
 
 
 async def run(env: Env, selected: list[Scenario], apps: list[str], report: Report) -> Report:
-    """Scenario 1, then 2 to 7 once per app, then 8 and 9. Failure of 2 skips 3 to 7 for that app."""
+    """Scenario 1, then 2 to 7 and 10 once per app, then 8 and 9. Failure of 2 skips the rest for that app."""
     for scenario in (s for s in selected if not s.per_app and s.number < FIRST_PER_APP):
         await _run_one(env, scenario, "-", report)
     per_app = [s for s in selected if s.per_app]
@@ -134,7 +136,7 @@ async def run(env: Env, selected: list[Scenario], apps: list[str], report: Repor
             status = await _run_one(env, scenario, app, report)
             if scenario.number == BASE and status != "PASS":
                 base_ok = False
-    for scenario in (s for s in selected if not s.per_app and s.number > LAST_PER_APP):
+    for scenario in (s for s in selected if not s.per_app and s.number > FIRST_PER_APP):
         await _run_one(env, scenario, "-", report)
     return report
 

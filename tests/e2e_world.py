@@ -48,6 +48,7 @@ class Behaviour:
     desk_turn: bool = True
     back_keeps_parked: bool = False
     panic_keeps_running: bool = False
+    stop_ignored: bool = False  # /stop is acknowledged but the turn keeps running
     final_text: str = "OK"
     final_delay: float = 5.0
 
@@ -120,6 +121,7 @@ class World:
         self.roots: dict[str, dict[str, str]] = {}
         self.uploads: dict[str, str] = {}  # message id -> uploaded file name
         self.held: list[str] = []
+        self.running_long: set[str] = set()
         self.submitted: list[tuple[str, dict[str, JsonValue]]] = []
         self.sent: list[str] = []
         self.paused = False
@@ -383,6 +385,10 @@ class World:
             self.later(1.0, lambda: self._post_model_card(root_id))
         elif text.startswith("/model "):
             self._set_model(root_id, text.split()[1])
+        elif text == "/stop":
+            self._stop(root_id)
+        elif "integers from 1 to 800" in text:
+            self._long_turn(root_id)
         elif name is not None and not text:
             self.held.append(name)
         elif name is not None:
@@ -401,6 +407,25 @@ class World:
             self.later(self.b.final_delay, lambda: self.finish(root_id, "relay-e2e-42"))
         else:
             self.later(self.b.final_delay, lambda: self.finish(root_id, self.b.final_text))
+
+    def _long_turn(self, root_id: str) -> None:
+        self.roots[root_id]["status"] = "⏳ running"
+        self.refresh_root(root_id)
+        self.running_long.add(root_id)
+        self.later(120.0, lambda: self._long_done(root_id))
+
+    def _long_done(self, root_id: str) -> None:
+        if root_id in self.running_long:
+            self.running_long.discard(root_id)
+            self.finish(root_id, "1\n2\n3")
+
+    def _stop(self, root_id: str) -> None:
+        self.bot("⏹️ Stopped.", root_id)
+        if self.b.stop_ignored:
+            return
+        self.running_long.discard(root_id)
+        self.roots[root_id]["status"] = "💤 idle"
+        self.refresh_root(root_id)
 
     def _post_approval(self, root_id: str) -> None:
         body: list[JsonValue] = [{"type": "TextBlock", "text": "Run a shell command?"}]

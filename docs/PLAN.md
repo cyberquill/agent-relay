@@ -10,6 +10,21 @@ from an Android phone over Webex. Every session runs in the same harness the des
 > Research snapshot: 2026-10-03 · macOS 27 · VS Code 1.140 · Cursor 3.23 · Cursor CLI 2026.07.17 ·
 > OpenCode 1.18.15 · Python 3.13.5 · uv 0.12.3.
 
+> **Superseded since this plan was written (November round, 2026-11-21).** The build spec below is the
+> October design; where it differs, [`docs/deviations.md`](deviations.md) wins (each row names the plan
+> section). The differences that matter when reading §5:
+>
+> | Plan says | Now | Deviation |
+> |---|---|---|
+> | Approvals from the phone (cards, `/approve`, deadlines) | None: the relay allows every tool call and never waits on the phone; questions (`ask_phone`) remain | D117, D124, D125 |
+> | One space per app, several bots | One bot, one 1:1 space | D116 |
+> | Streaming text, progress and completion cards | One final message per turn with a one-line footer | D118, D127 |
+> | `answer.md` for long answers | `answer.html` (inert, CSP), `send_phone_file` | D122 |
+> | Per-workspace away, lock-screen presence | One global flag switched by hand (`/away`, `/back`, `/panic`) | D120 |
+> | `/new` wizard, flat model cards | One `/new` card, `/model` card, model discovery cache | D119 |
+> | Cursor CDP selectors v1 to v3 | Selectors v4 for Cursor 3.31; the chat is claimed so Cursor's hooks join it | D133, D134 |
+> | `scripts/smoke_live.py` | `scripts/phone_e2e.py` (owner-driven end-to-end) | D123 |
+
 ---
 
 ## 0. Reviewer summary

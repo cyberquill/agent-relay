@@ -127,7 +127,9 @@ class WebexWsClient:
         if self._device_url is None:
             response = await self._http.get(self._u2c_url, params={"format": "hostmap"})
             if response.status_code == 401:
-                raise DeviceError("Webex rejected the bot token (401). Check the Keychain entry.")
+                raise DeviceError(
+                    "Webex rejected the bot token (401). Store a new one: pbpaste | relay setup token --stdin"
+                )
             links = response.json().get("serviceLinks", {})
             wdm = links.get("wdm") if isinstance(links, dict) else None
             if not isinstance(wdm, str):

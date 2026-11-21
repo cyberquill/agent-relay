@@ -7,6 +7,8 @@ from datetime import timedelta
 from agent_relay.core.housekeeping import (
     DRAFT_PREFIX,
     DRAFT_SEEN_PREFIX,
+    OFFER_PREFIX,
+    OFFER_SEEN_PREFIX,
     PANIC_ISSUED_PREFIX,
     end_idle_sessions,
     housekeep,
@@ -16,6 +18,7 @@ from agent_relay.core.lifecycle import Lifecycle
 from agent_relay.core.registry import CARD_NONCE_PREFIX, SEEN_PREFIX, Registry
 from agent_relay.core.router import Router
 from agent_relay.core.signals import Signals
+from agent_relay.frontends import card_state
 from agent_relay.frontends.webex import handlers
 from agent_relay.frontends.webex.commands import away as away_commands
 from agent_relay.models.events import Harness, Origin, utcnow
@@ -58,6 +61,7 @@ async def test_other_keys_and_old_markers_follow_their_own_rules(registry: Regis
 def test_the_prefixes_match_the_ones_the_webex_frontend_writes() -> None:
     assert PANIC_ISSUED_PREFIX == away_commands.PANIC_ISSUED_PREFIX
     assert DRAFT_PREFIX == handlers.DRAFT_PREFIX
+    assert OFFER_PREFIX == card_state.OFFER_PREFIX
 
 
 async def test_panic_confirmations_older_than_a_day_are_pruned(registry: Registry) -> None:
@@ -158,3 +162,18 @@ async def test_housekeep_ends_idle_sessions_only_when_given_a_lifecycle(registry
     assert await _status(registry, "old-idle") is SessionStatus.IDLE
     assert await housekeep(registry, now=later, lifecycle=_lifecycle(registry)) == 1
     assert await _status(registry, "old-idle") is SessionStatus.ENDED
+
+
+async def test_an_offer_with_no_live_nonce_is_dropped_a_day_after_it_was_first_seen(
+    registry: Registry,
+) -> None:
+    start = utcnow()
+    await registry.kv_set(f"{OFFER_PREFIX}used", '["a"]')  # its card was submitted: the nonce is spent
+    await registry.kv_set(f"{OFFER_PREFIX}open", '["a"]')
+    await registry.kv_set(f"{CARD_NONCE_PREFIX}open", _ago(hours=1))
+    assert await housekeep(registry, now=start) == 0
+    assert await housekeep(registry, now=start + timedelta(hours=23)) == 0
+    assert await housekeep(registry, now=start + timedelta(hours=25)) == 1
+    assert await registry.kv_get(f"{OFFER_PREFIX}used") is None
+    assert await registry.kv_get(f"{OFFER_PREFIX}open") is not None
+    assert await registry.kv_prefix(OFFER_SEEN_PREFIX) == {}

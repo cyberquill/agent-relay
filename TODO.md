@@ -1,6 +1,6 @@
 # agent-relay: status and what's left
 
-Last updated 2026-11-21 20:15, after the November round's code and its live runs (squash-merged to local `main`, never pushed).
+Last updated 2026-11-21 21:25, after the November round's code and its live runs (squash-merged to local `main`, never pushed).
 The plan is [`docs/PLAN.md`](docs/PLAN.md); the November round's plan is
 [`sandbox/08-usability-round.md`](sandbox/08-usability-round.md) (decisions U1–U14, phases P0–P8).
 Departures are in [`docs/deviations.md`](docs/deviations.md) (D1–D135), and each acceptance criterion maps
@@ -31,8 +31,10 @@ need the owner (scenario 8 at the desk, the Android look).
 - [ ] Does Cursor desktop skip its own prompt when the hook answers `allow`? (Only matters while away.)
 - [ ] Does VS Code honour `permissionDecision: "allow"` from `PreToolUse`, given
       `chat.tools.global.autoApprove: true` in your settings?
-- [ ] Does `cursor-agent --force acp` stop sending `session/request_permission`? (D125)
-- [ ] AHP: is `autoApprove` a valid `createSession` config value on VS Code 1.147? (D125)
+- [x] Does `cursor-agent --force acp` stop sending `session/request_permission`? (D125)
+      Not observable: the relay answers every request itself (D117), so the flag changes nothing visible. Scenario 7 passes on Cursor CLI with no card either way.
+- [x] AHP: is `autoApprove` a valid `createSession` config value on VS Code 1.147? (D125)
+      Yes: VS Code 1.147 accepted `createSession` with it, and scenarios 2 to 7 pass on Copilot (AHP) with no card.
 - [ ] Is Cursor's last `afterAgentResponse` always the final answer, or can it be pre-tool narration?
       (Cleared when a tool hook follows it, so a turn ending after a tool yields no text.)
 - [ ] Does a Webex Android card delete remove the card cleanly, with no "Unable to send your request"
@@ -42,8 +44,9 @@ need the owner (scenario 8 at the desk, the Android look).
 - [x] With away on, does a Cursor CDP chat also register as a second desk session through Cursor's hooks?
       Yes; fixed with a claim (D134).
 - [ ] Do Copilot CLI hook payloads always carry `transcript_path`? It is the only source of the final text.
-- [ ] Does the OAuth integration behind `webex-cli` have the scope for `POST /attachment/actions`? If not,
+- [x] Does the OAuth integration behind `webex-cli` have the scope for `POST /attachment/actions`? If not,
       the driver falls back to typed commands and card taps stay a phone check. (D123)
+      Yes: the card taps of scenarios 2, 6 and 9 ran from the owner's token live.
 - [ ] Does a Webex client honour `label`, `isRequired` and `errorMessage` on the `/new` card's inputs?
       (`scripts/card_check.py` only proves Webex accepts them.)
 - [x] `scripts/card_check.py`: every card accepted (HTTP 200), 14 of 14.
@@ -81,30 +84,38 @@ need the owner (scenario 8 at the desk, the Android look).
 - [x] VS Code and Copilot (AHP) scenarios 2 to 7 pass live (12 of 12).
 - [x] Full `uv run tox` green on 2026-11-21 (format, lint, mypy --strict, pytest, ts). The Playwright PWA card test
       and the live tests are not part of it.
-- [ ] `uv.lock` was edited by hand for `markdown-it-py` (D126); run `uv lock` once online.
-- [ ] `scrub.scrub_text` is quadratic on one very long unbroken word (5,000 word characters take 0.5 s;
+- [x] `uv.lock` was edited by hand for `markdown-it-py` (D126); run `uv lock` once online.
+      Done: `uv lock` resolves with no change, so the hand edit matches.
+- [x] `scrub.scrub_text` is quadratic on one very long unbroken word (5,000 word characters take 0.5 s;
       60,000 take over a minute). `render_answer` scrubs three times and `validate_file` scrubs text, so a
       base64 or minified blob could stall the caller. Fix with possessive quantifiers or a length guard in
       `scrub.py`, and render answers through `asyncio.to_thread`.
-- [ ] Dead approval and wizard code left behind for a cleanup pass: `PendingKind` still has `"approval"` (an
-      old row is just closed), `HookService` still takes an unused `broker`, `ParkManager` takes an unused
-      `notify`, and `handlers.DRAFT_PREFIX` and the draft sweep in housekeeping outlive the wizard (a test pins
-      the two constants equal).
-- [ ] `plugins/opencode/package.json` still says the plugin "relays tool approvals"; the installer's hook
+      Fixed: `scrub.py` guards runs over 2,000 characters; `tests/test_scrub.py` pins it.
+- [x] Dead approval and wizard code: the unused `broker` of `HookService` and `notify` of `ParkManager` are gone.
+      `PendingKind` keeps `"approval"` and housekeeping keeps the draft sweep on purpose: they close or clear
+      rows an older relayd left in an existing database, and removing them would need a migration.
+- [x] `plugins/opencode/package.json` still says the plugin "relays tool approvals"; the installer's hook
       timeout for approval-kind hooks is `question_hook_timeout_s()` although they no longer block.
-- [ ] `ws_client.DeviceError` still says "Webex rejected the bot token (401). Check the Keychain entry."; the
+      Fixed: the package description is corrected. The approval-hook timeout is left alone: changing it would make every installed hook file read as drifted for no visible gain.
+- [x] `ws_client.DeviceError` still says "Webex rejected the bot token (401). Check the Keychain entry."; the
       host and doctor give the better message (`pbpaste | relay setup token --stdin`).
-- [ ] `card.offer:<nonce>` keys of `/new` and `/model` cards that are never submitted stay in the registry
+      Fixed: the message now says `pbpaste | relay setup token --stdin`.
+- [x] `card.offer:<nonce>` keys of `/new` and `/model` cards that are never submitted stay in the registry
       (about 4 KB each); sweep the ones whose `card.nonce:` key is gone in housekeeping.
-- [ ] The CDP self-test does not save the model list; only an explicit `/models cursor-ide` does
+      Fixed: housekeeping drops an offer a day after first seeing it without a live nonce (`_prune_offers`, tested).
+- [x] The CDP self-test does not save the model list; only an explicit `/models cursor-ide` does
       (`core.service.discovery.CDP_MODELS_KEY`). The Cursor CLI's own 30 s `models` call keeps running in the
       background when the card's 3 s timeout gives up (it fills the cache).
-- [ ] `webex_token_check` runs in both `relay doctor` and `/doctor` (one `GET /people/me` each).
+      Left as designed: the self-test must not open Cursor's model menu on the owner's screen. Run `/models cursor-ide` once to fill the list.
+- [x] `webex_token_check` runs in both `relay doctor` and `/doctor` (one `GET /people/me` each).
+      Left as is: two cheap calls, each in its own report; sharing a cache would add state for no gain.
 - [ ] An installed copy of the old `stepping-away` patch now reads as drifted: restore the base skill and run
       `relay install --apply` (see [operations.md](docs/operations.md#the-stepping-away-skill-patch)).
-- [ ] [`docs/PLAN.md`](docs/PLAN.md) §5 still describes approvals, per-workspace away, streaming and `answer.md`,
+- [x] [`docs/PLAN.md`](docs/PLAN.md) §5 still describes approvals, per-workspace away, streaming and `answer.md`,
       and lists `scripts/smoke_live.py`; deviations D116–D127 and D57 record what replaced them.
-- [ ] Squash-merge `feat/november-round` to `main` at the end; never push (U14).
+      Done: `docs/PLAN.md` opens with a table of what the November round superseded, pointing at the deviations.
+- [x] Squash-merge `feat/november-round` to `main` at the end; never push (U14).
+      Done: squash-merged to local `main` as `6ec9653`; nothing was pushed.
 
 ## October round (2026-10-13)
 
@@ -199,9 +210,10 @@ driven from Webex on 2026-10-04 with a script that is gone (D57, D123). The Nove
       and Cursor runs with the debug port.
 - [x] **CDP live (D35):** a real phone prompt and a follow-up both returned correct replies, and the
       `model_option` selector is fixed (selectors v3, nine models found).
-- [ ] **CDP, still unverified live:** `/models cursor-ide` after the v3 fix, choosing a model with
+- [x] **CDP, still unverified live:** `/models cursor-ide` after the v3 fix, choosing a model with
       `/new cursor-ide scratch "…" <model>`, and `/stop` on a running turn (one live session
       creation is left of the three allowed).
+      Done: `/models cursor-ide`, a model choice (scenario 6) and `/stop` (scenario 10) all pass live on every app.
 - [ ] **D61, partly done:** the A/B run showed no difference with and without the relay's hooks for
       commands Cursor auto-runs (see D61). Still to find: a command Cursor prompts for on its own (for
       example with sandboxed auto-run turned off), then confirm it still prompts with the hooks in place.
@@ -209,10 +221,8 @@ driven from Webex on 2026-10-04 with a script that is gone (D57, D123). The Nove
       (recorded in D25).
 - [x] AC-24 is ticked in `docs/acceptance.md` and D35 is updated; D61 stays partly open (above).
 
-- [ ] **November round, open after the live run** (details in *Live results (November round)*): VS Code's
-      next prompt after `/model` never arrives; re-run Copilot (AHP) scenarios 3 to 7 with the D129 fix (the
-      three allowed sessions are used); scenario 8 (needs a desk turn); Cursor CDP self-test; the Android look
-      of the `/new` and `/model` cards.
+- [x] **November round, open after the live run:** all closed by later runs (see *Live results (November
+      round)*) except the Android look of the `/new` and `/model` cards and scenario 8 for Cursor and Copilot CLI.
 
 Live runs now use the end-to-end driver (see "The live end-to-end test" in `docs/operations.md`):
 `RELAY_LIVE=1 .venv/bin/python scripts/phone_e2e.py`. Away mode is one global flag, so a scenario that turns
@@ -226,7 +236,8 @@ it on (scenario 8) affects every desk chat until its closing `/back`.
 - [x] No stubs or TODOs (`test_no_stubs` passes).
 - [x] `relay doctor` all green after G1.
 - [x] Live smoke works for VS Code, VS Code Copilot, OpenCode, the Cursor IDE and the Cursor CLI.
-- [ ] The README quick start works from a clean `RELAY_HOME`.
+- [x] The README quick start works from a clean `RELAY_HOME`.
+      Done: init, config, `ws add`, `install` (dry run) and `doctor` ran from an empty `RELAY_HOME` and wrote only there.
 
 ### 3. Smaller follow-ups noticed during testing
 
@@ -237,5 +248,6 @@ it on (scenario 8) affects every desk chat until its closing `/back`.
       housekeeping ends idle sessions after 7 days (D121).
 - [ ] Upstream: `cursor-agent` sometimes appends "Error: RetriableError: WritableIterable is closed"
       to the reply of a woken turn. The reply itself is complete. Report it to Cursor if it persists.
-- [ ] The OpenCode provider config can print provider tokens in a terminal. The
+- [x] The OpenCode provider config can print provider tokens in a terminal. The
       scrubber now catches them (D69).
+      Fixed by D69 and the long-run guard in the scrubber.

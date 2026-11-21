@@ -189,7 +189,12 @@ async def test_state_follows_the_websocket_while_attached() -> None:
     [
         (WebexError(401, "bad token"), "rejected"),
         (WebexError(403, "forbidden"), "rejected"),
-        (DeviceError("Webex rejected the bot token (401). Check the Keychain entry."), "rejected"),
+        (
+            DeviceError(
+                "Webex rejected the bot token (401). Store a new one: pbpaste | relay setup token --stdin"
+            ),
+            "rejected",
+        ),
         (WebexError(500, "oops"), "unreachable"),
         (DeviceError("device registration keeps returning 404"), "unreachable"),
         (httpx.ConnectError("no route"), "unreachable"),

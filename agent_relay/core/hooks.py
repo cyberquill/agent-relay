@@ -17,7 +17,6 @@ from pydantic import JsonValue
 
 from agent_relay import paths
 from agent_relay.core import away
-from agent_relay.core.approvals import ApprovalBroker
 from agent_relay.core.claims import CURSOR_SCOPE, UNCLAIMED_PREFIX, aliased, link_alias, take_claim
 from agent_relay.core.lifecycle import Lifecycle
 from agent_relay.core.parking import AWAY_OFF_REASON, ParkManager, phone_notice, phone_text
@@ -80,13 +79,11 @@ class HookService:
         self,
         registry: Registry,
         router: Router,
-        broker: ApprovalBroker,
         parking: ParkManager,
         lifecycle: Lifecycle,
     ) -> None:
         self._registry = registry
         self._router = router
-        self._broker = broker
         self._parking = parking
         self._lifecycle = lifecycle
 

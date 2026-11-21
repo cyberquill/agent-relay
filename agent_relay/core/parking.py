@@ -7,7 +7,7 @@ continuation, so the agent stops again at once and the next stop hook resumes th
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Awaitable, Callable
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Literal
@@ -35,8 +35,6 @@ NOTICE_MAX = 500
 AWAY_OFF_REASON = "away mode off"
 BLOCKS_KEY = "stop_blocks"
 DEADLINE_KEY = "park_deadline"
-
-type Notify = Callable[[SessionRecord, str], Awaitable[None]]
 
 
 @dataclass(frozen=True)
@@ -68,7 +66,6 @@ class ParkManager:
         router: Router,
         signals: Signals,
         config: ParkConfig,
-        notify: Notify | None,  # accepted for old callers; parking never posts to the phone itself
         lifecycle: Lifecycle,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
     ) -> None:
