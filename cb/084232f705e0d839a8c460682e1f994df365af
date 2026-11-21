@@ -1,0 +1,47 @@
+tests/core/test_hooks.py
+  s_6e0c2c6dba0592::t_344733300baf0d 15,529-545,547-556,577-583
+  s_6e0c2c6dba0592::t_045abaae9dce99 557-576
+  s_6e0c2c6dba0592::t_e33a5741258790 546
+  s_6e0c2c6dba0592::t_660d299e281142 584-585
+agent_relay/adapters/cursor_cdp/adapter.py
+  s_6e0c2c6dba0592::t_b4b4d083322a5f 30,260-263,273-281
+tests/adapters/test_cursor_cdp_units.py
+  s_6e0c2c6dba0592::t_404a701973bb5d 133-149
+agent_relay/core/hooks.py
+  s_6e0c2c6dba0592::t_1f2cfb838f218f 65,183-190
+  s_6e0c2c6dba0592::t_045abaae9dce99 11,14
+  s_6e0c2c6dba0592::t_84e839bcca2d69 21,58-59,149,158-162,180-182,191-195
+  s_6e0c2c6dba0592::t_5aa5d38ba3168c 196
+agent_relay/core/claims.py
+  s_6e0c2c6dba0592::t_84e839bcca2d69 19-21,33-34,43,46,50-53,58
+scripts/e2e/scenarios_more.py
+  s_6e0c2c6dba0592::t_e33a5741258790 13
+docs/deviations.md
+  s_6e0c2c6dba0592::t_0433bfab6eed68 141
+agent_relay/adapters/cursor_cdp/driver.py
+  s_6e0c2c6dba0592::t_404a701973bb5d 31-32,51-52,75-78,82-83,91-92,97-98,103,107,116-120,123,129
+  s_6e0c2c6dba0592::t_22b10f29c8fa12 167
+TODO.md
+  s_6e0c2c6dba0592::t_8a888fc419da84 6,42-43,67-68
+tests/fixtures/cursor_cdp/composer.html
+  s_6e0c2c6dba0592::t_404a701973bb5d 89
+docs/operations.md
+  s_6e0c2c6dba0592::t_d7d813727b93a4 429,435
+  s_6e0c2c6dba0592::t_8a888fc419da84 428,430-432,438-447,451,453-455
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "cb084232f705e0d839a8c460682e1f994df365af",
+  "prompts": {},
+  "sessions": {
+    "s_6e0c2c6dba0592": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "24c9909b-1d33-42f1-9ddc-cce97bd5d739",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "Brijgopal Bharadwaj <brijgopalbharadwaj1999@gmail.com>"
+    }
+  }
+}
