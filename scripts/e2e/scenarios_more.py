@@ -24,16 +24,29 @@ async def command(env: Env, text: str, what: str) -> Msg:
     return await top.wait_for(lambda _m: True, env.settings.command_s, what)
 
 
-async def _next_turn_uses_model(env: Env, thread: Thread, chosen: str) -> str:
-    await env.root_text(thread.root, lambda text: chosen in text, f"the model {chosen}")
+async def _model_shown(env: Env, thread: Thread, chosen: str) -> str:
+    """Where the chosen model shows: the root line, or (the root has a small edit budget, so a long thread
+    may have spent it) the thread's `/status` reply."""
+    root = await env.user.get(thread.root.id)
+    if root is not None and chosen in root.body:
+        return "root shows it"
+    replies = await env.watch(thread.root.id).start()
+    await env.post("/status", parent_id=thread.root.id)
+    reply = await replies.wait_for(lambda m: "model:" in m.body, env.settings.command_s, "the /status reply")
+    if chosen not in reply.body:
+        raise ScenarioFailed(f"the session does not use {chosen}: {env.summary(reply)}")
+    return "/status shows it"
 
+
+async def _next_turn_uses_model(env: Env, thread: Thread, chosen: str) -> str:
     async def send() -> Msg:
         return await env.post(OK_PROMPT, parent_id=thread.root.id)
 
     result = await env.turn(thread, send)
     if not OK_WORD.search(result.final.body):
         raise ScenarioFailed(f"the next turn is not OK: {env.summary(result.final)}")
-    return f"Model → {chosen}, root shows it, the next turn answered"
+    shown = await _model_shown(env, thread, chosen)
+    return f"Model → {chosen}, {shown}, the next turn answered"
 
 
 async def _model_reply(env: Env, replies: Watch, chosen: str) -> None:

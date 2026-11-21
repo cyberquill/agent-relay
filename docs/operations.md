@@ -426,34 +426,41 @@ the table is the last result per cell.
 | 1 `/help` | ✅ |
 | 2 `/new` card, one final OK | ✅ Copilot (AHP), VS Code, Cursor CLI, OpenCode |
 | 3 reply in a thread | ✅ Cursor CLI, OpenCode, VS Code. Copilot: passed only because the reply matched `OK` inside the classifier JSON (D129); the check now needs the message to start with `OK` |
-| 4 image and PDF reach the agent | ✅ VS Code, Cursor CLI (after D131), OpenCode. Copilot: ❌ the answer was the classifier JSON (D129) |
+| 4 image and PDF reach the agent | ✅ VS Code (first run), Cursor CLI (after D131), OpenCode. Copilot: ❌ open (see below) |
 | 5 long table arrives as `answer.html` (CSP, no script, no href) | ✅ VS Code, Cursor CLI, OpenCode. Copilot: ❌ the answer was the classifier JSON (D129) |
-| 6 `/model` card, next turn uses it | ✅ Copilot, Cursor CLI, OpenCode. VS Code: ❌ open item 1 below |
+| 6 `/model` card, next turn uses it | ✅ Copilot, Cursor CLI, OpenCode. VS Code: the model reached the session (D132), the root line was out of edits (see below) |
 | 7 shell command, no approval card | ✅ Cursor CLI (`--force`), OpenCode (`always`). Copilot: no card and the tool ran (`🔧 1`), but the text was the classifier JSON (D129). VS Code: ❌ queued behind item 1 |
 | 8 away: desk chat reaches the phone, reply continues it, `/back` releases it | not run: it needs the owner to run a desk turn |
 | 9 `/panic` | ✅ everything stopped, `/away` resumed, away left off |
 | Cursor CDP: self-test on Cursor 3.30.8; `/new cursor-ide` replies OK | not run: Cursor is running without the debug port, so the gate stays closed (`relay selftest cursor-cdp`) |
 | Android look of the `/new` and `/model` cards (by the owner) | not run: owner |
 
+Second VS Code and Copilot run (2026-11-21, after the VS Code reload; the owner asked to go past the
+three-session cap for these two apps):
+
+- **VS Code**: scenario 2 ✅. The answers of 3, 5 and 7 were right (`OK`, the table, `relay-e2e-42`):
+  the empty answers of D129 are gone. The run still "failed" 3 to 7 because the driver counted the
+  relay's own `📨 delivered to the parked session` and `📨 Queued (N waiting)` receipts as extra messages;
+  the driver now ignores them, like the `📎` receipt (`scripts/e2e/cardkit.py::is_receipt`). Scenario 6's
+  model *did* reach the session (`model` column `claude-haiku-4.5`, the later turns ran), so D132 works;
+  what failed was the root line, which still read "default model": the root has a budget of 8 edits
+  (`renderer.root_edit_budget`) and a long thread spends it. The driver now falls back to the thread's
+  `/status` reply (`model: …`).
+- **Copilot (AHP)**: scenario 2 ✅, 3 ✅ (a real `OK`, not the classifier JSON). Scenario 4 left the
+  session `running` with an open question ("I received the attached image. What would you like me to do
+  with it?"): the driver sent the PNG alone, and a files-only message to a **parked** chat goes at once as
+  `Files from the phone:` plus the path (D122c), so the agent got no question to answer. Scenarios 5 to 7
+  then only queued behind that open question. The driver now sends each file together with the question.
+  **Scenarios 4 to 7 for Copilot are not re-run**: the cap of three live sessions per adapter was used up.
+
 Open items for the owner:
 
-1. **VS Code, `/model` then the next turn.** After a model is chosen the prompt never reaches the chat:
-   the chat's transcript has no `user.message` for it, no error comes back, and the session stays
-   `running` (`/stop` ends it). Without a model the same path works (scenarios 3, 4, 5). The bridge sends
-   `workbench.action.chat.open` with `modelSelector: {id}` (`extensions/relay-bridge/src/bridge.ts`,
-   `openArgs`); VS Code resolves it with `selectLanguageModels` and then `setCurrentLanguageModel`.
-   D132 changes the selector to name the vendor, because VS Code refreshes every vendor's models for a
-   selector without one; that is a likely cause but **not verified live**. The new VSIX is installed; reload
-   the VS Code windows, then run `--only 2,6,7 --apps vscode` (the three sessions the cap allows were used).
-   If it still hangs, run `workbench.action.chat.open` by hand in the `.scratch` window with
-   `{query, modelSelector: {vendor, id}, blockOnResponse: true}`.
-2. **Copilot (AHP) scenarios 3 to 7 need one more run** with the D129 fix: `RELAY_LIVE=1 .venv/bin/python
-   scripts/phone_e2e.py --only 2,3,4,5,6,7 --apps copilot`. Three Copilot sessions were already used, so the
-   cap stopped the re-run. The fix was checked offline against the real `events.jsonl` of that session
-   (cut just before each `assistant.message`: the old code returned the JSON every time, the new code
-   returns nothing and the streamed text is used).
-3. After a restart of VS Code, a Copilot thread made before it cannot be replied to
+1. **Re-run after the driver fixes**: `RELAY_LIVE=1 .venv/bin/python scripts/phone_e2e.py --only 2,3,4,5,6,7
+   --apps copilot,vscode` (one new session each; both are over the cap, so this is the owner's call).
+   Close the stuck Copilot session first with `/stop` in its thread.
+2. After a restart of VS Code, a Copilot thread made before it cannot be replied to
    (`Session was never created on the backend`, shown as "That failed (AhpRpcError)").
+3. Scenario 8 (away round trip) needs the owner at the desk: see `TODO.md`.
 4. Cursor CDP and Android, as in the table. The AHP `autoApprove` flag is only indirectly confirmed
    (scenario 7 ran a tool with no card); a desk-session check of the three apps is still open.
 

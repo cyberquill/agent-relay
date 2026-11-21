@@ -202,5 +202,6 @@ def fill_new(view: CardView, *, harness: str, prompt: str) -> dict[str, JsonValu
 
 
 def is_receipt(message: Msg) -> bool:
-    """The relay's one-line acknowledgement of a file the owner sent."""
-    return message.body.lstrip().startswith("📎")
+    """The relay's one-line acknowledgement of something the owner just did: a file ("📎") or a reply
+    delivered or queued ("📨")."""
+    return message.body.lstrip().startswith(("📎", "📨"))

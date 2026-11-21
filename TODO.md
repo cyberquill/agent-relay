@@ -58,6 +58,14 @@ orchestrator.
 
 ### Open items from the November round
 
+- [ ] **Scenario 8 (away round trip), owner at the desk.** Headless `cursor-agent -p` and `copilot -p` create no
+      phone thread, so run a real desk chat: 1) in the phone space send `/away`; 2) in a Cursor chat, a Copilot
+      chat in VS Code or a Copilot CLI session in `.scratch`, ask `Reply with exactly: OK`; 3) the phone gets a
+      thread with `OK` and the chat parks (🅿️); 4) reply in that thread and check the desk chat continues;
+      5) send `/back` and check the root drops 🅿️/🏝️ and the desk chat is released.
+- [ ] Cursor CDP self-test and `/new cursor-ide` live (`/tmp/nov-round/cdp-result.md` while it exists; see
+      `docs/operations.md`).
+
 - [ ] **Full `uv run tox`** on the merged tree (ruff, `mypy --strict`, pytest, `tox -e ts`); the OpenCode
       plugin's TypeScript test and `tests/frontends/test_pwa_cards.py` (Playwright) were not run. Re-run
       `tests/test_e2e_driver.py` and `tests/live/test_phone_e2e.py` once the tree is quiet.

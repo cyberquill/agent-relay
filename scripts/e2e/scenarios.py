@@ -3,6 +3,8 @@ or raises ScenarioFailed / ScenarioSkipped."""
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from scripts.e2e.cardkit import card_of, fill_new, has_card
 from scripts.e2e.env import OK_PROMPT, OK_WORD, Env, Thread
 from scripts.e2e.files import PDF_NAME, PNG_NAME, html_problems, write_samples
@@ -103,17 +105,18 @@ async def thread_reply(env: Env, app: str) -> str:
 
 
 async def file_reply(env: Env, app: str) -> str:
+    """One file with the question, per turn. A files-only message to a parked desk chat goes at once (the
+    hooks cannot hold it), so a file sent alone first would start a turn with nothing to answer."""
     thread = thread_of(env, app)
     png, pdf = write_samples(env.tmp_dir)
+    for path, name in ((png, PNG_NAME), (pdf, PDF_NAME)):
 
-    async def send() -> Msg:
-        await env.post("", parent_id=thread.root.id, file=png)
-        return await env.post(FILES_PROMPT, parent_id=thread.root.id, file=pdf)
+        async def send(path: Path = path) -> Msg:
+            return await env.post(FILES_PROMPT, parent_id=thread.root.id, file=path)
 
-    result = await env.turn(thread, send)
-    missing = [name for name in (PNG_NAME, PDF_NAME) if name not in result.final.body]
-    if missing:
-        raise ScenarioFailed(f"the agent did not name {', '.join(missing)}: {env.summary(result.final)}")
+        result = await env.turn(thread, send)
+        if name not in result.final.body:
+            raise ScenarioFailed(f"the agent did not name {name}: {env.summary(result.final)}")
     return "the agent named both files"
 
 
