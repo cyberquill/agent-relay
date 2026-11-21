@@ -1,0 +1,31 @@
+agent_relay/hook/outputs.py
+  s_6e0c2c6dba0592::t_b0b712946c60c3 41-45,47-48,65,76
+  s_6e0c2c6dba0592::t_32d1b493a7f6ea 38-40,46
+docs/deviations.md
+  s_6e0c2c6dba0592::t_357d8eef4d2223 144
+tests/core/test_hooks.py
+  s_6e0c2c6dba0592::t_b0b712946c60c3 420,422-423
+  s_6e0c2c6dba0592::t_32d1b493a7f6ea 20,421
+tests/core/test_phone_notice.py
+  s_6e0c2c6dba0592::t_32d1b493a7f6ea 27-36
+  s_6e0c2c6dba0592::t_19b312a3871f56 6
+TODO.md
+  s_6e0c2c6dba0592::t_357d8eef4d2223 3
+  s_6e0c2c6dba0592::t_08aadb734c30f6 62-65
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a1f6c630e6512749cb7259cec2bdf801f62786f5",
+  "prompts": {},
+  "sessions": {
+    "s_6e0c2c6dba0592": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "24c9909b-1d33-42f1-9ddc-cce97bd5d739",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "Brijgopal Bharadwaj <brijgopalbharadwaj1999@gmail.com>"
+    }
+  }
+}
