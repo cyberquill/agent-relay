@@ -1,0 +1,92 @@
+tests/frontends/test_new_card.py
+  s_d55e146ebbc7b2::t_e7862ae0621ab3 7,24,66-68,102-104,150,229-231,262-268,271,297-302,344-346,379-381,433,496-498,513-515,531
+  s_0ae3b763defb38::t_2d2d753de5c952 1,5,15,19-20,26-28,35,56-65,69-73,75-85,88-93,98-100,105-118,121-133,136,143-145,148-149,153-154,156,159-164,167,188-192,200,214-217,221,226-228,232-244,254-261,269-270,272-282,288-289,291,293-295,303-311,319,323-328,338-343,348-349,352,355-371,373-378,382-392,396,399-402,406-414,417,420-427,430,436-444,447-461,464-466,469-472,475,478-479,482-484,487-488,490-494,499-506,510,512,516,518-530,532
+  s_6e0c2c6dba0592::t_cb534d77d95b01 74,86-87,507
+  s_6e0c2c6dba0592::t_215a61ac3a8e79 296,495,508
+agent_relay/frontends/webex/cards/new_session.py
+  s_0ae3b763defb38::t_c90d58b1e5c020 1-4,8,22,24,27-28,34-35,39-40,42-47,51-81
+  s_0ae3b763defb38::t_24c49bf8666002 48-50
+tests/core/test_discovery.py
+  s_6532114fb9259a::t_cce88bef912a0b 285-287
+  s_0ae3b763defb38::t_eddc8804c381e1 1-284,288-306
+tests/frontends/card_spec.py
+  s_0ae3b763defb38::t_dc8bb6c23009a6 1-141
+agent_relay/core/service/discovery.py
+  s_0ae3b763defb38::t_24c49bf8666002 215-217
+  s_0ae3b763defb38::t_a469bd7629b9cd 1-6,11-14,18,28,35-130,133,135-137,154-175,177-178,183-190,194-213,220,222-281,293,298-300
+  s_265047b0913283::t_ae31a74131b274 16,191-193
+  s_0ae3b763defb38::t_2c668a4086bda3 15,214,301
+tests/core/discovery_fakes.py
+  s_6532114fb9259a::t_cce88bef912a0b 23-28
+  s_0ae3b763defb38::t_58e949af2aee38 1-22,29-73
+agent_relay/frontends/webex/cards/model_switch.py
+  s_0ae3b763defb38::t_d5b374b67adbae 20
+scripts/card_check.py
+  s_5a7905b4d03fed::t_081a2a16de68ab 20,43-44,48,51
+  s_0ae3b763defb38::t_ce9f41b9ba3008 1-19,21-42,45-47,49-50,52-98
+tests/frontends/test_card_spec.py
+  s_0ae3b763defb38::t_c1de263c7c6a37 1-5,7-23,32-110
+  s_0ae3b763defb38::t_a6b0d017bb3142 6,24-31
+tests/frontends/test_model_switch.py
+  s_0ae3b763defb38::t_e241e0fd69d951 1,12,14,29,31-32,37,44,46-47,74,89,96-106,125-141,147,165-176,180,191-244
+  s_0ae3b763defb38::t_6e9757a3d24525 177-179,181-190
+tests/frontends/card_samples.py
+  s_0ae3b763defb38::t_a6b0d017bb3142 32-35,57-59,63-66,84-88,93-97,103-105,107-111
+  s_0ae3b763defb38::t_54869c410ead39 1-31,36-56,60-62,67-83,89-92,98-102,106,112-115
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "2bddfbb0750bdf378245c083c0b243c9874160db",
+  "prompts": {},
+  "sessions": {
+    "s_0ae3b763defb38": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "d0b2a672-ed0c-4eb8-afff-11d7f7dc11d2",
+        "model": "claude-sonnet-5-5-high"
+      },
+      "human_author": "Brijgopal Bharadwaj <brijgopalbharadwaj1999@gmail.com>"
+    },
+    "s_265047b0913283": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "27811d49-0391-4ede-818b-9fc5f1cb4895",
+        "model": "claude-sonnet-5-5-high"
+      },
+      "human_author": "Brijgopal Bharadwaj <brijgopalbharadwaj1999@gmail.com>"
+    },
+    "s_5a7905b4d03fed": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "f1b090c3-584a-4a4b-ba57-3dad1a5d1994",
+        "model": "claude-sonnet-5-5-high"
+      },
+      "human_author": "Brijgopal Bharadwaj <brijgopalbharadwaj1999@gmail.com>"
+    },
+    "s_6532114fb9259a": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "d756fb38-74b9-4655-8894-5b825b165389",
+        "model": "claude-sonnet-5-5-high"
+      },
+      "human_author": "Brijgopal Bharadwaj <brijgopalbharadwaj1999@gmail.com>"
+    },
+    "s_6e0c2c6dba0592": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "24c9909b-1d33-42f1-9ddc-cce97bd5d739",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "Brijgopal Bharadwaj <brijgopalbharadwaj1999@gmail.com>"
+    },
+    "s_d55e146ebbc7b2": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "be38d2bf-f046-481d-8145-58820be8e710",
+        "model": "claude-sonnet-5-5-high"
+      },
+      "human_author": "Brijgopal Bharadwaj <brijgopalbharadwaj1999@gmail.com>"
+    }
+  }
+}
