@@ -1,0 +1,27 @@
+agent_relay/core/hooks.py
+  s_6e0c2c6dba0592::t_0044c0f83a2887 314
+tests/hook/test_transcript.py
+  s_6e0c2c6dba0592::t_accafbbd5aad06 5,7,128-151
+  s_6e0c2c6dba0592::t_6486dac8dbb921 48-60,62-66
+  s_6e0c2c6dba0592::t_4111ed29926b79 61
+agent_relay/hook/transcript.py
+  s_6e0c2c6dba0592::t_0044c0f83a2887 5,7,125-144
+  s_6e0c2c6dba0592::t_4111ed29926b79 94-102,124
+  s_6e0c2c6dba0592::t_6486dac8dbb921 48-55,74-75
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "5811d8e7ee1c7ba6df9c08e9f78ececdd8e9aba4",
+  "prompts": {},
+  "sessions": {
+    "s_6e0c2c6dba0592": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "24c9909b-1d33-42f1-9ddc-cce97bd5d739",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "Brijgopal Bharadwaj <brijgopalbharadwaj1999@gmail.com>"
+    }
+  }
+}
