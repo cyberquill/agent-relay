@@ -15,7 +15,6 @@ import pytest
 from pydantic import JsonValue
 from typer.testing import CliRunner
 
-from agent_relay.adapters.base import Decision
 from agent_relay.cli import app as cli
 from agent_relay.core.registry import Registry
 from agent_relay.core.router import Router
@@ -179,18 +178,26 @@ def test_the_page_renders_monospace_text_and_sends_the_cards_own_data() -> None:
     assert ".mono" in (STATIC / "app.css").read_text(encoding="utf-8")
 
 
+def test_the_page_shows_a_turn_as_one_final_message_and_no_progress() -> None:
+    script = (STATIC / "app.js").read_text(encoding="utf-8")
+    assert "renderLive" not in script and "state.live" not in script
+    assert "▶ " not in script and "✓ " not in script  # no per-tool progress lines
+    assert 'case "turn.completed"' in script and "state.last" in script
+    assert ".live" not in (STATIC / "app.css").read_text(encoding="utf-8")
+
+
 H = Harness.OPENCODE
 AUTH = {"Authorization": f"Bearer {TOKEN}"}
 
 
-async def _request(registry: Registry, kind: str, request_id: str) -> SessionRecord:
+async def _request(registry: Registry, request_id: str) -> SessionRecord:
     session = await registry.create_session(
         SessionRecord(session_key="opencode:p1", harness=H, harness_id="p1", workspace="/w/p")
     )
     await registry.add_pending(
         PendingRequest(
             request_id=request_id,
-            kind="approval" if kind == "approval" else "question",
+            kind="question",
             session_key=session.session_key,
             payload={"source": "adapter"},
             deadline=datetime.now(UTC) + timedelta(minutes=10),
@@ -199,8 +206,10 @@ async def _request(registry: Registry, kind: str, request_id: str) -> SessionRec
     return session
 
 
-async def test_the_hub_sends_approvals_and_questions_as_cards_with_a_nonce(registry: Registry) -> None:
-    session = await _request(registry, "approval", "r1")
+async def test_the_hub_sends_questions_as_cards_with_a_nonce_and_never_an_approval_card(
+    registry: Registry,
+) -> None:
+    session = await _request(registry, "q1")
     hub = PwaHub(registry=registry)
     async with hub.subscribe() as queue:
         await hub.handle(
@@ -213,25 +222,24 @@ async def test_the_hub_sends_approvals_and_questions_as_cards_with_a_nonce(regis
                 harness=H, session_key=session.session_key, request_id="q1", question="Which?", options=("a",)
             )
         )
-        payloads = [queue.get_nowait() for _ in range(4)]
-    assert [p["kind"] for p in payloads] == ["event", "message", "event", "message"]
-    approval, question = payloads[1], payloads[3]
-    assert approval["markdown"] == "🔐 Approval needed: bash · auto-deny in 10m"
+        payloads = [queue.get_nowait() for _ in range(3)]
+        assert queue.empty()
+    assert [p["kind"] for p in payloads] == ["event", "event", "message"]
+    question = payloads[2]
     assert question["markdown"] == "❓ Question: Which?"
-    for message in (approval, question):
-        card = message["card"]
-        assert isinstance(card, dict)
-        for data in _submits(card):
-            assert await registry.kv_get(f"{card_state.NONCE_PREFIX}{data['nonce']}") is not None
+    card = question["card"]
+    assert isinstance(card, dict)
+    for data in _submits(card):
+        assert await registry.kv_get(f"{card_state.NONCE_PREFIX}{data['nonce']}") is not None
     assert await card_state.load_offer(registry, "q1") == ["a"]
 
 
 async def test_a_hub_without_a_registry_sends_only_the_raw_event(registry: Registry) -> None:
-    session = await _request(registry, "approval", "r1")
+    session = await _request(registry, "q1")
     hub = PwaHub()
     async with hub.subscribe() as queue:
         await hub.handle(
-            ApprovalRequested(harness=H, session_key=session.session_key, request_id="r1", tool="b")
+            QuestionAsked(harness=H, session_key=session.session_key, request_id="q1", question="Which?")
         )
         assert queue.get_nowait()["kind"] == "event" and queue.empty()
 
@@ -243,16 +251,18 @@ async def test_card_submits_need_a_live_nonce_and_relay_errors_are_shown(
     router.add_adapter(EmittingAdapter(count=0))
     hub = PwaHub(registry=registry)
     app = build_app(hub, svc, Handlers(svc, hub), TOKEN)
-    session = await _request(registry, "approval", "r1")
+    session = await _request(registry, "q1")
     async with (
         hub.subscribe() as queue,
         httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://pwa") as client,
     ):
         await hub.handle(
-            ApprovalRequested(harness=H, session_key=session.session_key, request_id="r1", tool="b")
+            QuestionAsked(
+                harness=H, session_key=session.session_key, request_id="q1", question="Which?", options=("a",)
+            )
         )
         queue.get_nowait()  # the raw event
-        data = _first_submit(queue.get_nowait())
+        data = {**_first_submit(queue.get_nowait()), "choice": "a"}
 
         async def post(inputs: dict[str, JsonValue]) -> JsonValue:
             reply = await client.post("/api/card", headers=AUTH, json={"inputs": inputs})
@@ -263,17 +273,15 @@ async def test_card_submits_need_a_live_nonce_and_relay_errors_are_shown(
         assert await post({k: v for k, v in data.items() if k != "nonce"}) == "expired"
         assert queue.get_nowait()["markdown"] == card_state.EXPIRED
 
-        real = svc.answer_approval
+        real = svc.answer_question
         failures = [DeliveryError("OpenCode could not be reached.")]
 
-        async def flaky(
-            request_id: str, decision: Decision, by: ResolvedBy = "phone", reason: str | None = None
-        ) -> bool:
+        async def flaky(request_id: str, answer: str | None, by: ResolvedBy = "phone") -> bool:
             if failures:
                 raise failures.pop()
-            return await real(request_id, decision, by, reason)
+            return await real(request_id, answer, by)
 
-        monkeypatch.setattr(svc, "answer_approval", flaky)
+        monkeypatch.setattr(svc, "answer_question", flaky)
         assert await post(data) == "failed"
         shown = queue.get_nowait()
         assert shown["markdown"] == "⚠️ OpenCode could not be reached."

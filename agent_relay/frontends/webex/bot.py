@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 from collections.abc import Awaitable, Callable
+from datetime import datetime
 
 import httpx
 
@@ -15,25 +16,34 @@ from agent_relay.frontends import actions, commands
 from agent_relay.frontends.webex.access import AccessControl
 from agent_relay.frontends.webex.api import AttachmentAction, Message, WebexApi, WebexError
 from agent_relay.frontends.webex.attachments import AttachmentIntake
-from agent_relay.frontends.webex.bots import APP_HARNESSES, BOT_LABELS, BotScope, scoped
 from agent_relay.frontends.webex.handlers import Context, Handlers
 from agent_relay.frontends.webex.renderer import Outbox, WebexRenderer
-from agent_relay.frontends.webex.routing import BotRenderers
 from agent_relay.frontends.webex.ws_client import Activity, Connector, WebexWsClient, default_connector
 from agent_relay.log import get_logger, log_body
-from agent_relay.models.config import CONTROL, AttachmentsConfig, BotName, RelayConfig
+from agent_relay.models.config import AttachmentsConfig, RelayConfig
 from agent_relay.models.events import utcnow
 
 log = get_logger(__name__)
 
 LAST_SEEN_KEY = "webex.last_seen"
-HELLO_KEY = "webex.hello"
 CATCH_UP_PAGES = 10
+CATCH_UP_MAX_AGE_S = 1800  # older than this, a missed message is dropped, never replayed
 TOP_LANE = "top"
 IMMEDIATE_COMMANDS = frozenset({"panic", "stop"})  # never queued behind a slow handler
 LOOKUP_ATTEMPTS = 3
 LOOKUP_RETRY_S = 1.0
 SERVER_ERROR = 500
+
+
+def _too_old(message: Message) -> bool:
+    """A message created long ago: a user does not want it run now. An unreadable stamp counts as fresh."""
+    try:
+        created = datetime.fromisoformat(message.created.replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    if created.tzinfo is None:
+        return False
+    return (utcnow() - created).total_seconds() > CATCH_UP_MAX_AGE_S
 
 
 class WebexFrontend:
@@ -59,8 +69,6 @@ class WebexFrontend:
             handlers.inbox = self.intake.inbox
         self._access = access
         self._bot_id = bot_person_id
-        self.bot: BotName = renderer.bot
-        self._last_seen_key = scoped(LAST_SEEN_KEY, self.bot)
         self._sleep = sleep
         self._lock = asyncio.Lock()
         self._tasks: set[asyncio.Task[None]] = set()
@@ -70,7 +78,7 @@ class WebexFrontend:
     # exactly-once bookkeeping
 
     def _seen_key(self, message_id: str) -> str:
-        return scoped(f"{SEEN_PREFIX}{message_id}", self.bot)
+        return f"{SEEN_PREFIX}{message_id}"
 
     async def _claim(self, message_id: str) -> bool:
         """Mark a message processed. Returns False if it was already handled."""
@@ -86,25 +94,7 @@ class WebexFrontend:
             await self._registry.kv_delete(self._seen_key(message_id))
 
     async def _remember_last(self, message: Message) -> None:
-        await self._registry.kv_set(self._last_seen_key, message.id)
-
-    async def hello(self) -> bool:
-        """Open this app bot's 1:1 space once: a first message to the allowed email creates it.
-
-        Skipped for the control bot (its first post does this) and for a bot that already has a space.
-        """
-        if self.bot == CONTROL:
-            return False
-        marker = scoped(HELLO_KEY, self.bot)
-        if await self.renderer.outbox.room_id() is not None or await self._registry.kv_get(marker):
-            return False
-        apps = ", ".join(f"`{h.value}`" for h in APP_HARNESSES[self.bot])
-        await self.renderer.outbox.post(
-            f"👋 **{BOT_LABELS[self.bot]}** is ready. Sessions for {apps} live in this space. "
-            "`/help` lists commands."
-        )
-        await self._registry.kv_set(marker, utcnow().isoformat())
-        return True
+        await self._registry.kv_set(LAST_SEEN_KEY, message.id)
 
     # tasks
 
@@ -207,10 +197,11 @@ class WebexFrontend:
             intake = await self.intake.accept(message, context.session, text)
             if intake.notice:
                 await self.handlers.reply(context, intake.notice)
+            body = intake.text if intake.text is not None else text
             if intake.handle_text and intake.received is None:
-                await self.handlers.text(context, text)
+                await self.handlers.text(context, body)
             elif intake.handle_text:
-                await self.handlers.text(context, text, intake.received)
+                await self.handlers.text(context, body, intake.received)
 
     async def _admit_message(self, message: Message) -> Context | None:
         """Access check and thread lookup; None when the message was refused or answered here."""
@@ -244,10 +235,17 @@ class WebexFrontend:
             return
         outcome = await actions.submit(self._service, self.handlers, action.inputs)
         request_id = action.inputs.get("request_id")
-        if outcome == "already_answered" and isinstance(request_id, str):
+        if outcome == "done" and not actions.is_reusable(action.inputs.get("relay")):
+            await self._delete_card(action.message_id)
+        elif outcome == "already_answered" and isinstance(request_id, str):
             await self._already_resolved(request_id)
         elif outcome == "ignored":
             log.info("ignored a card submission with no relay action")
+
+    async def _delete_card(self, message_id: str) -> None:
+        """A one-shot card is done once it succeeded: delete it, so it cannot be tapped again."""
+        if message_id and not await self.renderer.outbox.delete(message_id):
+            log.info("could not delete a finished card; it stays in the chat")
 
     async def _admit_action(self, action: AttachmentAction) -> bool:
         room = await self._retried(lambda: self.api.get_room(action.room_id))
@@ -272,7 +270,7 @@ class WebexFrontend:
     async def catch_up(self) -> int:
         """Process messages that arrived while disconnected, oldest first. Returns how many."""
         room = await self.renderer.outbox.room_id()
-        last = await self._registry.kv_get(self._last_seen_key)
+        last = await self._registry.kv_get(LAST_SEEN_KEY)
         if room is None or last is None:
             return 0
         missed: list[Message] = []
@@ -289,14 +287,21 @@ class WebexFrontend:
                 before = page[-1].id
                 continue
             break
-        handled = 0
+        handled = dropped = 0
         for message in reversed(missed):
             if message.person_id == self._bot_id:
                 continue
             if await self._registry.kv_get(self._seen_key(message.id)) is not None:
                 continue
+            if _too_old(message):
+                dropped += 1
+                await self._claim(message.id)
+                await self._remember_last(message)
+                continue
             await self.handle_message(message)
             handled += 1
+        if dropped:
+            log.warning(f"dropped {dropped} message(s) older than {CATCH_UP_MAX_AGE_S} s from the catch-up")
         if handled:
             log.info(f"caught up on {handled} message(s) sent while disconnected")
         return handled
@@ -319,28 +324,19 @@ async def build_frontend(
     http: httpx.AsyncClient | None = None,
     connector: Connector = default_connector,
     doctor: Callable[[], Awaitable[str]] | None = None,
-    *,
-    bot: BotName = CONTROL,
-    renderers: BotRenderers | None = None,
 ) -> tuple[WebexFrontend, WebexWsClient]:
-    """One bot's front end and websocket client; with `renderers`, its renderer joins the router."""
+    """The front end and websocket client for the bot.
+
+    A rejected token (`WebexError`) or a network failure (`httpx.TransportError`) while checking who the
+    bot is propagates: the caller decides whether to retry. The router is not subscribed here.
+    """
     client = http or httpx.AsyncClient(headers={"Authorization": f"Bearer {token}"}, timeout=30)
     api = WebexApi(client, config.webex.api_base)
     me = await api.me()
-    outbox = Outbox(api, registry, config.webex.allowed_email, bot)
-    renderer = WebexRenderer(
-        outbox,
-        registry,
-        config.renderer,
-        config.approvals.deadline_s,
-        default_queue_mode=config.queue.default_mode,
-    )
-    if renderers is not None:
-        renderers.add(renderer)
+    outbox = Outbox(api, registry, config.webex.allowed_email)
+    renderer = WebexRenderer(outbox, registry, config.renderer, default_queue_mode=config.queue.default_mode)
     inbox = Inbox(registry, config.attachments)
-    handlers = Handlers(
-        service, renderer, doctor=doctor, inbox=inbox, scope=BotScope.for_bot(bot), sessions=renderers
-    )
+    handlers = Handlers(service, renderer, doctor=doctor, inbox=inbox)
     access = AccessControl(registry, config.webex.allowed_email, me.id)
     frontend = WebexFrontend(
         api, registry, service, renderer, handlers, access, me.id, intake=AttachmentIntake(api, inbox)

@@ -8,6 +8,8 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Awaitable, Callable
 
+import httpx
+
 from agent_relay import paths
 from agent_relay.adapters.ahp.endpoints import run_cli
 from agent_relay.doctor import local
@@ -25,15 +27,21 @@ def _sync_checks(config: RelayConfig, python: str | None) -> list[Check]:
     checks += local.mcp_checks(python)
     checks += local.skill_checks()
     checks += local.keychain_checks(config)
+    checks += local.legacy_config_checks()
     return checks
 
 
-async def local_checks(config: RelayConfig, python: str, runner: local.Runner | None = None) -> list[Check]:
+async def local_checks(
+    config: RelayConfig,
+    python: str,
+    runner: local.Runner | None = None,
+    http: httpx.AsyncClient | None = None,
+) -> list[Check]:
     runner = runner or run_cli
     checks = await local.version_checks(runner)
     checks += await asyncio.to_thread(_sync_checks, config, python)
+    checks += await local.webex_token_check(config, http)
     checks += await local.launchd_checks(python, runner, opencode=config.adapters.opencode)
-    checks.append(await local.presence_check(config))
     return checks
 
 
@@ -64,5 +72,6 @@ async def run(
     python: str,
     daemon: DaemonChecks = over_ipc,
     runner: local.Runner | None = None,
+    http: httpx.AsyncClient | None = None,
 ) -> Report:
-    return Report(checks=[*await daemon(), *await local_checks(config, python, runner)])
+    return Report(checks=[*await daemon(), *await local_checks(config, python, runner, http)])

@@ -3,7 +3,7 @@
 
 const TOKEN_KEY = "agent-relay.token";
 const TOP = "";
-const state = { current: TOP, threads: new Map([[TOP, { root: "Top level", items: [] }]]), live: new Map() };
+const state = { current: TOP, threads: new Map([[TOP, { root: "Top level", items: [] }]]), last: new Map() };
 const $ = (id) => document.getElementById(id);
 
 function token() { return sessionStorage.getItem(TOKEN_KEY) || ""; }
@@ -81,31 +81,29 @@ function onPayload(payload) {
   }
 }
 
+// A turn shows as one message: its final answer, when it completes. Deltas are kept, not shown, and a
+// tool call starts the next message over, so the fallback is the text after the last tool call.
 function onEvent(event) {
   const key = event.session_key;
   switch (event.type) {
-    case "text.delta": {
-      const text = (state.live.get(key) || "") + event.text;
-      state.live.set(key, text);
-      if (key === state.current) { renderLive(); }
-      break;
-    }
-    case "turn.completed":
-      state.live.delete(key);
-      if (event.text) { push(key, { type: "message", markdown: event.text }); }
-      else if (key === state.current) { renderLive(); }
+    case "text.delta":
+      state.last.set(key, (state.last.get(key) || "") + event.text);
       break;
     case "tool.started":
-      push(key, { type: "tool", text: `▶ ${event.name} ${event.detail || ""}` });
+      state.last.delete(key);
       break;
-    case "tool.finished":
-      push(key, { type: "tool", text: `${event.ok ? "✓" : "✗"} ${event.name} ${event.summary || ""}` });
+    case "turn.completed": {
+      const text = event.text || state.last.get(key) || "";
+      state.last.delete(key);
+      if (text) { push(key, { type: "message", markdown: text }); }
       break;
+    }
     case "session.started":
       thread(key).root = `${event.harness} · ${event.workspace || ""}`;
       refreshSessions();
       break;
     case "error":
+      state.last.delete(key);
       push(key, { type: "tool", text: `⚠️ ${event.message}` });
       break;
     default:
@@ -411,16 +409,6 @@ function renderItem(item) {
   return li;
 }
 
-function renderLive() {
-  const list = $("messages");
-  let live = list.querySelector("li.live");
-  const text = state.live.get(state.current);
-  if (!text) { if (live) { live.remove(); } return; }
-  if (!live) { live = el("li", "live"); list.append(live); }
-  live.textContent = text;
-  scrollDown();
-}
-
 function renderThreads() {
   const list = $("thread-list");
   list.replaceChildren();
@@ -436,7 +424,6 @@ function select(key) {
   const entry = thread(key);
   $("thread-title").textContent = entry.root.replaceAll("**", "");
   $("messages").replaceChildren(...entry.items.map(renderItem));
-  renderLive();
   renderThreads();
   scrollDown();
 }

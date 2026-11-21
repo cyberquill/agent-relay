@@ -1,4 +1,4 @@
-"""/queue and /steer, and the card submits that act on queued messages and finished turns."""
+"""/queue and /steer, and the card submits that act on queued messages."""
 
 from __future__ import annotations
 
@@ -13,8 +13,6 @@ from agent_relay.frontends.actions import Outcome, register_action
 from agent_relay.frontends.card_state import InvalidInput
 from agent_relay.frontends.commands import Command, Invalid
 from agent_relay.frontends.registry import CommandSpec, register
-from agent_relay.frontends.webex.cards import MAX_PROMPT_CHARS
-from agent_relay.frontends.webex.cards.completion import REPLY_FIELD
 from agent_relay.frontends.webex.cards.queue import MAX_ITEMS, queue_card
 from agent_relay.frontends.webex.handlers import Context, Handlers
 from agent_relay.models.config import QueueMode
@@ -110,42 +108,6 @@ async def _queue_action(service: RelayService, handlers: Handlers, inputs: dict[
     return "done"
 
 
-async def _completion_action(
-    service: RelayService, handlers: Handlers, inputs: dict[str, JsonValue]
-) -> Outcome:
-    key = inputs.get("session_key")
-    if not isinstance(key, str):
-        return "ignored"
-    ctx = Context(await service.session(key))
-    match inputs.get("op"):
-        case "diff":
-            diff = await service.diff(key)
-            if diff.strip():
-                await handlers.reply(ctx, "📎 changes.diff", file=("changes.diff", diff, "text/x-diff"))
-            else:
-                await handlers.reply(ctx, "No changes.")
-        case "continue":
-            await _send(service, handlers, ctx, key, "continue")
-        case "back":
-            await handlers.reply(ctx, await service.back(key))
-        case "send":
-            reply = inputs.get(REPLY_FIELD)
-            if not isinstance(reply, str) or not reply.strip():
-                raise InvalidInput("Type a reply first.")
-            if len(reply) > MAX_PROMPT_CHARS:
-                raise InvalidInput(f"That reply is too long ({MAX_PROMPT_CHARS} characters at most).")
-            await _send(service, handlers, ctx, key, reply.strip())
-        case _:
-            raise InvalidInput("That is not an action this card offers.")
-    return "done"
-
-
-async def _send(service: RelayService, handlers: Handlers, ctx: Context, key: str, text: str) -> None:
-    receipt = await service.prompt(key, text)
-    if receipt != "sent":
-        await handlers.reply(ctx, f"📨 {receipt}")
-
-
 register(
     CommandSpec(
         "queue",
@@ -170,5 +132,3 @@ register(
     )
 )
 register_action("queue", _queue_action, reusable=True)
-# Continue and Send may start a turn before failing, so a retry could send twice.
-register_action("completion", _completion_action, retryable=False)

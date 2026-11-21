@@ -2,91 +2,53 @@
 
 from __future__ import annotations
 
-from typing import Literal, get_args
+from collections.abc import Mapping
+from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class _Section(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
-BotName = Literal["control", "vscode", "cursor", "opencode"]
-BOT_NAMES: tuple[BotName, ...] = get_args(BotName)
-CONTROL: BotName = "control"
-# Keychain accounts of other secrets, which no bot may claim (a test keeps this equal to `settings.Secret`).
-OTHER_SECRET_ACCOUNTS = frozenset({"pwa-token", "opencode-password"})
-CONTROL_ACCOUNT = "webex-bot-token"
+# Keys of earlier builds. They are accepted, ignored and reported (`settings.legacy_config_keys`), so a
+# relay.toml written before the November round still loads; `relay config unset <key>` removes one.
+LEGACY_KEYS: dict[str, tuple[str, ...]] = {
+    "webex": ("bots", "bot_name", "new_card_layout"),
+    "renderer": ("flush_bytes", "flush_idle_s", "progress_edit_interval_s", "quick_reply"),
+}
+LEGACY_SECTIONS: tuple[str, ...] = ("approvals", "presence")
+
+
+def split_legacy(data: Mapping[str, object]) -> tuple[dict[str, object], list[str]]:
+    """`data` without the legacy keys, and their dotted names (sorted) for the doctor."""
+    found: list[str] = []
+    clean: dict[str, object] = {}
+    for key, value in data.items():
+        legacy = LEGACY_KEYS.get(key)
+        if key in LEGACY_SECTIONS:
+            leaves = [f"{key}.{leaf}" for leaf in value] if isinstance(value, Mapping) else []
+            found.extend(leaves or [key])
+        elif legacy is not None and isinstance(value, Mapping):
+            found.extend(f"{key}.{leaf}" for leaf in value if leaf in legacy)
+            clean[key] = {leaf: item for leaf, item in value.items() if leaf not in legacy}
+        else:
+            clean[key] = value
+    return clean, sorted(found)
 
 
 class WebexConfig(_Section):
     allowed_email: str = ""
-    bot_name: str = "agent-relay"
     api_base: str = "https://webexapis.com/v1"
     u2c_url: str = "https://u2c.wbx2.com/u2c/api/v1/catalog"
-    # "two" splits `/new` into app + workspace + prompt, then model, if a phone mishandles ShowCard.
-    new_card_layout: Literal["one", "two"] = "one"
-    # One bot, so one 1:1 space, per app: bot name -> the Keychain account that holds its token.
-    # Empty means the single bot (`webex-bot-token`) serves every app. `control` may be left out.
-    bots: dict[BotName, str] = Field(default_factory=dict)
-
-    @field_validator("bots")
-    @classmethod
-    def _accounts(cls, bots: dict[BotName, str]) -> dict[BotName, str]:
-        seen: dict[str, BotName] = {}
-        for bot, account in bots.items():
-            if not account or account != account.strip() or len(account.split()) != 1:
-                raise ValueError(f"webex.bots.{bot} must be a Keychain account name with no spaces")
-            if account in OTHER_SECRET_ACCOUNTS or (account == CONTROL_ACCOUNT and bot != CONTROL):
-                raise ValueError(f"webex.bots.{bot}: {account!r} holds another secret; pick its own name")
-            if account in seen:
-                raise ValueError(f"webex.bots.{bot} and {seen[account]} use the same Keychain account")
-            seen[account] = bot
-        return bots
 
 
-READ_ONLY_TOOLS: tuple[str, ...] = (
-    "read",
-    "read_file",
-    "view",
-    "glob",
-    "grep",
-    "ls",
-    "list",
-    "list_dir",
-    "search",
-    "*_search",
-    "search_*",
-    "find_*",
-    "get_*",
-    "fetch",
-    "webfetch",
-    "think",
-    "todo*",
-    "read_*",
-)
+class QuestionsConfig(_Section):
+    """How long a question to the phone (`ask_phone`, an app's own question) waits for the answer."""
 
-
-class ApprovalConfig(_Section):
     deadline_s: int = Field(default=600, ge=10)
     hook_timeout_margin_s: int = Field(default=60, ge=5)
-    auto_allow: list[str] = Field(default_factory=lambda: list(READ_ONLY_TOOLS))
-    # How long "allow this tool in this workspace" from the phone lasts.
-    workspace_grant_s: int = Field(default=14_400, ge=60)
-
-    @model_validator(mode="after")
-    def _no_global_auto_approve(self) -> ApprovalConfig:
-        for pattern in self.auto_allow:
-            literals = sum(1 for c in pattern if c not in "*?[]! ")
-            if literals < MIN_LITERAL_CHARS:
-                raise ValueError(
-                    f"approvals.auto_allow pattern {pattern!r} matches (nearly) every tool; "
-                    "a global auto-approve is not allowed"
-                )
-        return self
-
-
-MIN_LITERAL_CHARS = 2
 
 
 class ParkConfig(_Section):
@@ -131,13 +93,11 @@ class AdaptersConfig(_Section):
 
 
 class RendererConfig(_Section):
-    flush_bytes: int = 1_536
-    flush_idle_s: float = 15.0
     max_message_bytes: int = 6_144
     pace_s: float = 2.0
     root_edit_budget: int = 8
-    progress_edit_interval_s: float = Field(default=30.0, ge=5)
-    quick_reply: bool = False
+    # A long or rich answer goes out as `answer.html`: always, never, or (auto) when too big or rich.
+    html_threshold: Literal["auto", "always", "never"] = "auto"
 
 
 QueueMode = Literal["queue", "steer", "interrupt"]
@@ -145,11 +105,6 @@ QueueMode = Literal["queue", "steer", "interrupt"]
 
 class QueueConfig(_Section):
     default_mode: QueueMode = "queue"
-
-
-class PresenceConfig(_Section):
-    auto_away_on_lock: bool = True
-    poll_s: float = Field(default=10.0, ge=1)
 
 
 class AttachmentsConfig(_Section):
@@ -171,7 +126,7 @@ class WsConfig(_Section):
 
 class RelayConfig(_Section):
     webex: WebexConfig = Field(default_factory=WebexConfig)
-    approvals: ApprovalConfig = Field(default_factory=ApprovalConfig)
+    questions: QuestionsConfig = Field(default_factory=QuestionsConfig)
     park: ParkConfig = Field(default_factory=ParkConfig)
     pwa: PwaConfig = Field(default_factory=PwaConfig)
     cdp: CdpConfig = Field(default_factory=CdpConfig)
@@ -180,14 +135,18 @@ class RelayConfig(_Section):
     adapters: AdaptersConfig = Field(default_factory=AdaptersConfig)
     renderer: RendererConfig = Field(default_factory=RendererConfig)
     queue: QueueConfig = Field(default_factory=QueueConfig)
-    presence: PresenceConfig = Field(default_factory=PresenceConfig)
     attachments: AttachmentsConfig = Field(default_factory=AttachmentsConfig)
     ws: WsConfig = Field(default_factory=WsConfig)
     log_level: str = "INFO"
     debug_bodies: bool = False
 
-    def approval_hook_timeout_s(self) -> int:
-        return self.approvals.deadline_s + self.approvals.hook_timeout_margin_s
+    @model_validator(mode="before")
+    @classmethod
+    def _drop_legacy(cls, data: object) -> object:
+        return split_legacy(data)[0] if isinstance(data, Mapping) else data
+
+    def question_hook_timeout_s(self) -> int:
+        return self.questions.deadline_s + self.questions.hook_timeout_margin_s
 
     def park_hook_timeout_s(self) -> int:
         return self.park.slice_s + self.park.hook_timeout_margin_s

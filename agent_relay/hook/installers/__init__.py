@@ -29,7 +29,7 @@ def is_relay_entry(entry: object) -> bool:
 
 def timeout_for(kind: str, config: RelayConfig) -> int:
     if kind == "approval":
-        return config.approval_hook_timeout_s()
+        return config.question_hook_timeout_s()
     if kind == "park":
         return config.park_hook_timeout_s()
     return 10

@@ -2,8 +2,8 @@
 
 Every server's `/global/event` stream is read by its own supervised task. Events are rendered only for
 sessions the relay knows (started from the phone, or registered while away mode is on), so nothing
-reaches the phone while you are at the desk. Approvals that the plugin already got from the phone are
-answered here without a second card.
+reaches the phone while you are at the desk. A permission request is only reported as an event: the
+approval broker answers it (always allow) before any frontend sees it.
 """
 
 from __future__ import annotations
@@ -25,7 +25,7 @@ from agent_relay.adapters.base import (
 from agent_relay.adapters.opencode import mapping as m
 from agent_relay.adapters.opencode.client import OpenCodeClient, OpenCodeError, ServerEvent
 from agent_relay.core import away
-from agent_relay.core.hooks import APPROVED_CALL_KEY, OPENCODE_SERVER_PREFIX
+from agent_relay.core.hooks import OPENCODE_SERVER_PREFIX
 from agent_relay.core.registry import Registry
 from agent_relay.core.service import RelayError
 from agent_relay.log import get_logger
@@ -34,7 +34,6 @@ from agent_relay.models.capabilities import Capabilities
 from agent_relay.models.config import OpenCodeConfig
 from agent_relay.models.events import (
     ApprovalRequested,
-    ApprovalResolved,
     ErrorEvent,
     Event,
     Harness,
@@ -224,12 +223,9 @@ class OpenCodeAdapter(Adapter):
             case m.Failed(message=message):
                 await self._emit(ErrorEvent, session, message=message)
             case m.PermissionAsk():
-                await self._permission(client, session, record)
-            case m.PermissionDone(request_id=request_id, decision=decision):
-                if await self._still_open(request_id):
-                    await self._emit(
-                        ApprovalResolved, session, request_id=request_id, decision=decision, by="desk"
-                    )
+                await self._permission(session, record)
+            case m.PermissionDone():
+                return
             case m.QuestionAsk(request_id=request_id, question=question, options=options, count=count):
                 self._question_counts[request_id] = count
                 await self._emit(
@@ -246,14 +242,7 @@ class OpenCodeAdapter(Adapter):
         pending = await self._registry.get_pending(request_id)
         return pending is not None and pending.status == "open"
 
-    async def _permission(self, client: OpenCodeClient, session: SessionRecord, ask: m.PermissionAsk) -> None:
-        if ask.call_id:
-            prior = await self._registry.kv_get(APPROVED_CALL_KEY.format(call_id=ask.call_id))
-            if prior in ("allow", "deny"):
-                decision: Decision = "allow" if prior == "allow" else "deny"
-                await client.reply_permission(session.harness_id, ask.request_id, decision, session.workspace)
-                log.info(f"opencode permission {ask.request_id} answered from the earlier phone decision")
-                return
+    async def _permission(self, session: SessionRecord, ask: m.PermissionAsk) -> None:
         await self._emit(
             ApprovalRequested, session, request_id=ask.request_id, tool=ask.tool, detail=ask.detail
         )

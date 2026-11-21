@@ -13,10 +13,8 @@ from typing import Literal
 
 from pydantic import JsonValue
 
-from agent_relay.adapters.base import Decision
 from agent_relay.core.registry import Registry
 from agent_relay.core.service import RelayError, RelayService
-from agent_relay.core.service.approvals import REASON_MAX_CHARS
 from agent_relay.frontends import card_state
 from agent_relay.frontends import registry as command_table
 from agent_relay.frontends.card_state import InvalidInput
@@ -25,13 +23,6 @@ from agent_relay.frontends.webex.handlers import Context, Handlers
 
 type Outcome = Literal["done", "already_answered", "ignored", "expired", "failed"]
 type ActionHandler = Callable[[RelayService, Handlers, dict[str, JsonValue]], Awaitable[Outcome]]
-
-DECISIONS: dict[str, Decision] = {
-    "allow": "allow",
-    "allow_session": "allow_session",
-    "allow_workspace": "allow_workspace",
-    "deny": "deny",
-}
 
 _ACTIONS: dict[str, ActionHandler] = {}
 # Kinds whose handler may have acted before failing, so a retry could act twice.
@@ -57,6 +48,11 @@ def action_kinds() -> frozenset[str]:
     return frozenset(_ACTIONS)
 
 
+def is_reusable(kind: object) -> bool:
+    """Whether a card of this kind stays usable after a submit; any other is deleted once it is done."""
+    return isinstance(kind, str) and kind in _REUSABLE
+
+
 async def _where(registry: Registry, request_id: object) -> Context:
     """The thread a request belongs to, so replies land next to its card."""
     if isinstance(request_id, str):
@@ -80,23 +76,6 @@ async def _answer(registry: Registry, request_id: str, inputs: dict[str, JsonVal
     return custom if custom.strip() else choice or None
 
 
-async def _approval(service: RelayService, handlers: Handlers, inputs: dict[str, JsonValue]) -> Outcome:
-    request_id = inputs.get("request_id")
-    if not isinstance(request_id, str):
-        return "ignored"
-    decision = DECISIONS.get(str(inputs.get("decision")))
-    if decision is None:
-        raise InvalidInput("That is not a decision this card offers.")
-    reason = inputs.get("reason")
-    if reason is not None and not isinstance(reason, str):
-        raise InvalidInput("That reason was not text.")
-    if reason is not None and len(reason) > REASON_MAX_CHARS:
-        raise InvalidInput(f"That reason is too long ({REASON_MAX_CHARS} characters at most).")
-    # The other buttons submit the reason box too; only a deny carries it.
-    note = reason if decision == "deny" else None
-    return "done" if await service.answer_approval(request_id, decision, reason=note) else "already_answered"
-
-
 async def _question(service: RelayService, handlers: Handlers, inputs: dict[str, JsonValue]) -> Outcome:
     request_id = inputs.get("request_id")
     if not isinstance(request_id, str):
@@ -111,14 +90,13 @@ async def _question(service: RelayService, handlers: Handlers, inputs: dict[str,
 
 
 async def _new(service: RelayService, handlers: Handlers, inputs: dict[str, JsonValue]) -> Outcome:
-    await handlers.new_step(inputs)
+    await handlers.new_submit(inputs)
     return "done"
 
 
-register_action("approval", _approval)
 register_action("question", _question)
-# A `/new` may have started a session before it failed.
-register_action("new", _new, retryable=False)
+# `new_submit` raises only while no session exists, so a failed tap can be tapped again.
+register_action("new", _new)
 
 
 async def submit(service: RelayService, handlers: Handlers, inputs: dict[str, JsonValue]) -> Outcome:

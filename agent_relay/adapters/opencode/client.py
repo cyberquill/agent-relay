@@ -14,12 +14,8 @@ from pydantic import JsonValue
 from agent_relay.adapters.base import Decision, ModelInfo
 from agent_relay.models.attachments import Attachment
 
-PERMISSION_REPLY: dict[Decision, str] = {
-    "allow": "once",
-    "allow_session": "always",
-    "allow_workspace": "once",
-    "deny": "reject",
-}
+# `always` rather than `once`: the relay never wants OpenCode to ask again for the same kind of call.
+PERMISSION_REPLY: dict[Decision, str] = {"allow": "always", "deny": "reject"}
 
 
 class PermissionVariant(StrEnum):
@@ -88,6 +84,11 @@ def parse_sse(lines: list[str]) -> ServerEvent | None:
         properties=properties if isinstance(properties, dict) else {},
         directory=directory if isinstance(directory, str) else None,
     )
+
+
+# The server sends `server.heartbeat` about every 10 s: a stream that says nothing for this long is
+# dead (a server that took the connection while it was still starting up), so it is opened again.
+STREAM_SILENCE_S = 60.0
 
 
 class OpenCodeClient:
@@ -218,7 +219,7 @@ class OpenCodeClient:
             f"{self.base_url}/global/event",
             auth=self._auth or httpx.USE_CLIENT_DEFAULT,
             headers={"Accept": "text/event-stream"},
-            timeout=httpx.Timeout(10.0, read=None),
+            timeout=httpx.Timeout(10.0, read=STREAM_SILENCE_S),
         ) as response:
             if response.status_code >= 400:
                 raise OpenCodeError(f"GET /global/event → HTTP {response.status_code}")

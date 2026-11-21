@@ -12,10 +12,10 @@ import httpx
 import pytest
 from pydantic import JsonValue
 
-from agent_relay.adapters.base import AdapterUnavailableError, Decision
+from agent_relay.adapters.base import AdapterUnavailableError
 from agent_relay.adapters.opencode.adapter import OpenCodeAdapter
-from agent_relay.adapters.opencode.client import OpenCodeClient, ServerEvent, parse_sse
-from agent_relay.adapters.opencode.mapping import Delta, EventMapper, Idle
+from agent_relay.adapters.opencode.client import STREAM_SILENCE_S, OpenCodeClient, ServerEvent, parse_sse
+from agent_relay.adapters.opencode.mapping import REPLY_DECISION, Delta, EventMapper, Idle
 from agent_relay.core import away
 from agent_relay.core.registry import Registry
 from agent_relay.core.service import RelayError
@@ -148,7 +148,68 @@ def test_mapper_skips_reasoning_and_user_text_and_fills_unstreamed_text() -> Non
     assert mapper.map(ev("message.part.updated", sessionID="s", part=whole)) == [Delta("s", "Hello there")]
     assert mapper.map(ev("message.part.updated", sessionID="s", part=whole)) == []
     assert mapper.map(ev("session.idle", sessionID="s")) == [Idle("s", "Hello there")]
-    assert mapper.map(ev("session.idle", sessionID="s")) == [Idle("s", None)]
+    assert mapper.map(ev("session.idle", sessionID="s")) == [Idle("s", "")]
+
+
+def _tool_part(call_id: str, status: str) -> dict[str, JsonValue]:
+    return {
+        "id": f"tp_{call_id}",
+        "messageID": "a",
+        "type": "tool",
+        "callID": call_id,
+        "tool": "bash",
+        "state": {"status": status, "input": {"command": "ls"}},
+    }
+
+
+def _text_part(part_id: str, text: str) -> dict[str, JsonValue]:
+    return {"id": part_id, "messageID": "a", "type": "text", "text": text}
+
+
+def _turn_events(*parts: dict[str, JsonValue]) -> list[ServerEvent]:
+    events = [
+        ServerEvent("message.updated", {"sessionID": "s", "info": {"id": "a", "role": "assistant"}}, "/w")
+    ]
+    events += [ServerEvent("message.part.updated", {"sessionID": "s", "part": part}, "/w") for part in parts]
+    events.append(ServerEvent("session.idle", {"sessionID": "s"}, "/w"))
+    return events
+
+
+def test_turn_text_is_only_what_follows_the_last_tool_call() -> None:
+    mapper = EventMapper()
+    records = [
+        r
+        for event in _turn_events(
+            _text_part("p1", "Let me look."),
+            _tool_part("c1", "running"),
+            _tool_part("c1", "completed"),
+            _text_part("p2", "Now the second look."),
+            _tool_part("c2", "running"),
+            _text_part("p1", "Let me look."),  # a late update of narration must not come back
+            _text_part("p3", "All done: 4 files."),
+        )
+        for r in mapper.map(event)
+    ]
+    assert [r.text for r in records if isinstance(r, Idle)] == ["All done: 4 files."]
+    assert [r.text for r in records if isinstance(r, Delta)] == [
+        "Let me look.",
+        "Now the second look.",
+        "All done: 4 files.",
+    ], "every text is still streamed as a delta, for the renderer's fallback"
+
+
+def test_turn_text_is_empty_when_nothing_follows_the_last_tool_call() -> None:
+    mapper = EventMapper()
+    records = [
+        r
+        for event in _turn_events(_text_part("p1", "Working on it."), _tool_part("c1", "completed"))
+        for r in mapper.map(event)
+    ]
+    assert [r.text for r in records if isinstance(r, Idle)] == [""]
+
+
+def test_every_permission_reply_means_allow_except_reject() -> None:
+    assert REPLY_DECISION == {"once": "allow", "always": "allow", "reject": "deny"}
 
 
 async def test_phone_session_streams_recorded_turn(rig: Rig) -> None:
@@ -197,70 +258,44 @@ def _ask(sid: str, request_id: str = "per_1", call_id: str | None = None) -> dic
     return props
 
 
-@pytest.mark.parametrize(
-    ("decision", "reply"),
-    [("allow", "once"), ("allow_session", "always"), ("allow_workspace", "once"), ("deny", "reject")],
-)
-async def test_permission_round_trip_current_endpoint(rig: Rig, decision: Decision, reply: str) -> None:
+async def test_permission_is_answered_always_and_never_reaches_a_sink(rig: Rig) -> None:
     session = await rig.start()
     rig.fake.emit("permission.asked", _ask(session.harness_id))
-    await until(lambda: rig.rec.of(ApprovalRequested))
-    asked = rig.rec.of(ApprovalRequested)[0]
-    assert (asked.request_id, asked.tool, asked.detail) == ("per_1", "bash", "bash: rm -rf build")
-    await until(lambda: rig.core.registry.get_pending("per_1"))
-    pending = await rig.core.registry.get_pending("per_1")
-    assert pending is not None and pending.payload["source"] == "adapter"
-    assert await rig.core.service.answer_approval("per_1", decision)
-    assert rig.fake.replies == [("permission:per_1", {"reply": reply})]
+    await until(lambda: rig.fake.replies)
+    assert rig.fake.replies == [("permission:per_1", {"reply": "always"})]
+    await rig.core.router.join()
+    assert rig.rec.of(ApprovalRequested) == []
+    assert await rig.core.registry.get_pending("per_1") is None
 
 
-async def test_a_deny_reason_travels_as_the_reply_message_on_the_current_endpoint(rig: Rig) -> None:
+async def test_permission_on_the_legacy_endpoint_is_answered_always_with_basic_auth(legacy_rig: Rig) -> None:
+    session = await legacy_rig.start()
+    legacy_rig.fake.emit("permission.asked", _ask(session.harness_id))
+    await until(lambda: legacy_rig.fake.replies)
+    assert legacy_rig.fake.replies == [(f"legacy:{session.harness_id}:per_1", {"response": "always"})]
+    assert legacy_rig.fake.unauthorized == 0
+
+
+async def test_a_deny_travels_as_reject_and_the_reason_as_the_reply_message(rig: Rig) -> None:
     session = await rig.start()
-    rig.fake.emit("permission.asked", _ask(session.harness_id))
-    await until(lambda: rig.core.registry.get_pending("per_1"))
-    assert await rig.core.service.answer_approval("per_1", "deny", reason="use the staging db")
+    await rig.adapter.answer_approval(session, "per_1", "deny", "use the staging db")
     assert rig.fake.replies == [("permission:per_1", {"reply": "reject", "message": "use the staging db"})]
 
 
 async def test_the_legacy_endpoint_has_no_message_field(legacy_rig: Rig) -> None:
     session = await legacy_rig.start()
-    legacy_rig.fake.emit("permission.asked", _ask(session.harness_id))
-    await until(lambda: legacy_rig.core.registry.get_pending("per_1"))
-    assert await legacy_rig.core.service.answer_approval("per_1", "deny", reason="nope")
+    await legacy_rig.adapter.answer_approval(session, "per_1", "deny", "nope")
     assert legacy_rig.fake.replies == [(f"legacy:{session.harness_id}:per_1", {"response": "reject"})]
 
 
-async def test_permission_legacy_endpoint_and_basic_auth(legacy_rig: Rig) -> None:
-    session = await legacy_rig.start()
-    legacy_rig.fake.emit("permission.asked", _ask(session.harness_id))
-    await until(lambda: legacy_rig.rec.of(ApprovalRequested))
-    await until(lambda: legacy_rig.core.registry.get_pending("per_1"))
-    assert await legacy_rig.core.service.answer_approval("per_1", "deny")
-    assert legacy_rig.fake.replies == [(f"legacy:{session.harness_id}:per_1", {"response": "reject"})]
-    assert legacy_rig.fake.unauthorized == 0
-
-
-async def test_permission_already_decided_through_the_plugin_is_answered_quietly(rig: Rig) -> None:
+async def test_a_permission_answered_at_the_desk_is_not_reported_or_answered_again(rig: Rig) -> None:
     session = await rig.start()
-    await rig.core.registry.kv_set("approved_call:call_9", "allow")
-    rig.fake.emit("permission.asked", _ask(session.harness_id, call_id="call_9"))
-    await until(lambda: rig.fake.replies)
-    assert rig.fake.replies == [("permission:per_1", {"reply": "once"})]
-    assert not rig.rec.of(ApprovalRequested)
-
-
-async def test_permission_answered_at_the_desk_closes_the_card_without_a_second_reply(rig: Rig) -> None:
-    session = await rig.start()
-    sid = session.harness_id
-    rig.fake.emit("permission.asked", _ask(sid))
-    await until(lambda: rig.core.registry.get_pending("per_1"))
-    rig.fake.emit("permission.replied", {"sessionID": sid, "requestID": "per_1", "reply": "always"})
-    await until(lambda: rig.rec.of(ApprovalResolved))
-    assert [(e.decision, e.by) for e in rig.rec.of(ApprovalResolved)] == [("allow_session", "desk")]
-    pending = await rig.core.registry.get_pending("per_1")
-    assert pending is not None and pending.status == "resolved"
+    rig.fake.emit(
+        "permission.replied", {"sessionID": session.harness_id, "requestID": "per_1", "reply": "always"}
+    )
+    await asyncio.sleep(0.05)
     assert rig.fake.replies == []
-    assert not await rig.core.service.answer_approval("per_1", "deny")
+    assert rig.rec.of(ApprovalRequested) == [] and rig.rec.of(ApprovalResolved) == []
 
 
 async def test_single_and_multi_questions(rig: Rig) -> None:
@@ -408,3 +443,19 @@ async def test_plugin_registered_server_is_followed_and_forgotten_when_gone(rig:
         return await rig.core.registry.kv_prefix("opencode.server:") == {}
 
     await until(forgotten)
+
+
+async def test_a_silent_event_stream_times_out_so_it_is_opened_again() -> None:
+    """A server that took the connection while starting up never answers; the stream must not wait forever."""
+    seen: list[dict[str, float | None]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request.extensions["timeout"])
+        raise httpx.ReadTimeout("no heartbeat", request=request)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http:
+        client = OpenCodeClient(http, PRIMARY)
+        with pytest.raises(httpx.ReadTimeout):
+            async for _ in client.events():
+                pass
+    assert seen and seen[0]["read"] == STREAM_SILENCE_S

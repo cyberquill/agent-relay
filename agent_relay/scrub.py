@@ -45,7 +45,28 @@ def _looks_random(candidate: str) -> bool:
     )
 
 
+# A single unbroken run this long (base64, minified code) makes the patterns above backtrack for minutes,
+# so it is set aside while the rest is scrubbed and put back, redacted when it looks like a secret.
+_LONG_RUN_CHARS = 2_000
+_LONG_RUN = re.compile(rf"\S{{{_LONG_RUN_CHARS},}}")
+
+
 def scrub_text(text: str) -> str:
+    if len(text) < _LONG_RUN_CHARS or _LONG_RUN.search(text) is None:
+        return _scrub_short(text)
+    runs: list[str] = []
+
+    def _park(match: re.Match[str]) -> str:
+        runs.append(match.group(0))
+        return f"@@run{len(runs) - 1}@@"
+
+    out = _scrub_short(_LONG_RUN.sub(_park, text))
+    for index, run in enumerate(runs):
+        out = out.replace(f"@@run{index}@@", REDACTED if _looks_random(run) else run)
+    return out
+
+
+def _scrub_short(text: str) -> str:
     out = text
     for pattern in _PATTERNS:
         out = pattern.sub(REDACTED, out)

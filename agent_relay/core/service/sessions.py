@@ -132,7 +132,7 @@ class Sessions:
     def __init__(self, deps: Deps, discovery: Discovery) -> None:
         self._deps = deps
         self._discovery = discovery
-        deps.router.subscribe(QueueDrain(deps))
+        deps.router.subscribe(QueueDrain(deps), desk=True)
 
     async def start(
         self,

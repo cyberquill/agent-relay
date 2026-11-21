@@ -7,23 +7,17 @@ import json
 
 from pydantic import JsonValue
 
+from agent_relay.core.service.discovery import is_hidden_model as is_hidden_model  # built in core, shown here
 from agent_relay.hook.shims import abbreviate
 
 SCHEMA = "http://adaptivecards.io/schemas/adaptive-card.json"
 VERSION = "1.3"
-WIZARD_FIELDS = ("app", "ws", "model", "prompt")
 CARD_LIMIT_BYTES = 22_740  # Webex: message text + card JSON
 MAX_CHOICES = 25
 CHOICE_TITLE_CHARS = 100
 MAX_ANSWER_CHARS = 4_000
 MAX_PROMPT_CHARS = 20_000
 SHRUNK_TEXT_CHARS = 2_000
-MAX_ACTIONS_ON_CARD = 5  # past this, ShowCard buttons go in a body ActionSet
-HIDDEN_MODEL_MARKERS = ("copilot-utility", "dictation")  # the app's own helpers, never user choices
-
-
-def is_hidden_model(model_id: str, label: str = "") -> bool:
-    return any(marker in f"{model_id} {label}".lower() for marker in HIDDEN_MODEL_MARKERS)
 
 
 def card(body: list[JsonValue], actions: list[JsonValue]) -> dict[str, JsonValue]:
@@ -43,7 +37,16 @@ def text(
     return block
 
 
-def input_text(field: str, hint: str, max_length: int, value: str | None = None) -> JsonValue:
+def input_text(
+    field: str,
+    hint: str,
+    max_length: int,
+    value: str | None = None,
+    *,
+    label: str | None = None,
+    required_message: str | None = None,
+) -> JsonValue:
+    """A multiline text box. `required_message` makes it required, with that message shown when empty."""
     block: dict[str, JsonValue] = {
         "type": "Input.Text",
         "id": field,
@@ -51,6 +54,11 @@ def input_text(field: str, hint: str, max_length: int, value: str | None = None)
         "placeholder": hint,
         "maxLength": max_length,
     }
+    if label:
+        block["label"] = label
+    if required_message:
+        block["isRequired"] = True
+        block["errorMessage"] = required_message
     if value:
         block["value"] = value
     return block
@@ -68,33 +76,34 @@ def input_toggle(field: str, title: str, on: bool = False) -> JsonValue:
 
 
 def choice_set(
-    field: str, choices: list[tuple[str, str]], style: str, default: str | None = None
+    field: str,
+    choices: list[tuple[str, str]],
+    style: str,
+    default: str | None = None,
+    *,
+    limit: int = MAX_CHOICES,
+    label: str | None = None,
+    required_message: str | None = None,
 ) -> JsonValue:
-    """An Input.ChoiceSet of at most MAX_CHOICES entries (the default always among them); callers
+    """An Input.ChoiceSet of at most `limit` entries (the default always among them); callers
     say when some were left out."""
-    shown = choices[:MAX_CHOICES]
+    shown = choices[:limit]
     if default is not None and all(value != default for value, _ in shown):
-        shown = [*[c for c in choices if c[0] == default][:1], *shown[: MAX_CHOICES - 1]]
+        shown = [*[c for c in choices if c[0] == default][:1], *shown[: limit - 1]]
     block: dict[str, JsonValue] = {
         "type": "Input.ChoiceSet",
         "id": field,
         "style": style,
-        "choices": [{"title": label[:CHOICE_TITLE_CHARS], "value": value} for value, label in shown],
+        "choices": [{"title": title[:CHOICE_TITLE_CHARS], "value": value} for value, title in shown],
     }
+    if label:
+        block["label"] = label
+    if required_message:
+        block["isRequired"] = True
+        block["errorMessage"] = required_message
     if default is not None:
         block["value"] = default
     return block
-
-
-def show_card(title: str, body: list[JsonValue], actions: list[JsonValue]) -> JsonValue:
-    """An Action.ShowCard: a button that opens a nested card; its submit also sends the parent's inputs."""
-    nested: dict[str, JsonValue] = {
-        "type": "AdaptiveCard",
-        "version": VERSION,
-        "body": body,
-        "actions": actions,
-    }
-    return {"type": "Action.ShowCard", "title": title, "card": nested}
 
 
 def action_set(actions: list[JsonValue]) -> JsonValue:
@@ -106,11 +115,6 @@ def submit(title: str, data: dict[str, JsonValue], style: str | None = None) -> 
     if style:
         action["style"] = style
     return action
-
-
-def carry_fields(values: dict[str, JsonValue]) -> dict[str, JsonValue]:
-    """Keep only the `/new` wizard fields that carry from one step to the next."""
-    return {k: v for k, v in values.items() if k in WIZARD_FIELDS and v not in (None, "")}
 
 
 def card_fallback(card: dict[str, JsonValue]) -> str:
@@ -125,6 +129,29 @@ def card_fallback(card: dict[str, JsonValue]) -> str:
             ):
                 return str(block["text"])
     return "agent-relay"
+
+
+def duration_text(seconds: float) -> str:
+    whole = max(0, round(seconds))
+    if whole < 60:
+        return f"{whole}s"
+    minutes, secs = divmod(whole, 60)
+    if minutes < 60:
+        return f"{minutes}m {secs}s" if secs else f"{minutes}m"
+    hours, minutes = divmod(minutes, 60)
+    return f"{hours}h {minutes}m" if minutes else f"{hours}h"
+
+
+def footer_line(seconds: float | None, tool_calls: int, files: int, added: int, removed: int) -> str:
+    """`⏱ 3m · 🔧 14 · 📝 4 files (+120 −8)`: a part is left out when it has nothing to say."""
+    parts: list[str] = []
+    if seconds is not None:
+        parts.append(f"⏱ {duration_text(seconds)}")
+    if tool_calls:
+        parts.append(f"🔧 {tool_calls}")
+    if files:
+        parts.append(f"📝 {files} file{'' if files == 1 else 's'} (+{added} −{removed})")
+    return " · ".join(parts)
 
 
 def minify(value: JsonValue) -> str:

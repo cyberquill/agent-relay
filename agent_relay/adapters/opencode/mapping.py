@@ -15,7 +15,7 @@ from pydantic import JsonValue
 from agent_relay.adapters.base import Decision
 from agent_relay.adapters.opencode.client import ServerEvent
 
-REPLY_DECISION: dict[str, Decision] = {"once": "allow", "always": "allow_session", "reject": "deny"}
+REPLY_DECISION: dict[str, Decision] = {"once": "allow", "always": "allow", "reject": "deny"}
 
 
 @dataclass(frozen=True)
@@ -55,7 +55,7 @@ class Busy:
 @dataclass(frozen=True)
 class Idle:
     sid: str
-    text: str | None
+    text: str
 
 
 @dataclass(frozen=True)
@@ -116,10 +116,20 @@ class _Turn:
     parts: dict[str, str] = field(default_factory=dict)
     streamed: dict[str, int] = field(default_factory=dict)
     tools: dict[str, str] = field(default_factory=dict)
+    # Text parts that came before a tool call: narration, no longer part of the turn's answer.
+    retired: set[str] = field(default_factory=set)
 
-    def text(self) -> str | None:
-        joined = "\n\n".join(t.strip() for t in self.parts.values() if t.strip())
-        return joined or None
+    def text(self) -> str:
+        """The last assistant message: the text written after the final tool call ("" when none)."""
+        return "\n\n".join(t.strip() for t in self.parts.values() if t.strip())
+
+    def retire_text(self) -> None:
+        self.retired.update(self.parts)
+        self.parts.clear()
+
+    def store(self, part_id: str, text: str) -> None:
+        if part_id not in self.retired:
+            self.parts[part_id] = text
 
 
 def _str(value: JsonValue) -> str | None:
@@ -219,7 +229,7 @@ class EventMapper:
             text = part.get("text") if isinstance(part.get("text"), str) else ""
             assert isinstance(text, str)
             turn = self._turn(sid)
-            turn.parts[pid] = text
+            turn.store(pid, text)
             sent = turn.streamed.get(pid, 0)
             if len(text) > sent:
                 turn.streamed[pid] = len(text)
@@ -236,7 +246,7 @@ class EventMapper:
         if self._part_types.get(pid) != "text" or not self._assistant(mid):
             return []
         turn = self._turn(sid)
-        turn.parts[pid] = turn.parts.get(pid, "") + delta
+        turn.store(pid, turn.parts.get(pid, "") + delta)
         turn.streamed[pid] = turn.streamed.get(pid, 0) + len(delta)
         return [Delta(sid, delta)]
 
@@ -250,6 +260,8 @@ class EventMapper:
         turn = self._turn(sid)
         previous = turn.tools.get(call_id)
         turn.tools[call_id] = status
+        if previous is None:
+            turn.retire_text()
         if status in ("pending", "running") and previous is None:
             return [ToolStart(sid, call_id, name, _detail(state.get("input")))]
         if status in ("completed", "error") and previous not in ("completed", "error"):

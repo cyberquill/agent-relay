@@ -24,6 +24,7 @@ from agent_relay.core.inbox import (
     human_size,
     receipt_line,
     safe_name,
+    skipped_line,
     sweep_inbox,
 )
 from agent_relay.core.registry import Registry
@@ -331,6 +332,86 @@ async def test_discarding_removes_the_files_and_an_emptied_new_folder(inbox: Inb
     folder = Path(got.attachments[0].local_path).parent
     await inbox.discard(got)
     assert not folder.exists()
+
+
+async def test_held_top_level_peeks_without_releasing(inbox: Inbox, workspace: Path) -> None:
+    assert await inbox.held_top_level() is None
+    staged = await stage(inbox, "a.txt", b"1")
+    await inbox.hold(TOP, Received(attachments=(staged,)), staged=True)
+    first = await inbox.held_top_level()
+    assert first == Received(attachments=(staged,))
+    assert await inbox.held_top_level() == first
+    assert Path(staged.local_path).exists()
+    got = await inbox.take_for_new(workspace)
+    assert got is not None and [a.name for a in got.attachments] == ["a.txt"]
+    assert await inbox.held_top_level() is None
+
+
+async def test_held_top_level_ignores_files_held_for_a_thread(inbox: Inbox, workspace: Path) -> None:
+    one = await inbox.store(incoming("a.txt", b"1"), workspace=workspace, folder="s")
+    await inbox.hold("thread-1", Received(attachments=(one,)))
+    assert await inbox.held_top_level() is None
+
+
+async def test_held_top_level_is_none_once_the_time_is_up_and_leaves_the_files_for_the_sweep(
+    inbox: Inbox, registry: Registry, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    staged = await stage(inbox, "a.txt", b"1")
+    await inbox.hold(TOP, Received(attachments=(staged,)), staged=True)
+    at_time(monkeypatch, seconds=AttachmentsConfig().hold_s - 1)
+    assert await inbox.held_top_level() is not None
+    at_time(monkeypatch, seconds=AttachmentsConfig().hold_s + 1)
+    assert await inbox.held_top_level() is None
+    assert Path(staged.local_path).exists()
+    assert await sweep_inbox(registry) == 1
+    assert not Path(staged.local_path).exists()
+
+
+async def test_held_top_level_does_not_count_a_garbled_record(inbox: Inbox, registry: Registry) -> None:
+    await registry.kv_set(f"{HOLD_PREFIX}{TOP}", "not json")
+    assert await inbox.held_top_level() is None
+
+
+async def test_new_takes_every_file_held_at_the_top_level(inbox: Inbox, workspace: Path) -> None:
+    for name in ("a.txt", "b.txt", "c.txt"):
+        staged = await inbox.store(incoming(name, name.encode()), workspace=None, folder=f"top-{name}")
+        await inbox.hold(TOP, Received(attachments=(staged,)), staged=True)
+    got = await inbox.take_for_new(workspace)
+    assert got is not None
+    assert [a.name for a in got.attachments] == ["a.txt", "b.txt", "c.txt"]
+    assert {Path(a.local_path).parent for a in got.attachments} == {
+        Path(got.attachments[0].local_path).parent
+    }
+
+
+async def test_files_taken_for_a_new_that_failed_can_be_put_back(inbox: Inbox, workspace: Path) -> None:
+    staged = await stage(inbox, "a.txt", b"hello")
+    await inbox.hold(TOP, Received(attachments=(staged,)), staged=True)
+    got = await inbox.take_for_new(workspace)
+    assert got is not None
+    await inbox.restore_new(got)
+    again = await inbox.held_top_level()
+    assert again is not None and [a.name for a in again.attachments] == ["a.txt"]
+    final = await inbox.take_for_new(workspace)
+    assert final is not None
+    (item,) = final.attachments
+    assert Path(item.local_path).read_bytes() == b"hello"
+    assert not Path(got.attachments[0].local_path).exists()
+
+
+async def test_putting_back_nothing_holds_nothing(inbox: Inbox) -> None:
+    await inbox.restore_new(Received(skipped=("x (big)",)))
+    assert await inbox.held_top_level() is None
+
+
+def test_the_hold_time_comes_from_the_config(registry: Registry) -> None:
+    assert Inbox(registry, AttachmentsConfig(hold_s=90)).hold_s == 90
+
+
+def test_skipped_files_make_one_warning_line() -> None:
+    assert skipped_line([]) == ""
+    assert skipped_line(["big.zip (over 4 KB)"]) == "⚠️ Skipped big.zip (over 4 KB)"
+    assert skipped_line(["a (x)", "b (y)"]) == "⚠️ Skipped a (x), b (y)"
 
 
 # cleanup

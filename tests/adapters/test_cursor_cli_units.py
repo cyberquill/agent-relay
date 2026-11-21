@@ -111,13 +111,14 @@ async def test_failing_models_command_is_unavailable(tmp_path: Path) -> None:
         await CursorCli(cli_file, runner=runner).models()
 
 
-def test_argv_adds_isolation_and_skips_auto(registry: Registry, tmp_path: Path) -> None:
+def test_argv_adds_isolation_and_force_and_skips_auto(registry: Registry, tmp_path: Path) -> None:
     adapter = CursorCliAdapter(registry, CursorCli(tmp_path / "agent"))
     assert adapter.argv("/w", "auto", True) == [
         str(tmp_path / "agent"),
         "--workspace",
         "/w",
         "--worktree",
+        "--force",
         "acp",
     ]
 
@@ -170,7 +171,8 @@ def test_pick_option_prefers_kinds_then_documented_ids() -> None:
     ]
     assert m.pick_option(offered, "allow") == "yes"
     assert m.pick_option(offered, "deny") == "never"
-    assert m.pick_option([{"optionId": "allow-always"}], "allow_session") == "allow-always"
+    assert m.pick_option([{"optionId": "allow-once"}], "allow") == "allow-once"
+    assert m.pick_option([], "allow") == "allow-once"
     assert m.pick_option([], "deny") == "reject-once"
     assert m.permission_result([], None) == {"outcome": {"outcome": "cancelled"}}
 
@@ -196,7 +198,7 @@ def test_question_answers_resolve_ids_labels_and_numbers() -> None:
 
 
 def test_plan_results() -> None:
-    assert m.plan_result("allow_session") == {"outcome": {"outcome": "accepted"}}
+    assert m.plan_result("allow") == {"outcome": {"outcome": "accepted"}}
     assert m.plan_result(None) == {"outcome": {"outcome": "cancelled"}}
     assert m.describe_plan({"plan": "x" * 2000}).endswith("…")
 

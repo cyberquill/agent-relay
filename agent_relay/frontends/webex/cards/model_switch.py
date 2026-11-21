@@ -17,7 +17,7 @@ def model_switch(
 ) -> dict[str, JsonValue]:
     body: list[JsonValue] = [
         text(f"Model: {current}", weight="Bolder"),
-        choice_set("model", choices, "compact", selected),
+        choice_set("model", choices, "compact", selected, label="Model", required_message="Pick a model."),
     ]
     if len(choices) > MAX_CHOICES:
         body.append(text(f"Showing {MAX_CHOICES} of {len(choices)}. `/model <id>` picks any.", subtle=True))

@@ -15,15 +15,15 @@ description: >-
 
 The user is **not at the machine**. They are reading the phone, if anything.
 
-**Agent Relay does the posting.** Its hooks mirror this session to Webex: tool use, approvals and the
-final answer reach the phone without any Webex tool calls from you. Do not open a thread, post
+**Agent Relay does the posting.** Its hooks mirror this session to Webex: the final result of each
+turn and your questions reach the phone without any Webex tool calls from you. Do not open a thread, post
 updates, poll replies or attach files yourself. Replies from the phone arrive in this session as
 messages.
 
 ## Start
 
 Follow the [`agent-relay-away`](../agent-relay-away/SKILL.md) skill: run
-`relay away on --workspace "$PWD"`, confirm in one line, then work under the contract below.
+`relay away on`, confirm in one line, then work under the contract below.
 
 ## The away-mode contract
 
@@ -34,6 +34,7 @@ Follow the [`agent-relay-away`](../agent-relay-away/SKILL.md) skill: run
 4. **Log every decision** in your reply, one line each, so the phone shows it.
 5. **End each turn with a status summary of at most 3 lines.**
 6. **Use `ask_phone` only for real blockers**; on `timeout` or `denied`, take the safe path.
+7. **Send rich output as a file**: write HTML and call `send_phone_file`.
 
 Decision rules, safety rails and the blocked-work ladder: [reference/away-mode.md](reference/away-mode.md).
 Its notes about posting to the Webex thread and `sa.py` are superseded: Agent Relay posts, and the
@@ -43,4 +44,4 @@ decision log lives in your replies and commit messages.
 
 The user eventually comes back to the terminal. The final chat response must stand on its own: lead
 with the outcome, list the decisions made for them and anything that still needs them. When they
-say they are back, run `relay away off --workspace "$PWD"`.
+say they are back, run `relay away off`.

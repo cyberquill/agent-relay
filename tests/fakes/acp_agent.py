@@ -135,6 +135,10 @@ class Agent:
             )
             self.chunk(sid, f"plan {reply['result']['outcome']['outcome']}")
             return {"stopReason": "end_turn"}
+        if "narrate with tools" in text:
+            return self.narrate(sid, answer="All done: 2 files.")
+        if "narrate without answer" in text:
+            return self.narrate(sid, answer=None)
         if "wait" in text:
             self.chunk(sid, "working")
             while not self.cancelled:
@@ -149,6 +153,18 @@ class Agent:
             return {"stopReason": "max_tokens"}
         self.chunk(sid, "O")
         self.chunk(sid, "K")
+        return {"stopReason": "end_turn"}
+
+    def narrate(self, sid: str, answer: str | None) -> dict[str, Any]:
+        """Text, a tool call, more text, another tool call, and then `answer` (when there is one)."""
+        self.chunk(sid, "Let me look.")
+        for call_id in ("n1", "n2"):
+            call = {"toolCallId": call_id, "title": "Read", "kind": "read", "status": "completed"}
+            self.update(sid, {"sessionUpdate": "tool_call", **call})
+            if call_id == "n1":
+                self.chunk(sid, "Now the second look.")
+        if answer is not None:
+            self.chunk(sid, answer)
         return {"stopReason": "end_turn"}
 
     def tool(self, sid: str) -> dict[str, Any]:

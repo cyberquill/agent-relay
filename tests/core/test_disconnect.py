@@ -1,4 +1,4 @@
-"""A hook that goes away while it waits must not leave its approval answerable or its park waiting."""
+"""A hook that goes away while it waits must not leave its question answerable or its park waiting."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from agent_relay.core.keys import session_signal
 from agent_relay.core.registry import Registry
 from agent_relay.daemon import Core
 from agent_relay.models.config import RelayConfig
-from agent_relay.models.events import ApprovalResolved, Event, Harness, Origin, QuestionAnswered
+from agent_relay.models.events import Event, Harness, Origin, QuestionAnswered
 from agent_relay.models.sessions import PendingRequest, SessionRecord, SessionStatus
 
 
@@ -103,46 +103,6 @@ async def test_partial_and_bad_frames_do_not_break_the_server(partial: bytes) ->
     await writer.wait_closed()
     assert await ipc.async_request({"op": "ping"}, paths.socket_path(), timeout=2) == {"echo": {"op": "ping"}}
     await server.stop()
-
-
-async def test_a_hook_that_dies_mid_approval_closes_the_request(served: tuple[Core, Recorder]) -> None:
-    core, rec = served
-    await away.set_away(core.registry, True)
-    reader, writer = await asyncio.open_unix_connection(str(paths.socket_path()))
-    await ipc.write_frame(
-        writer,
-        {
-            "op": "hook",
-            "harness": "copilot",
-            "event": "PreToolUse",
-            "payload": {
-                "session_id": "L1",
-                "cwd": "/w/proj",
-                "tool_name": "run_in_terminal",
-                "tool_input": {"command": "rm -rf build"},
-                "tool_use_id": "t1",
-            },
-        },
-    )
-
-    async def open_request() -> PendingRequest | None:
-        pending = await core.registry.open_pending()
-        return pending[0] if pending else None
-
-    request = await _until(open_request, "the approval to open")
-    writer.close()
-
-    async def closed() -> PendingRequest | None:
-        got = await core.registry.get_pending(request.request_id)
-        return got if got is not None and got.status != "open" else None
-
-    done = await _until(closed, "the approval to close")
-    assert done.status == "expired"
-    assert done.answer == {"decision": "deny", "by": "abandoned"}
-    await core.router.join()
-    assert [e.by for e in rec.events if isinstance(e, ApprovalResolved)] == ["abandoned"]
-    assert not await core.service.answer_approval(request.request_id, "allow"), "the card is dead"
-    assert await reader.read() == b""
 
 
 async def test_an_abandoned_question_is_closed_as_skipped(served: tuple[Core, Recorder]) -> None:

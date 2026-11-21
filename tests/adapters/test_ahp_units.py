@@ -115,6 +115,51 @@ def test_mapper_forwards_markdown_only_and_joins_the_final_text() -> None:
     assert records == [mp.Delta(chat, "Hel"), mp.Delta(chat, "lo"), mp.TurnDone(chat, "t", "Hello")]
 
 
+def _text_part(part_id: str, content: str) -> dict[str, JsonValue]:
+    return {
+        "type": "chat/responsePart",
+        "turnId": "t",
+        "part": {"kind": "markdown", "id": part_id, "content": content},
+    }
+
+
+def _tool_start(call_id: str) -> dict[str, JsonValue]:
+    return {
+        "type": "chat/toolCallStart",
+        "turnId": "t",
+        "toolCallId": call_id,
+        "toolName": "shell",
+        "displayName": "Shell",
+    }
+
+
+def test_turn_text_is_only_what_follows_the_last_tool_call() -> None:
+    mapper = mp.ActionMapper()
+    actions: list[dict[str, JsonValue]] = [
+        _text_part("a", "Let me look."),
+        _tool_start("c1"),
+        _text_part("b", "Now the second look."),
+        _tool_start("c2"),
+        _text_part("c", "All done: 4 files."),
+        {"type": "chat/turnComplete", "turnId": "t", "duration": 1},
+    ]
+    records = [r for a in actions for r in mapper.map("chat", a)]
+    assert isinstance(records[-1], mp.TurnDone)
+    assert records[-1].text == "All done: 4 files."
+
+
+def test_turn_text_is_empty_when_nothing_follows_the_last_tool_call() -> None:
+    mapper = mp.ActionMapper()
+    actions: list[dict[str, JsonValue]] = [
+        _text_part("a", "Working on it."),
+        _tool_start("c1"),
+        {"type": "chat/turnComplete", "turnId": "t", "duration": 1},
+    ]
+    records = [r for a in actions for r in mapper.map("chat", a)]
+    assert isinstance(records[-1], mp.TurnDone)
+    assert records[-1].text == ""
+
+
 def test_mapper_skips_malformed_actions_and_auto_confirmed_tools() -> None:
     mapper = mp.ActionMapper()
     assert mapper.map("c", {"type": "chat/delta", "turnId": "t"}) == []

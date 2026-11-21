@@ -1,4 +1,4 @@
-"""AC-38: an app update re-runs its adapter's self-test; a failure degrades the adapter and is posted."""
+"""AC-38: an app update re-runs its adapter's self-test; a failure degrades the adapter. No phone post."""
 
 from __future__ import annotations
 
@@ -33,24 +33,15 @@ class Script:
         return self.results.pop(0)
 
 
-class Posts:
-    def __init__(self) -> None:
-        self.texts: list[str] = []
-
-    async def __call__(self, text: str) -> None:
-        self.texts.append(text)
-
-
 @pytest.fixture
 def plist(tmp_path: Path) -> Path:
     return write_plist(tmp_path / "VS Code.app" / "Contents" / "Info.plist", "1.105.0")
 
 
-def watcher(registry: Registry, plist: Path, test: Selftest, posts: Posts) -> UpdateWatcher:
+def watcher(registry: Registry, plist: Path, test: Selftest) -> UpdateWatcher:
     return UpdateWatcher(
         registry,
         {Harness.VSCODE_COPILOT: test},
-        posts,
         apps=(WatchedApp("VS Code", plist, (Harness.VSCODE_COPILOT,)),),
     )
 
@@ -64,63 +55,67 @@ def test_app_version_reads_the_bundle_version(tmp_path: Path, plist: Path) -> No
 
 
 async def test_first_sighting_only_records_the_version(registry: Registry, plist: Path) -> None:
-    test, posts = Script(), Posts()
-    assert await watcher(registry, plist, test, posts).check() == []
+    test = Script()
+    assert await watcher(registry, plist, test).check() == []
     assert test.calls == 0
     assert json.loads(paths.versions_file().read_text(encoding="utf-8")) == {"VS Code": "1.105.0"}
 
 
-async def test_failed_selftest_after_update_pauses_and_posts(registry: Registry, plist: Path) -> None:
-    test, posts = Script(("fail", "VS Code speaks AHP 1.0.0")), Posts()
-    w = watcher(registry, plist, test, posts)
+async def test_failed_selftest_after_update_pauses_and_records_the_notice(
+    registry: Registry, plist: Path
+) -> None:
+    test = Script(("fail", "VS Code speaks AHP 1.0.0"))
+    w = watcher(registry, plist, test)
     await w.check()
     write_plist(plist, "1.106.0")
     notices = await w.check()
     assert test.calls == 1
-    assert notices == posts.texts
-    assert posts.texts[0].startswith(
+    assert notices[0].startswith(
         "⚠️ VS Code updated 1.105.0 → 1.106.0: the VS Code agent host self-test failed"
     )
-    assert "It is paused until it passes" in posts.texts[0]
+    assert "It is paused until it passes" in notices[0]
+    recorded = await updates.latest_notices(registry)
+    assert recorded["vscode_copilot"][1] == notices[0], "the doctor reads it from the registry"
     reason = await updates.degraded_reason(registry, Harness.VSCODE_COPILOT)
     assert reason is not None and "AHP 1.0.0" in reason
     assert json.loads(paths.versions_file().read_text(encoding="utf-8")) == {"VS Code": "1.106.0"}
 
 
-async def test_passing_selftest_after_update_is_posted(registry: Registry, plist: Path) -> None:
-    test, posts = Script(("pass", "AHP 0.9.0")), Posts()
-    w = watcher(registry, plist, test, posts)
+async def test_passing_selftest_after_update_is_recorded(registry: Registry, plist: Path) -> None:
+    test = Script(("pass", "AHP 0.9.0"))
+    w = watcher(registry, plist, test)
     await w.check()
     write_plist(plist, "1.106.0")
-    await w.check()
-    assert posts.texts == [
+    notices = await w.check()
+    assert notices == [
         "✅ VS Code updated 1.105.0 → 1.106.0: the VS Code agent host self-test passed (AHP 0.9.0)."
     ]
+    assert (await updates.latest_notices(registry))["vscode_copilot"][1] == notices[0]
     assert await updates.degraded_reason(registry, Harness.VSCODE_COPILOT) is None
 
 
 async def test_unknown_outcome_retries_on_the_next_check(registry: Registry, plist: Path) -> None:
-    test, posts = Script(("unknown", "VS Code is closed"), ("pass", "AHP 0.9.0")), Posts()
-    w = watcher(registry, plist, test, posts)
+    test = Script(("unknown", "VS Code is closed"), ("pass", "AHP 0.9.0"))
+    w = watcher(registry, plist, test)
     await w.check()
     write_plist(plist, "1.106.0")
     assert await w.check() == []
     assert json.loads(paths.versions_file().read_text(encoding="utf-8")) == {"VS Code": "1.105.0"}
-    await w.check()
+    notices = await w.check()
     assert test.calls == 2
-    assert posts.texts and posts.texts[0].startswith("✅ VS Code updated 1.105.0 → 1.106.0")
+    assert notices and notices[0].startswith("✅ VS Code updated 1.105.0 → 1.106.0")
 
 
 async def test_degraded_adapter_recovers_when_a_retry_passes(registry: Registry, plist: Path) -> None:
-    test, posts = Script(("fail", "bad"), ("unknown", "closed"), ("pass", "AHP 0.9.0")), Posts()
-    w = watcher(registry, plist, test, posts)
+    test = Script(("fail", "bad"), ("unknown", "closed"), ("pass", "AHP 0.9.0"))
+    w = watcher(registry, plist, test)
     await w.check()
     write_plist(plist, "1.106.0")
     await w.check()
     assert await w.check() == []
     assert await updates.degraded_reason(registry, Harness.VSCODE_COPILOT) is not None
-    await w.check()
-    assert posts.texts[-1] == "✅ VS Code agent host passed its self-test again (AHP 0.9.0); it is back on."
+    notices = await w.check()
+    assert notices[-1] == "✅ VS Code agent host passed its self-test again (AHP 0.9.0); it is back on."
     assert await updates.degraded_reason(registry, Harness.VSCODE_COPILOT) is None
 
 
@@ -128,27 +123,16 @@ async def test_crashing_selftest_counts_as_a_failure(registry: Registry, plist: 
     async def boom() -> SelftestResult:
         raise OSError("nope")
 
-    posts = Posts()
-    w = watcher(registry, plist, boom, posts)
+    w = watcher(registry, plist, boom)
     await w.check()
     write_plist(plist, "2.0.0")
-    await w.check()
-    assert "self-test crashed: OSError" in posts.texts[0]
+    notices = await w.check()
+    assert "self-test crashed: OSError" in notices[0]
 
 
-async def test_a_failing_post_does_not_stop_the_check(registry: Registry, plist: Path) -> None:
-    async def broken(_: str) -> None:
-        raise RuntimeError("webex down")
-
-    w = UpdateWatcher(
-        registry,
-        {Harness.VSCODE_COPILOT: Script(("fail", "x"))},
-        broken,
-        apps=(WatchedApp("VS Code", plist, (Harness.VSCODE_COPILOT,)),),
-    )
-    await w.check()
-    write_plist(plist, "2.0.0")
-    assert len(await w.check()) == 1
+def test_the_watcher_has_no_way_to_post_to_the_phone() -> None:
+    fields = set(UpdateWatcher.__dataclass_fields__)
+    assert "notify" not in fields and fields >= {"registry", "selftests", "apps"}
 
 
 async def test_service_refuses_a_degraded_adapter_with_the_reason(registry: Registry, tmp_path: Path) -> None:

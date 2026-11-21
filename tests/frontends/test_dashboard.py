@@ -1,4 +1,4 @@
-"""`/sessions` as a card: pick a session, then Status, Diff, Stop, Back or Away; each result lands in that
+"""`/sessions` as a card: pick a session, then Status, Diff, Stop or Back; each result lands in that
 session's thread."""
 
 from __future__ import annotations
@@ -8,7 +8,6 @@ from pathlib import Path
 
 from pydantic import JsonValue
 
-from agent_relay.core import away
 from agent_relay.frontends import card_state
 from agent_relay.frontends.webex import cards
 from agent_relay.models.events import Harness
@@ -38,7 +37,7 @@ def last_reply(relay: Relay) -> tuple[str, str | None]:
     return last.markdown, last.parent_id
 
 
-async def test_sessions_is_a_card_with_one_choice_per_session_and_five_buttons(relay: Relay) -> None:
+async def test_sessions_is_a_card_with_one_choice_per_session_and_four_buttons(relay: Relay) -> None:
     await _two_sessions(relay)
     await relay.say("/sessions")
     msg, card = relay.webex.last_card()
@@ -49,7 +48,7 @@ async def test_sessions_is_a_card_with_one_choice_per_session_and_five_buttons(r
     assert all("🟩" in t and "⏳" in t for t in titles)
     actions = card["actions"]
     assert isinstance(actions, list)
-    assert [a["title"] for a in actions if isinstance(a, dict)] == ["Status", "Diff", "Stop", "Back", "Away"]
+    assert [a["title"] for a in actions if isinstance(a, dict)] == ["Status", "Diff", "Stop", "Back"]
 
 
 async def test_no_sessions_is_plain_text(relay: Relay) -> None:
@@ -116,14 +115,12 @@ async def test_back_releases_a_parked_session(relay: Relay) -> None:
     assert await relay.registry.kv_get(f"release:{ONE}") == "/back"
 
 
-async def test_away_turns_away_on_for_that_sessions_workspace(relay: Relay) -> None:
-    first, _ = await _two_sessions(relay)
+async def test_the_dashboard_has_no_away_button_and_refuses_the_old_op(relay: Relay) -> None:
+    await _two_sessions(relay)
     msg, card = await _dashboard(relay)
-    assert not await away.is_away(relay.registry, first.workspace)
-    await relay.tap(msg, card, "Away", session=ONE)
-    assert await away.is_away(relay.registry, first.workspace)
-    text, parent = last_reply(relay)
-    assert text.startswith("Away mode on") and parent == first.webex_thread_id
+    assert "away" not in cards.DASHBOARD_OPS
+    await relay.tap(msg, card, "Status", session=ONE, op="away")
+    assert "not an action this card offers" in relay.bot_texts()[-1]
 
 
 async def test_a_session_that_is_gone_is_refused_and_the_card_stays_usable(relay: Relay) -> None:

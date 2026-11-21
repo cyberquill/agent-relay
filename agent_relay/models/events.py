@@ -71,13 +71,13 @@ class ApprovalRequested(_Base):
     detail: str = ""
 
 
-type ResolvedBy = Literal["phone", "grant", "deadline", "panic", "desk", "ended", "stopped", "abandoned"]
+type ResolvedBy = Literal["phone", "auto", "deadline", "panic", "desk", "ended", "stopped", "abandoned"]
 
 
 class ApprovalResolved(_Base):
     type: Literal["approval.resolved"] = "approval.resolved"
     request_id: str
-    decision: Literal["allow", "allow_session", "deny", "desk"]
+    decision: Literal["allow", "deny"]
     by: ResolvedBy = "phone"
 
 
@@ -96,6 +96,8 @@ class QuestionAnswered(_Base):
 
 
 class TurnCompleted(_Base):
+    """`text` is the last assistant message of the turn: what was written after the final tool call."""
+
     type: Literal["turn.completed"] = "turn.completed"
     text: str | None = None
 

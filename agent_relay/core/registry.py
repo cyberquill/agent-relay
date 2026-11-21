@@ -12,7 +12,7 @@ import json
 import sqlite3
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from pathlib import Path
 
 from pydantic import JsonValue
@@ -78,11 +78,6 @@ CREATE TABLE IF NOT EXISTS kv (
 """
 
 GLOBAL_SCOPE = "*"
-# Per-session grants live under these prefixes, followed by `{session_key}:`; the lifecycle drops them.
-ALLOW_SESSION_PREFIX = "allow_session:"
-RECENT_APPROVAL_PREFIX = "approved_recent:"
-# A recent approval is honoured this long; the stored value is `<ISO-8601 UTC> <decision>`.
-RECENT_APPROVAL_TTL = timedelta(seconds=60)
 # Webex card nonces, valued with the ISO-8601 UTC time they were issued.
 CARD_NONCE_PREFIX = "card.nonce:"
 # Processed Webex message ids, valued with the time they were seen so they can be pruned.
@@ -113,12 +108,54 @@ def _add_session_bot(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE sessions ADD COLUMN webex_bot TEXT")
 
 
+APP_BOT_SUFFIXES = (":vscode", ":cursor", ":opencode")
+# Per-bot state of the retired app bots, whose keys end in the bot's name (`webex.room_id:cursor`).
+APP_BOT_KEY_PREFIXES = ("webex.room_id", "webex.last_seen", "webex.hello", SEEN_PREFIX)
+# Approval grants of the retired approval cards.
+RETIRED_GRANT_PREFIXES = ("allow_session:", "allow_ws:", "approved_recent:")
+
+
+def _clean_slate_one_space(conn: sqlite3.Connection) -> None:
+    """One bot, one space: forget the app bots and end every session that existed (U1, U12).
+
+    The `webex_bot` column stays, unused: migrations are append-only. Old threads live on in the dead
+    spaces; the next event of a session opens a fresh thread in the one space.
+    """
+    conn.execute(
+        "UPDATE sessions SET webex_thread_id = NULL WHERE webex_bot IN ('vscode', 'cursor', 'opencode')"
+    )
+    for prefix in APP_BOT_KEY_PREFIXES:
+        for suffix in APP_BOT_SUFFIXES:
+            conn.execute(
+                "DELETE FROM kv WHERE substr(key, 1, ?) = ? AND substr(key, ?) = ?",
+                (len(prefix), prefix, -len(suffix), suffix),
+            )
+    for prefix in RETIRED_GRANT_PREFIXES:
+        conn.execute("DELETE FROM kv WHERE substr(key, 1, ?) = ?", (len(prefix), prefix))
+    # The sessions these requests belong to are ended below, so nothing can answer them any more.
+    conn.execute("UPDATE pending SET status = 'expired' WHERE status = 'open'")
+    conn.execute("UPDATE queue SET consumed = 1 WHERE consumed = 0")
+    conn.execute(
+        "UPDATE sessions SET status = 'ended', updated = ? WHERE status != 'ended'", (_ts(utcnow()),)
+    )
+
+
+def _collapse_away_scopes(conn: sqlite3.Connection) -> None:
+    """Away mode is one global flag (U5): the `*` row is on when any row was on; the others go."""
+    any_on = conn.execute("SELECT 1 FROM away WHERE enabled = 1 LIMIT 1").fetchone() is not None
+    conn.execute("DELETE FROM away")
+    if any_on:
+        conn.execute("INSERT INTO away (scope, enabled) VALUES (?, 1)", (GLOBAL_SCOPE,))
+
+
 # Ordered and append-only: entry N moves the schema from version N-1 to N (`PRAGMA user_version`).
 MIGRATIONS: tuple[Callable[[sqlite3.Connection], None], ...] = (
     _add_pending_status_index,
     _drop_bogus_sticky_models,
     _stamp_seen_keys,
     _add_session_bot,
+    _clean_slate_one_space,
+    _collapse_away_scopes,
 )
 
 
@@ -366,23 +403,6 @@ class Registry:
         """Write the status column. Only `core.lifecycle` calls this; everything else goes through it."""
         sql = "UPDATE sessions SET status=?, updated=? WHERE session_key=?"
         await self._run(lambda: self._write(sql, (status.value, _ts(utcnow()), session_key)))
-
-    async def drop_session_grants(self, session_key: str) -> None:
-        """Forget the "allow for session" and recent-approval flags that belong to one session."""
-
-        def _drop() -> None:
-            db = self._db()
-            db.execute("BEGIN IMMEDIATE")
-            try:
-                for prefix in (ALLOW_SESSION_PREFIX, RECENT_APPROVAL_PREFIX):
-                    scoped = f"{prefix}{session_key}:"
-                    db.execute("DELETE FROM kv WHERE substr(key, 1, ?) = ?", (len(scoped), scoped))
-                db.execute("COMMIT")
-            except BaseException:
-                db.execute("ROLLBACK")
-                raise
-
-        await self._run(_drop)
 
     async def set_session_extra(self, session_key: str, key: str, value: JsonValue) -> None:
         """Set one key of the session's `extra` JSON, leaving the rest as it is."""

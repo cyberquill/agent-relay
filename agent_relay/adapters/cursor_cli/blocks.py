@@ -40,8 +40,17 @@ async def _image(item: Attachment) -> dict[str, JsonValue]:
 
 
 async def prompt_blocks(text: str, attachments: Sequence[Attachment], images: bool) -> list[JsonValue]:
-    """The text, then one block per file: an image block where the agent takes images, else a link."""
+    """The text, then one block per file: an image block where the agent takes images, else a link.
+
+    An image block carries no name, and the agent copies it under one of its own, so a text block
+    after it says what the file is called on the phone."""
     blocks: list[JsonValue] = [{"type": "text", "text": text}]
     for item in attachments:
-        blocks.append(await _image(item) if images and item.mime.startswith("image/") else _link(item))
+        if images and item.mime.startswith("image/"):
+            block = await _image(item)
+            blocks.append(block)
+            if block["type"] == "image":
+                blocks.append({"type": "text", "text": f"(the image above is {item.name})"})
+        else:
+            blocks.append(_link(item))
     return blocks

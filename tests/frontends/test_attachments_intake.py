@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from agent_relay.core.inbox import HOLD_PREFIX, Inbox
-from agent_relay.frontends.webex.attachments import AttachmentIntake
+from agent_relay.core.inbox import HOLD_PREFIX, TOP, Inbox
+from agent_relay.frontends.webex.attachments import PARKED_FILES_TEXT, AttachmentIntake
 from agent_relay.models.attachments import Attachment
 from agent_relay.models.capabilities import Capabilities
 from agent_relay.models.config import AttachmentsConfig
@@ -22,8 +22,10 @@ NATIVE = Capabilities(
 )
 
 
-def configure(relay: Relay, enabled: bool = True, max_bytes: int = 20 * 1024 * 1024) -> Inbox:
-    inbox = Inbox(relay.registry, AttachmentsConfig(enabled=enabled, max_bytes=max_bytes))
+def configure(
+    relay: Relay, enabled: bool = True, max_bytes: int = 20 * 1024 * 1024, hold_s: int = 600
+) -> Inbox:
+    inbox = Inbox(relay.registry, AttachmentsConfig(enabled=enabled, max_bytes=max_bytes, hold_s=hold_s))
     relay.frontend.intake = AttachmentIntake(relay.frontend.api, inbox)
     relay.frontend.handlers.inbox = inbox
     return inbox
@@ -183,6 +185,63 @@ async def test_a_download_without_a_name_gets_one_from_its_type(relay: Relay) ->
     assert delivered(relay)[0].name == "file.png"
 
 
+# parked desk sessions: hooks cannot carry files, so the continuation text carries their paths
+
+
+async def park(relay: Relay, session: SessionRecord) -> None:
+    await relay.registry.set_session_status(session.session_key, SessionStatus.PARKED)
+
+
+async def test_a_file_with_text_to_a_parked_session_puts_the_path_in_the_continuation(relay: Relay) -> None:
+    session = await thread(relay)
+    message_id = relay.webex.user_sends_file("notes.txt", b"hello", "read this", session.webex_thread_id)
+    await park(relay, session)
+    await relay.frontend.handle_message(await relay.frontend.api.get_message(message_id))
+    await relay.router.join()
+    (queued,) = await relay.service.queued(session.session_key)
+    (item,) = (p for p in inbox_of(session).iterdir())
+    assert queued.text == f"read this\n\nAttached file: {item}"
+    assert relay.bot_texts()[-1] == "📎 notes.txt (as a path)"
+
+
+async def test_a_files_only_reply_to_a_parked_session_is_delivered_at_once_as_paths(relay: Relay) -> None:
+    session = await thread(relay)
+    message_id = relay.webex.user_sends_file("a.txt", b"1", "", session.webex_thread_id)
+    message = await relay.frontend.api.get_message(message_id)
+    await park(relay, session)
+    parked = await relay.registry.session_by_thread(session.webex_thread_id or "")
+    assert parked is not None and parked.status is SessionStatus.PARKED
+    intake = await relay.frontend.intake.accept(message, parked, "")
+    assert intake.text == PARKED_FILES_TEXT
+    assert intake.handle_text and intake.notice is None
+    assert intake.received is not None and [a.name for a in intake.received.attachments] == ["a.txt"]
+    assert await relay.registry.kv_prefix(HOLD_PREFIX) == {}
+
+
+async def test_a_files_only_reply_to_a_session_that_is_not_parked_is_held_as_before(relay: Relay) -> None:
+    session = await thread(relay)
+    message_id = relay.webex.user_sends_file("a.txt", b"1", "", session.webex_thread_id)
+    message = await relay.frontend.api.get_message(message_id)
+    intake = await relay.frontend.intake.accept(message, session, "")
+    assert intake.text is None and intake.received is None
+    assert intake.notice == "📎 Got 1 file; they'll go with your next message."
+    assert list(await relay.registry.kv_prefix(HOLD_PREFIX)) == [f"{HOLD_PREFIX}{session.webex_thread_id}"]
+
+
+async def test_files_held_earlier_go_with_a_parked_sessions_files_only_reply(relay: Relay) -> None:
+    session = await thread(relay)
+    root = session.webex_thread_id
+    await send(relay, "first.txt", b"1", parent_id=root)
+    message_id = relay.webex.user_sends_file("second.txt", b"2", "", root)
+    message = await relay.frontend.api.get_message(message_id)
+    await park(relay, session)
+    parked = await relay.registry.session_by_thread(root or "")
+    assert parked is not None
+    intake = await relay.frontend.intake.accept(message, parked, "")
+    assert intake.received is not None
+    assert [a.name for a in intake.received.attachments] == ["first.txt", "second.txt"]
+
+
 # limits and failures
 
 
@@ -192,7 +251,7 @@ async def test_a_file_over_the_cap_is_skipped_and_the_text_still_goes(relay: Rel
     await send(relay, "big.zip", b"x" * 5000, "here", session.webex_thread_id)
     assert relay.adapter.prompts[-1] == (session.session_key, "here")
     assert delivered(relay) == ()
-    assert relay.bot_texts()[-1] == "📎 Skipped big.zip (over 4 KB)"
+    assert relay.bot_texts()[-1] == "⚠️ Skipped big.zip (over 4 KB)"
     assert not inbox_of(session).exists() or list(inbox_of(session).iterdir()) == []
 
 
@@ -201,7 +260,7 @@ async def test_the_cap_holds_even_when_the_download_declares_no_length(relay: Re
     session = await thread(relay)
     await send(relay, "big.zip", b"x" * 9000, "here", session.webex_thread_id, declare_length=False)
     assert delivered(relay) == ()
-    assert relay.bot_texts()[-1] == "📎 Skipped big.zip (over 4 KB)"
+    assert relay.bot_texts()[-1] == "⚠️ Skipped big.zip (over 4 KB)"
     assert list(inbox_of(session).iterdir()) == []
 
 
@@ -215,7 +274,7 @@ async def test_one_big_file_does_not_cost_the_small_one_beside_it(relay: Relay) 
     await relay.frontend.handle_message(await relay.frontend.api.get_message(first))
     await relay.router.join()
     assert [a.name for a in delivered(relay)] == ["ok.txt"]
-    assert relay.bot_texts()[-1] == "📎 ok.txt (as a path); skipped big.bin (over 4 KB)"
+    assert relay.bot_texts()[-2:] == ["⚠️ Skipped big.bin (over 4 KB)", "📎 ok.txt (as a path)"]
 
 
 async def test_a_file_still_being_scanned_is_retried_after_the_wait_webex_asks_for(relay: Relay) -> None:
@@ -232,22 +291,22 @@ async def test_a_file_that_stays_locked_is_given_up_on_after_a_bounded_number_of
     (content,) = relay.webex.contents.values()
     assert content.reads == 6
     assert delivered(relay) == ()
-    assert relay.bot_texts()[-1] == "📎 Skipped file (Webex is still scanning it; send it again in a minute)"
+    assert relay.bot_texts()[-1] == "⚠️ Skipped file (Webex is still scanning it; send it again in a minute)"
 
 
 async def test_a_refused_download_is_reported_not_raised(relay: Relay) -> None:
     session = await thread(relay)
     await send(relay, "a.txt", b"1", "go", session.webex_thread_id, status=403)
-    assert relay.bot_texts()[-1] == "📎 Skipped a.txt (Webex refused the download (HTTP 403))"
+    assert relay.bot_texts()[-1] == "⚠️ Skipped a.txt (Webex refused the download (HTTP 403))"
     assert relay.adapter.prompts[-1][1] == "go"
 
 
 async def test_the_bot_token_never_leaves_the_webex_api_host(relay: Relay) -> None:
     session = await thread(relay)
     await send(relay, "a.txt", b"1", "go", session.webex_thread_id, url="https://files.evil.example/steal")
-    assert relay.bot_texts()[-1] == "📎 Skipped file (not a Webex file link)"
+    assert relay.bot_texts()[-1] == "⚠️ Skipped file (not a Webex file link)"
     await send(relay, "b.txt", b"1", "go", session.webex_thread_id, location="https://cdn.evil.example/steal")
-    assert relay.bot_texts()[-1] == "📎 Skipped b.txt (Webex redirected the download)"
+    assert relay.bot_texts()[-1] == "⚠️ Skipped b.txt (Webex redirected the download)"
     assert not any("evil" in request for request in relay.webex.requests)
     assert relay.webex.authorized_hosts == {"webexapis.com": {"Bearer test-token"}}
 
@@ -262,7 +321,7 @@ async def test_a_look_alike_host_is_not_the_webex_host(relay: Relay) -> None:
         session.webex_thread_id,
         url="https://webexapis.com.evil.example/v1/contents/x",
     )
-    assert relay.bot_texts()[-1] == "📎 Skipped file (not a Webex file link)"
+    assert relay.bot_texts()[-1] == "⚠️ Skipped file (not a Webex file link)"
     assert not any("evil" in request for request in relay.webex.requests)
 
 
@@ -293,18 +352,99 @@ async def test_a_session_with_no_workspace_cannot_take_files(relay: Relay) -> No
     assert content.reads == 0
 
 
+async def test_a_files_only_message_where_every_file_fails_gets_one_warning_and_nothing_is_held(
+    relay: Relay,
+) -> None:
+    session = await thread(relay)
+    await send(relay, "a.txt", b"1", parent_id=session.webex_thread_id, status=403)
+    assert relay.bot_texts()[-1] == "⚠️ Skipped a.txt (Webex refused the download (HTTP 403))"
+    assert not any("Got 0 files" in text for text in relay.bot_texts())
+    assert await relay.registry.kv_prefix(HOLD_PREFIX) == {}
+
+
+async def test_one_warning_line_names_every_file_that_failed(relay: Relay) -> None:
+    configure(relay, max_bytes=4096)
+    session = await thread(relay)
+    first = relay.webex.user_sends_file("big1.bin", b"x" * 5000, "go", session.webex_thread_id)
+    second = relay.webex.user_sends_file("big2.bin", b"x" * 5000)
+    relay.webex.messages[first].files.append(relay.webex.messages[second].files[0])
+    await settle(relay, session.webex_thread_id)
+    await relay.frontend.handle_message(await relay.frontend.api.get_message(first))
+    await relay.router.join()
+    warnings = [t for t in relay.bot_texts() if t.startswith("⚠️")]
+    assert warnings == ["⚠️ Skipped big1.bin (over 4 KB), big2.bin (over 4 KB)"]
+
+
+async def test_a_download_that_raises_is_named_in_the_warning(
+    relay: Relay, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    session = await thread(relay)
+
+    def broken(*_: object, **__: object) -> object:
+        raise OSError("disk went away")
+
+    monkeypatch.setattr(relay.frontend.api, "download", broken)
+    await send(relay, "a.txt", b"1", "go", session.webex_thread_id)
+    assert relay.bot_texts()[-1] == "⚠️ Skipped file (could not be downloaded)"
+    assert relay.adapter.prompts[-1] == (session.session_key, "go")
+
+
 # at the top level
 
 
-async def test_files_outside_a_thread_are_pointed_to_a_thread_or_new(relay: Relay) -> None:
+async def test_a_file_at_the_top_level_is_held_for_the_next_new_not_refused(relay: Relay) -> None:
     await send(relay, "a.txt", b"1")
-    assert relay.bot_texts() == ["📎 Send files inside a session thread, or with /new."]
-    await send(relay, "b.txt", b"1", "hello there")
-    assert relay.bot_texts()[-1] == "📎 Send files inside a session thread, or with /new."
+    assert relay.bot_texts() == ["📎 Got 1 file; it'll go with your next /new (within 10 min)."]
+    await send(relay, "b.txt", b"2", "hello there")
+    assert relay.bot_texts()[-1] == "📎 Got 1 file; it'll go with your next /new (within 10 min)."
     assert len(relay.bot_texts()) == 2
     assert relay.adapter.started == []
+    held = await relay.registry.kv_prefix(HOLD_PREFIX)
+    assert list(held) == [f"{HOLD_PREFIX}{TOP}"]
+    peek = await relay.frontend.intake.inbox.held_top_level()
+    assert peek is not None and [a.name for a in peek.attachments] == ["a.txt", "b.txt"]
+    await relay.say('/new opencode proj m1 "use both"')
+    assert [a.name for a in relay.adapter.start_attachments[-1]] == ["a.txt", "b.txt"]
     assert await relay.registry.kv_prefix(HOLD_PREFIX) == {}
-    (content, _) = relay.webex.contents.values()
+
+
+async def test_a_command_with_a_file_at_the_top_level_runs_and_the_file_is_held(relay: Relay) -> None:
+    await send(relay, "a.txt", b"1", "/status")
+    assert relay.bot_texts()[0].startswith("📎 Got 1 file; it'll go with your next /new")
+    assert (await relay.frontend.intake.inbox.held_top_level()) is not None
+
+
+async def test_the_top_level_hold_says_how_long_it_lasts(relay: Relay) -> None:
+    configure(relay, hold_s=90)
+    await send(relay, "a.txt", b"1")
+    await send(relay, "b.txt", b"1")
+    assert relay.bot_texts()[-2:] == ["📎 Got 1 file; it'll go with your next /new (within 90 s)."] * 2
+
+
+async def test_files_held_at_the_top_level_are_left_behind_when_their_time_runs_out(
+    relay: Relay, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    await send(relay, "a.txt", b"1")
+    later = utcnow().replace(year=utcnow().year + 1)
+    monkeypatch.setattr("agent_relay.core.inbox.utcnow", lambda: later)
+    assert await relay.frontend.intake.inbox.held_top_level() is None
+    await relay.say('/new opencode proj m1 "late"')
+    assert relay.adapter.start_attachments[-1] == ()
+
+
+async def test_a_top_level_file_that_cannot_be_downloaded_gets_one_warning_and_no_hold(
+    relay: Relay,
+) -> None:
+    await send(relay, "a.txt", b"1", status=403)
+    assert relay.bot_texts() == ["⚠️ Skipped a.txt (Webex refused the download (HTTP 403))"]
+    assert await relay.registry.kv_prefix(HOLD_PREFIX) == {}
+
+
+async def test_a_top_level_file_with_attachments_off_is_not_downloaded(relay: Relay) -> None:
+    configure(relay, enabled=False)
+    await send(relay, "a.txt", b"1")
+    assert any("Attachments are turned off" in text for text in relay.bot_texts())
+    (content,) = relay.webex.contents.values()
     assert content.reads == 0
 
 
@@ -328,7 +468,7 @@ async def test_files_sent_with_an_unfinished_new_wait_for_the_session_to_start(r
     assert [a.name for a in relay.adapter.start_attachments[-1]] == ["log.txt"]
 
 
-async def test_a_new_session_that_fails_to_start_leaves_no_files(
+async def test_a_new_session_that_fails_to_start_leaves_no_files_in_the_workspace_and_holds_them_again(
     relay: Relay, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     async def refuse(*_: object, **__: object) -> SessionRecord:
@@ -339,6 +479,8 @@ async def test_a_new_session_that_fails_to_start_leaves_no_files(
     workspace = Path(load_workspaces().workspaces[0].path)
     leftovers = [p for p in (workspace / ".agent-relay").rglob("*") if p.is_file()]
     assert leftovers == []
+    held = await relay.frontend.handlers.inbox.held_top_level()  # type: ignore[union-attr]
+    assert held is not None and [a.name for a in held.attachments] == ["log.txt"]
 
 
 async def test_new_reports_a_skipped_file_instead_of_a_saved_one(relay: Relay) -> None:
@@ -346,5 +488,5 @@ async def test_new_reports_a_skipped_file_instead_of_a_saved_one(relay: Relay) -
     await send(relay, "ok.txt", b"1", '/new opencode proj m1 "go"')
     assert relay.bot_texts()[-1] == "📎 ok.txt (as a path)"
     await send(relay, "big.bin", b"x" * 5000, '/new opencode proj m1 "again"')
-    assert relay.bot_texts()[-1] == "📎 Skipped big.bin (over 4 KB)"
+    assert "⚠️ Skipped big.bin (over 4 KB)" in relay.bot_texts()
     assert relay.adapter.start_attachments[-1] == ()

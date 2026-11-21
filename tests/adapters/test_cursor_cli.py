@@ -13,12 +13,12 @@ from typing import Any
 
 import pytest
 
+from agent_relay import paths
 from agent_relay.adapters.base import AdapterUnavailableError
 from agent_relay.adapters.cursor_cli.adapter import IDLE_S, RESUME_EXTRA, STOPPED_TEXT, CursorCliAdapter
 from agent_relay.adapters.cursor_cli.catalog import LOGIN_HINT, CursorCli
 from agent_relay.adapters.cursor_cli.rpc import AcpProcess, NotificationHandler, RequestHandler
 from agent_relay.core import away
-from agent_relay.core.hooks import APPROVED_CALL_KEY
 from agent_relay.core.registry import Registry
 from agent_relay.daemon import Core
 from agent_relay.models.config import RelayConfig, Workspace, WorkspacesConfig
@@ -154,14 +154,14 @@ async def test_phone_session_streams_ok(rig: Rig) -> None:
     }
     assert new["params"] == {"cwd": rig.workspace, "mcpServers": []}
     assert prompt["params"]["prompt"] == [{"type": "text", "text": "Reply with exactly: OK"}]
-    assert rig.runs()[-1] == ["--workspace", rig.workspace, "acp"]
+    assert rig.runs()[-1] == ["--workspace", rig.workspace, "--force", "acp"]
     assert (await rig.session(record.session_key)).status is SessionStatus.IDLE
 
 
 async def test_a_chosen_model_is_passed_on_the_command_line(rig: Rig) -> None:
     await rig.start(model="gpt-5")
     await rig.turns(1)
-    assert rig.runs()[-1] == ["--workspace", rig.workspace, "--model", "gpt-5", "acp"]
+    assert rig.runs()[-1] == ["--workspace", rig.workspace, "--model", "gpt-5", "--force", "acp"]
 
 
 async def test_logged_out_cli_is_reported_before_spawning(rig: Rig) -> None:
@@ -242,50 +242,55 @@ async def test_resume_needs_load_support(rig: Rig) -> None:
         await rig.adapter.send_prompt(await rig.session(record.session_key), "again")
 
 
-# approvals, questions, plans
+# permissions (always allowed), questions, plans
 
 
-@pytest.mark.parametrize(
-    ("decision", "option", "ok"),
-    [
-        ("allow", "allow-once", True),
-        ("allow_session", "allow-always", True),
-        ("allow_workspace", "allow-once", True),
-        ("deny", "reject-once", False),
-    ],
-)
-async def test_permission_requests_are_answered_from_the_phone(
-    rig: Rig, decision: str, option: str, ok: bool
-) -> None:
+def pause_relay() -> None:
+    """The /panic flag: while it exists the relay answers no tool permission."""
+    flag = paths.pause_flag()
+    flag.parent.mkdir(parents=True, exist_ok=True)
+    flag.write_text("paused", encoding="utf-8")
+
+
+async def test_permission_requests_are_allowed_at_once_and_never_reach_a_sink(rig: Rig) -> None:
     await rig.start("use a tool")
-    ask = await rig.asked(ApprovalRequested)
-    assert (ask.tool, ask.detail) == ("Run ls", "ls")
-    assert await rig.core.service.answer_approval(ask.request_id, decision)  # type: ignore[arg-type]
     (done,) = await rig.turns(1)
-    assert done.text == f"tool {option}"
+    assert done.text == "tool allow-once"
     reply = rig.replies()[-1]
-    assert reply["result"] == {"outcome": {"outcome": "selected", "optionId": option}}
+    assert reply["result"] == {"outcome": {"outcome": "selected", "optionId": "allow-once"}}
     (started,) = rig.rec.of(ToolStarted)
     (finished,) = rig.rec.of(ToolFinished)
     assert (started.tool_id, started.name) == ("tc1", "Run ls")
-    assert (finished.ok, finished.summary) == (ok, "file.txt")
+    assert (finished.ok, finished.summary) == (True, "file.txt")
+    assert rig.rec.of(ApprovalRequested) == [] and rig.rec.of(ApprovalResolved) == []
+    assert await rig.registry.open_pending() == []
 
 
-async def test_a_deny_reason_is_dropped_because_acp_has_no_field_for_it(rig: Rig) -> None:
-    await rig.start("use a tool")
+async def test_a_deny_picks_the_reject_option_and_drops_the_reason(rig: Rig) -> None:
+    pause_relay()
+    record = await rig.start("use a tool")
     ask = await rig.asked(ApprovalRequested)
-    assert await rig.core.service.answer_approval(ask.request_id, "deny", reason="not in prod")
+    await rig.adapter.answer_approval(record, ask.request_id, "deny", reason="not in prod")
     (done,) = await rig.turns(1)
     assert done.text == "tool reject-once"
     assert rig.replies()[-1]["result"] == {"outcome": {"outcome": "selected", "optionId": "reject-once"}}
 
 
-async def test_an_earlier_phone_decision_for_the_call_is_reused(rig: Rig) -> None:
-    await rig.registry.kv_set(APPROVED_CALL_KEY.format(call_id="tc1"), "allow")
-    await rig.start("use a tool")
+async def test_turn_text_is_only_what_follows_the_last_tool_call(rig: Rig) -> None:
+    await rig.start("narrate with tools")
     (done,) = await rig.turns(1)
-    assert done.text == "tool allow-once"
-    assert rig.rec.of(ApprovalRequested) == []
+    assert done.text == "All done: 2 files."
+    assert [e.text for e in rig.rec.of(TextDelta)] == [
+        "Let me look.",
+        "Now the second look.",
+        "All done: 2 files.",
+    ], "every chunk is still streamed, for the renderer's fallback"
+
+
+async def test_turn_text_is_empty_when_nothing_follows_the_last_tool_call(rig: Rig) -> None:
+    await rig.start("narrate without answer")
+    (done,) = await rig.turns(1)
+    assert done.text == ""
 
 
 async def test_a_question_is_answered_by_number(rig: Rig) -> None:
@@ -322,15 +327,11 @@ async def test_a_skipped_question_is_reported_as_skipped(rig: Rig) -> None:
     assert json.loads(done.text or "")["outcome"] == "skipped"
 
 
-@pytest.mark.parametrize(("decision", "outcome"), [("allow", "accepted"), ("deny", "rejected")])
-async def test_plans_need_phone_approval(rig: Rig, decision: str, outcome: str) -> None:
+async def test_plans_are_accepted_at_once(rig: Rig) -> None:
     await rig.start("plan first")
-    ask = await rig.asked(ApprovalRequested)
-    assert ask.tool == "plan"
-    assert ask.detail == "Refactor\n\n1. a\n2. b"
-    await rig.core.service.answer_approval(ask.request_id, decision)  # type: ignore[arg-type]
     (done,) = await rig.turns(1)
-    assert done.text == f"plan {outcome}"
+    assert done.text == "plan accepted"
+    assert rig.rec.of(ApprovalRequested) == []
 
 
 # cancel and steering
@@ -345,23 +346,22 @@ async def test_stop_cancels_the_turn(rig: Rig) -> None:
     assert "session/cancel" in rig.methods()
 
 
-async def test_stop_closes_an_open_approval(rig: Rig) -> None:
+async def test_stop_releases_a_permission_the_relay_was_not_answering(rig: Rig) -> None:
+    pause_relay()
     record = await rig.start("use a tool")
-    ask = await rig.asked(ApprovalRequested)
+    await rig.asked(ApprovalRequested)
     await rig.core.service.stop(record.session_key)
-    resolved = await rig.asked(ApprovalResolved)
-    assert (resolved.request_id, resolved.by) == (ask.request_id, "desk")
-    pending = await rig.registry.get_pending(ask.request_id)
-    assert pending is not None and pending.status == "resolved"
     await rig.turns(1)
+    assert await rig.registry.open_pending() == []
 
 
 async def test_a_prompt_during_a_turn_runs_when_the_turn_ends(rig: Rig) -> None:
+    pause_relay()
     record = await rig.start("use a tool")
     ask = await rig.asked(ApprovalRequested)
     receipt = await rig.core.service.prompt(record.session_key, "Reply with exactly: OK")
     assert receipt == "Queued (1 waiting)"
-    await rig.core.service.answer_approval(ask.request_id, "allow")
+    await rig.adapter.answer_approval(record, ask.request_id, "allow")
     first, second = await rig.turns(2)
     assert first.text == "tool allow-once"
     assert second.text == "OK"
@@ -393,7 +393,7 @@ async def test_set_model_restarts_the_process_when_unsupported(rig: Rig) -> None
     await rig.core.service.set_model(record.session_key, "sonnet-4")
     await rig.core.service.prompt(record.session_key, "Reply with exactly: OK")
     await rig.turns(2)
-    assert rig.runs()[-1] == ["--workspace", rig.workspace, "--model", "sonnet-4", "acp"]
+    assert rig.runs()[-1] == ["--workspace", rig.workspace, "--model", "sonnet-4", "--force", "acp"]
     assert "session/load" in rig.methods()
 
 
@@ -436,11 +436,12 @@ async def test_an_idle_session_process_is_closed_and_resumed_by_the_next_prompt(
 
 @pytest.mark.parametrize("rig", [0.4], indirect=True)
 async def test_a_session_with_an_open_request_is_not_reaped(rig: Rig) -> None:
+    pause_relay()
     record = await rig.start("use a tool")
     ask = await rig.asked(ApprovalRequested)
     await asyncio.sleep(1.0)
     assert record.session_key in rig.adapter._live
-    await rig.core.service.answer_approval(ask.request_id, "allow")
+    await rig.adapter.answer_approval(record, ask.request_id, "allow")
     (done,) = await rig.turns(1)
     assert done.text == "tool allow-once"
 

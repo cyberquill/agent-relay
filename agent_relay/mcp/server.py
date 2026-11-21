@@ -1,6 +1,7 @@
 """relay-mcp: a stdio MCP server that lets an agent reach the phone through relayd.
 
-Tools: `notify_phone(text)` and `ask_phone(question, options, timeout_s<=900)`. The workspace is
+Tools: `notify_phone(text)`, `send_phone_file(path, caption)` and `ask_phone(question, options,
+timeout_s<=900)`. The workspace is
 `RELAY_WORKSPACE` when set, else the server's working directory (harnesses start MCP servers there).
 """
 
@@ -24,9 +25,11 @@ log = get_logger(__name__)
 ASK_MAX_S = 900
 PROGRESS_EVERY_S = 20.0
 NOTIFY_TIMEOUT_S = 30.0
+SEND_FILE_TIMEOUT_S = 60.0
 INSTRUCTIONS = (
-    "Reach the user's phone through Agent Relay. Use notify_phone for short status updates and "
-    "ask_phone only for real blockers while the user is away; prefer deciding yourself."
+    "Reach the user's phone through Agent Relay. Use notify_phone for short status updates, "
+    "send_phone_file to deliver a report or other file from the workspace (for a report, write HTML "
+    "and send it) and ask_phone only for real blockers while the user is away; prefer deciding yourself."
 )
 
 
@@ -39,6 +42,12 @@ class ProgressSink(Protocol):
 class NotifyResult(BaseModel):
     delivered: bool
     reason: str = ""
+
+
+class SendFileResult(BaseModel):
+    delivered: bool
+    reason: str | None = None
+    error: str | None = None
 
 
 class AskResult(BaseModel):
@@ -65,6 +74,17 @@ async def notify(text: str, sock: Path, folder: str) -> NotifyResult:
     if "error" in reply:
         return NotifyResult(delivered=False, reason=str(reply["error"]))
     return NotifyResult(delivered=bool(reply.get("delivered")), reason=str(reply.get("reason") or ""))
+
+
+async def send_file(path: str, caption: str | None, sock: Path, folder: str) -> SendFileResult:
+    message: dict[str, object] = {"op": "send_file", "workspace": folder, "path": path, "caption": caption}
+    reply = await _call(message, sock, SEND_FILE_TIMEOUT_S)
+    if "error" in reply:
+        return SendFileResult(delivered=False, error=str(reply["error"]))
+    reason = reply.get("reason")
+    return SendFileResult(
+        delivered=bool(reply.get("delivered")), reason=reason if isinstance(reason, str) and reason else None
+    )
 
 
 async def ask(
@@ -111,6 +131,16 @@ def build_server(sock: Path | None = None, folder: str | None = None) -> FastMCP
     async def notify_phone(text: str) -> NotifyResult:
         """Post a short status line to the user's phone, in the thread of this session."""
         return await notify(text, sock or paths.socket_path(), folder or workspace())
+
+    @server.tool()
+    async def send_phone_file(path: str, caption: str | None = None) -> SendFileResult:
+        """Send a file from this workspace to the user's phone, in the thread of this session.
+
+        `path` is relative to the workspace (or absolute) and must stay inside it. Text files are
+        redacted for secrets first. Use it for reports: write the report as an HTML file and send
+        that. `delivered` is false, with a `reason` or `error`, when it could not be sent.
+        """
+        return await send_file(path, caption, sock or paths.socket_path(), folder or workspace())
 
     @server.tool()
     async def ask_phone(

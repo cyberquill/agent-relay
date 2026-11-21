@@ -1,32 +1,29 @@
-"""Housekeeping drops stale approvals and card nonces and leaves everything else alone."""
+"""Housekeeping drops stale card nonces and old markers, reconciles sessions at start, and ends idle ones."""
 
 from __future__ import annotations
 
 from datetime import timedelta
 
-from agent_relay.core.housekeeping import DRAFT_PREFIX, DRAFT_SEEN_PREFIX, PANIC_ISSUED_PREFIX, housekeep
-from agent_relay.core.registry import CARD_NONCE_PREFIX, RECENT_APPROVAL_PREFIX, SEEN_PREFIX, Registry
+from agent_relay.core.housekeeping import (
+    DRAFT_PREFIX,
+    DRAFT_SEEN_PREFIX,
+    PANIC_ISSUED_PREFIX,
+    end_idle_sessions,
+    housekeep,
+    reconcile_sessions,
+)
+from agent_relay.core.lifecycle import Lifecycle
+from agent_relay.core.registry import CARD_NONCE_PREFIX, SEEN_PREFIX, Registry
+from agent_relay.core.router import Router
+from agent_relay.core.signals import Signals
 from agent_relay.frontends.webex import handlers
 from agent_relay.frontends.webex.commands import away as away_commands
-from agent_relay.models.events import utcnow
+from agent_relay.models.events import Harness, Origin, utcnow
+from agent_relay.models.sessions import SessionRecord, SessionStatus
 
 
 def _ago(**delta: float) -> str:
     return (utcnow() - timedelta(**delta)).isoformat()
-
-
-async def test_expired_recent_approvals_are_pruned(registry: Registry) -> None:
-    keys = {
-        "old": f"{_ago(minutes=5)} allow",
-        "fresh": f"{_ago(seconds=10)} allow",
-        "legacy": "allow",
-    }
-    for name, value in keys.items():
-        await registry.kv_set(f"{RECENT_APPROVAL_PREFIX}s:{name}", value)
-    assert await housekeep(registry) == 2
-    assert await registry.kv_get(f"{RECENT_APPROVAL_PREFIX}s:old") is None
-    assert await registry.kv_get(f"{RECENT_APPROVAL_PREFIX}s:legacy") is None
-    assert await registry.kv_get(f"{RECENT_APPROVAL_PREFIX}s:fresh") is not None
 
 
 async def test_card_nonces_older_than_two_days_are_pruned(registry: Registry) -> None:
@@ -92,3 +89,72 @@ async def test_a_finished_draft_leaves_no_marker_behind(registry: Registry) -> N
     await registry.kv_delete(f"{DRAFT_PREFIX}n1")
     assert await housekeep(registry, now=start + timedelta(hours=1)) == 0
     assert await registry.kv_prefix(DRAFT_SEEN_PREFIX) == {}
+
+
+def _lifecycle(registry: Registry) -> Lifecycle:
+    return Lifecycle(registry, Router(), Signals())
+
+
+async def _session(registry: Registry, key: str, status: SessionStatus) -> None:
+    await registry.create_session(
+        SessionRecord(
+            session_key=key,
+            harness=Harness.OPENCODE,
+            harness_id=f"h-{key}",
+            workspace="/w",
+            origin=Origin.PHONE,
+        )
+    )
+    await registry.set_session_status(key, status)
+
+
+async def _status(registry: Registry, key: str) -> SessionStatus:
+    found = await registry.get_session(key)
+    assert found is not None
+    return found.status
+
+
+async def test_start_up_marks_running_sessions_idle_and_touches_nothing_else(registry: Registry) -> None:
+    for key, status in (
+        ("run1", SessionStatus.RUNNING),
+        ("run2", SessionStatus.RUNNING),
+        ("idle", SessionStatus.IDLE),
+        ("ended", SessionStatus.ENDED),
+    ):
+        await _session(registry, key, status)
+    assert await reconcile_sessions(registry, _lifecycle(registry)) == 2
+    assert [await _status(registry, k) for k in ("run1", "run2", "idle", "ended")] == [
+        SessionStatus.IDLE,
+        SessionStatus.IDLE,
+        SessionStatus.IDLE,
+        SessionStatus.ENDED,
+    ]
+    assert await reconcile_sessions(registry, _lifecycle(registry)) == 0
+
+
+async def test_idle_sessions_untouched_for_seven_days_are_ended(registry: Registry) -> None:
+    for key, status in (
+        ("idle-a", SessionStatus.IDLE),
+        ("idle-b", SessionStatus.IDLE),
+        ("running", SessionStatus.RUNNING),
+        ("parked", SessionStatus.PARKED),
+    ):
+        await _session(registry, key, status)
+    lifecycle = _lifecycle(registry)
+    assert await end_idle_sessions(registry, lifecycle, now=utcnow() + timedelta(days=6)) == 0
+    assert await end_idle_sessions(registry, lifecycle, now=utcnow() + timedelta(days=8)) == 2
+    assert [await _status(registry, k) for k in ("idle-a", "idle-b", "running", "parked")] == [
+        SessionStatus.ENDED,
+        SessionStatus.ENDED,
+        SessionStatus.RUNNING,
+        SessionStatus.PARKED,
+    ]
+
+
+async def test_housekeep_ends_idle_sessions_only_when_given_a_lifecycle(registry: Registry) -> None:
+    await _session(registry, "old-idle", SessionStatus.IDLE)
+    later = utcnow() + timedelta(days=8)
+    assert await housekeep(registry, now=later) == 0
+    assert await _status(registry, "old-idle") is SessionStatus.IDLE
+    assert await housekeep(registry, now=later, lifecycle=_lifecycle(registry)) == 1
+    assert await _status(registry, "old-idle") is SessionStatus.ENDED

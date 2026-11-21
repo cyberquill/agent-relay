@@ -83,46 +83,49 @@ async def rig(registry: Registry) -> AsyncIterator[Rig]:
     assert found.problems == [] and csp == []
 
 
-async def test_new_session_sends_the_nonce_every_input_and_the_open_sub_cards_model(rig: Rig) -> None:
-    models = (("m50", "Model 50"), ("m60", "Model 60"))
-    options = [
-        cards.AppOption("opencode", "OpenCode", "🟩", models, "m50"),
-        cards.AppOption("cursor", "Cursor", "🟦"),
+async def test_new_session_sends_the_nonce_and_every_input(rig: Rig) -> None:
+    agents = [
+        ("opencode:default", "🟩 OpenCode · Default"),
+        ("opencode:m60", "🟩 OpenCode · Model 60"),
+        ("cursor_cli:default", "⬛ Cursor CLI · Default"),
     ]
     box = await rig.show(
-        cards.new_session([("proj", "proj"), ("other", "other")], "proj", None, options, nonce="n1")
+        cards.new_session(
+            [("proj", "proj"), ("other", "other")], "proj", agents, "opencode:default", None, nonce="n1"
+        )
     )
-    await box.locator("textarea").fill("hello")
-    await box.get_by_label("Away mode on for this workspace").check()
-    await box.get_by_role("button", name="🟩 OpenCode").click()
-    await box.locator("select").nth(1).select_option("m60")
-    await box.get_by_role("button", name="🟦 Cursor").click()
-    assert await box.locator("select").nth(1).is_hidden()  # one sub-card open at a time
-    await box.get_by_role("button", name="🟩 OpenCode").click()
+    await box.get_by_label("Prompt").fill("hello")
+    await box.get_by_label("Agent").select_option("opencode:m60")
+    await box.get_by_label("Workspace").select_option("other")
     await box.get_by_role("button", name="Start").click()
     await rig.page.wait_for_function("() => document.querySelector('.card button:disabled')")
     assert rig.submits == [
         {
             "relay": "new",
-            "step": "start",
-            "app": "opencode",
             "nonce": "n1",
-            "ws": "proj",
+            "ws": "other",
+            "agent": "opencode:m60",
             "prompt": "hello",
-            "away": "true",
-            "model_opencode": "m60",
         }
     ]
 
 
-async def test_apps_past_the_card_action_limit_open_from_a_body_action_set(rig: Rig) -> None:
-    options = [cards.AppOption(f"app{i}", f"App {i}", "▫️") for i in range(6)]
-    box = await rig.show(cards.new_session([("proj", "proj")], "proj", "p", options, nonce="n2"))
-    await box.get_by_role("button", name="▫️ App 3").click()
-    await box.get_by_role("button", name="Start").click()
-    await rig.page.wait_for_function("() => document.querySelector('.card button:disabled')")
-    assert [s["app"] for s in rig.submits] == ["app3"]
-    assert rig.submits[0]["nonce"] == "n2" and rig.submits[0]["prompt"] == "p"
+async def test_new_session_shows_its_notes_and_the_prefilled_prompt(rig: Rig) -> None:
+    box = await rig.show(
+        cards.new_session(
+            [("proj", "proj")],
+            "proj",
+            [("opencode:default", "🟩 OpenCode · Default")],
+            "opencode:default",
+            "run the tests",
+            nonce="n2",
+            unavailable=["Cursor CLI (down)"],
+            files=2,
+        )
+    )
+    assert await box.get_by_label("Prompt").input_value() == "run the tests"
+    assert await box.get_by_text("Not available: Cursor CLI (down)").count() == 1
+    assert await box.get_by_text("📎 2 files will be attached").count() == 1
 
 
 async def test_queue_removes_one_item_and_sends_the_mode_in_scope(rig: Rig) -> None:
@@ -138,25 +141,22 @@ async def test_queue_removes_one_item_and_sends_the_mode_in_scope(rig: Rig) -> N
     ]
 
 
-async def test_deny_with_reason_sends_the_reason_only_from_its_own_sub_card(rig: Rig) -> None:
-    box = await rig.show(cards.approval("r1", "proj", "rm -rf x", "10m", nonce="nz"))
-    assert await box.locator(".mono").inner_text() == "rm -rf x"
-    await box.get_by_role("button", name="Deny with reason…").click()
-    await box.locator("textarea").fill("too risky")
-    await box.locator(".showcard").get_by_role("button", name="Deny").click()
+async def test_a_question_sends_the_chosen_option_and_the_typed_answer_with_its_nonce(rig: Rig) -> None:
+    box = await rig.show(cards.question("q1", "proj", "Which database?", ("pg", "sqlite"), nonce="nq"))
+    await box.get_by_label("sqlite").check()
+    await box.locator("textarea").fill("or neither")
+    await box.get_by_role("button", name="Answer").click()
     await rig.page.wait_for_function("() => document.querySelector('.card button:disabled')")
     assert rig.submits == [
-        {"relay": "approval", "request_id": "r1", "nonce": "nz", "decision": "deny", "reason": "too risky"}
+        {
+            "relay": "question",
+            "request_id": "q1",
+            "nonce": "nq",
+            "op": "answer",
+            "choice": "sqlite",
+            "custom": "or neither",
+        }
     ]
-
-
-async def test_allow_once_carries_no_input_from_an_open_sub_card(rig: Rig) -> None:
-    box = await rig.show(cards.approval("r1", "proj", "ls", "10m", nonce="nz"))
-    await box.get_by_role("button", name="Deny with reason…").click()
-    await box.locator(".showcard textarea").fill("typed but not sent")
-    await box.get_by_role("button", name="Allow once").click()
-    await rig.page.wait_for_function("() => document.querySelector('.card button:disabled')")
-    assert rig.submits == [{"relay": "approval", "request_id": "r1", "nonce": "nz", "decision": "allow"}]
 
 
 GENERIC: Card = {
@@ -274,9 +274,8 @@ async def test_malformed_cards_draw_notes_and_never_throw(rig: Rig) -> None:
 async def test_the_webex_cards_draw_with_a_button_per_action(rig: Rig) -> None:
     built: list[Card] = [
         cards.panic_confirm(nonce="p"),
-        cards.away_scope([("proj", "proj")], nonce="a"),
         cards.model_switch("s1", "m1", [("m1", "M1"), ("m2", "M2")], "m1", nonce="m"),
-        cards.approval("r", "proj", "ls", "1m", nonce="z"),
+        cards.question("r", "proj", "Which?", ("a", "b"), nonce="z"),
         queue_card("s", "steer", [(1, "x")], nonces={"mode": "m", "clear": "c", "remove:1": "r"}),
     ]
     for card in built:

@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from pathlib import Path
 
-from agent_relay.adapters.base import Decision, ModelInfo
+from agent_relay.adapters.base import ModelInfo
 from agent_relay.core.keys import RELEASE_KEY, pending_key, session_signal
 from agent_relay.core.lifecycle import Lifecycle
 from agent_relay.core.registry import Registry
@@ -15,7 +15,6 @@ from agent_relay.core.service.away import AwayControl
 from agent_relay.core.service.common import (
     APP_ALIASES,
     APP_LABELS,
-    DESK_DECISION,
     DIFF_LIMIT_BYTES,
     STICKY_MODEL_KEY,
     AppInfo,
@@ -24,7 +23,7 @@ from agent_relay.core.service.common import (
     RelayError,
     resolve_app,
 )
-from agent_relay.core.service.discovery import Discovery
+from agent_relay.core.service.discovery import AgentEntry, AgentOffer, Discovery
 from agent_relay.core.service.sessions import Sessions
 from agent_relay.core.service.workspaces import NOT_ENABLED as WS_NOT_ENABLED
 from agent_relay.core.service.workspaces import Started, WorkspaceAdmin
@@ -38,11 +37,12 @@ from agent_relay.models.sessions import QueuedMessage, SessionRecord
 __all__ = [
     "APP_ALIASES",
     "APP_LABELS",
-    "DESK_DECISION",
     "DIFF_LIMIT_BYTES",
     "RELEASE_KEY",
     "STICKY_MODEL_KEY",
     "WS_NOT_ENABLED",
+    "AgentEntry",
+    "AgentOffer",
     "AppInfo",
     "DeliveryError",
     "RelayError",
@@ -85,8 +85,12 @@ class RelayService:
     def workspaces(self) -> list[Workspace]:
         return self._discovery.workspaces()
 
-    async def models(self, app: str) -> list[ModelInfo]:
-        return await self._discovery.models(app)
+    async def models(self, app: str, *, refresh: bool = False) -> list[ModelInfo]:
+        """The app's models, from the shared 10-minute cache; `refresh` asks the app again."""
+        return await self._discovery.models(app, refresh=refresh)
+
+    async def agent_offer(self) -> AgentOffer:
+        return await self._discovery.agent_offer()
 
     async def sessions(self) -> list[SessionRecord]:
         return await self._discovery.sessions()
@@ -129,7 +133,7 @@ class RelayService:
     async def set_away(self, enabled: bool, session_key: str | None = None) -> str:
         return await self._away.set_away(enabled, session_key)
 
-    async def set_away_for(self, enabled: bool, workspace: str | None) -> str:
+    async def set_away_for(self, enabled: bool, workspace: str | None = None) -> str:
         return await self._away.set_away_for(enabled, workspace)
 
     async def release(self, session_key: str, reason: str) -> None:
@@ -141,12 +145,7 @@ class RelayService:
     async def panic(self) -> str:
         return await self._away.panic()
 
-    # approvals and questions
-
-    async def answer_approval(
-        self, request_id: str, decision: Decision, by: ResolvedBy = "phone", reason: str | None = None
-    ) -> bool:
-        return await self._approvals.answer_approval(request_id, decision, by, reason)
+    # questions
 
     async def answer_question(self, request_id: str, answer: str | None, by: ResolvedBy = "phone") -> bool:
         return await self._approvals.answer_question(request_id, answer, by)

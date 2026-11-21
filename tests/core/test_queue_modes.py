@@ -21,7 +21,7 @@ from agent_relay.core.signals import Signals
 from agent_relay.daemon import Core
 from agent_relay.models.capabilities import Capabilities
 from agent_relay.models.config import QueueConfig, QueueMode, RelayConfig
-from agent_relay.models.events import ErrorEvent, Event, Harness, TurnCompleted
+from agent_relay.models.events import ErrorEvent, Event, Harness, Origin, TurnCompleted
 from agent_relay.models.sessions import SessionRecord, SessionStatus
 from tests.fakes.adapters import EmittingAdapter
 
@@ -94,6 +94,7 @@ class Rig:
                 harness=harness or self.adapter.harness,
                 harness_id=key.split(":")[1],
                 workspace="/w/proj",
+                origin=Origin.PHONE,
                 status=status,
                 extra=extra or {},
             )

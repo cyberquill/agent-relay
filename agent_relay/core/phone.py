@@ -13,7 +13,7 @@ from agent_relay.models.sessions import SessionRecord, SessionStatus
 
 BUSY = (SessionStatus.RUNNING, SessionStatus.PARKED)
 NO_SESSION = "no relay session is live for this workspace"
-AWAY_OFF = "away mode is off for this workspace"
+AWAY_OFF = "away mode is off"
 PAUSED = "the relay is paused (/panic); send `/away on` from the phone"
 
 

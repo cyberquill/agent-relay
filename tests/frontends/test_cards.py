@@ -1,5 +1,5 @@
 """AC-12: Adaptive Cards v1.3 with Input.ChoiceSet and Action.Submit, one card per message,
-each card edited exactly once with its outcome. Plus the rules every card follows: a one-use nonce,
+a one-shot card deleted once it is done. Plus the rules every card follows: a one-use nonce,
 server-side re-validation, the size limit, and a text line that says what the card is about."""
 
 from __future__ import annotations
@@ -9,15 +9,13 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from pydantic import JsonValue
 
-from agent_relay.adapters.base import Decision
 from agent_relay.core.service.common import DeliveryError
 from agent_relay.frontends import card_state
 from agent_relay.frontends.webex import cards
 from agent_relay.frontends.webex.cards.common import card as build_card
 from agent_relay.models.events import (
-    ApprovalRequested,
-    ApprovalResolved,
     Harness,
+    Origin,
     QuestionAnswered,
     QuestionAsked,
     ResolvedBy,
@@ -64,26 +62,18 @@ def _walk(card: dict[str, JsonValue]) -> None:
 
 
 def test_builders_produce_valid_v13_cards() -> None:
-    _walk(cards.approval("r1", "label", "rm -rf /tmp/x", "10m", nonce="n"))
     _walk(cards.question("q1", "label", "Which?", ("a", "b"), nonce="n"))
     _walk(cards.question("q2", "label", "Free text?", (), nonce="n"))
-    apps = [cards.AppOption("opencode", "OpenCode", "🟩", (("m1", "M1"),), "m1")]
     ws = [("proj", "proj")]
-    _walk(cards.new_session(ws, "proj", None, apps, nonce="n"))
-    _walk(cards.new_session(ws, "proj", "x", [*apps] * 6, nonce="n"))
-    _walk(cards.new_details(ws, "proj", None, apps, "opencode", nonce="n"))
-    _walk(cards.new_model(apps[0], nonce="n"))
+    agents = [("opencode:default", "🟩 OpenCode · Default"), ("opencode:m1", "🟩 OpenCode · M1")]
+    _walk(cards.new_session(ws, "proj", agents, "opencode:default", None, nonce="n"))
+    _walk(
+        cards.new_session(
+            ws, "proj", agents, "opencode:m1", "x", nonce="n", unavailable=["Cursor CLI (down)"], files=2
+        )
+    )
     _walk(cards.model_switch("s", "m1", [("m1", "M1")], "m1", nonce="n"))
-    _walk(cards.away_scope([(cards.ALL_WORKSPACES, "All"), ("proj", "proj")], nonce="n"))
     _walk(cards.panic_confirm(nonce="n"))
-
-
-def test_the_approval_detail_is_monospace() -> None:
-    card = cards.approval("r1", "label", "echo `hi` *x*", "10m", nonce="n")
-    body = card["body"]
-    assert isinstance(body, list)
-    detail = body[2]
-    assert isinstance(detail, dict) and detail["fontType"] == "Monospace" and detail["wrap"] is True
 
 
 def test_fit_card_shrinks_then_gives_up() -> None:
@@ -103,14 +93,16 @@ def test_fit_card_shrinks_then_gives_up() -> None:
     assert cards.fit_card("hi", build_card(blocks, [])) is None
 
 
-async def _pending(relay: Relay, kind: str, request_id: str, minutes: int = 10) -> SessionRecord:
+async def _pending(relay: Relay, request_id: str, minutes: int = 10) -> SessionRecord:
     session = await relay.registry.get_session("opencode:c1") or await relay.registry.create_session(
-        SessionRecord(session_key="opencode:c1", harness=H, harness_id="c1", workspace="/w/p")
+        SessionRecord(
+            session_key="opencode:c1", harness=H, harness_id="c1", workspace="/w/p", origin=Origin.PHONE
+        )
     )
     await relay.registry.add_pending(
         PendingRequest(
             request_id=request_id,
-            kind="approval" if kind == "approval" else "question",
+            kind="question",
             session_key=session.session_key,
             payload={"source": "adapter"},
             deadline=datetime.now(UTC) + timedelta(minutes=minutes),
@@ -119,20 +111,10 @@ async def _pending(relay: Relay, kind: str, request_id: str, minutes: int = 10) 
     return session
 
 
-async def _ask_approval(relay: Relay, request_id: str = "r1", detail: str = "git push") -> SessionRecord:
-    session = await _pending(relay, "approval", request_id)
-    await relay.frontend.renderer.handle(
-        ApprovalRequested(
-            harness=H, session_key=session.session_key, request_id=request_id, tool="bash", detail=detail
-        )
-    )
-    return session
-
-
 async def _ask_question(
     relay: Relay, request_id: str = "q1", options: tuple[str, ...] = ("pg", "sqlite")
 ) -> SessionRecord:
-    session = await _pending(relay, "question", request_id)
+    session = await _pending(relay, request_id)
     await relay.frontend.renderer.handle(
         QuestionAsked(
             harness=H,
@@ -145,85 +127,35 @@ async def _ask_question(
     return session
 
 
-async def test_approval_card_is_edited_once_with_outcome(relay: Relay) -> None:
-    await _ask_approval(relay)
-    card_msg, card = relay.webex.last_card()
-    _walk(card)
-    assert sum(1 for m in relay.webex.bot_messages() if m.attachments) == 1
-    await relay.press(card_msg.id, card, "Allow once")
-    assert relay.webex.edits[card_msg.id] == 1
-    assert relay.webex.messages[card_msg.id].markdown == "✅ Allowed"
-    assert relay.adapter.approvals == [("r1", "allow")]
-    # a tap from another card for the same request: first answer wins
-    await relay.click(card_msg.id, {**submit_data(card, "Deny"), "nonce": await relay.nonce()})
-    assert relay.webex.edits[card_msg.id] == 1
-    assert relay.adapter.approvals == [("r1", "allow")]
-    assert relay.bot_texts()[-1] == "That request was already answered."
-
-
 async def test_a_card_can_be_answered_once_only(relay: Relay) -> None:
-    await _ask_approval(relay)
+    await _ask_question(relay)
     card_msg, card = relay.webex.last_card()
-    await relay.press(card_msg.id, card, "Allow once")
-    await relay.press(card_msg.id, card, "Deny")
-    assert relay.adapter.approvals == [("r1", "allow")]
+    await relay.press(card_msg.id, card, "Answer", choice="pg", custom="")
+    await relay.press(card_msg.id, card, "Answer", choice="sqlite", custom="")
+    assert relay.adapter.answers == [("q1", "pg")]
     assert relay.bot_texts()[-1] == card_state.EXPIRED
 
 
 async def test_a_submit_without_a_valid_nonce_does_nothing(relay: Relay) -> None:
-    await _ask_approval(relay)
+    await _ask_question(relay)
     card_msg, card = relay.webex.last_card()
-    data = submit_data(card, "Allow once")
+    data = submit_data(card, "Answer")
     del data["nonce"]
-    await relay.click(card_msg.id, data)
-    await relay.click(card_msg.id, {**data, "nonce": "made-up"})
-    assert relay.adapter.approvals == []
+    await relay.click(card_msg.id, {**data, "choice": "pg"})
+    await relay.click(card_msg.id, {**data, "choice": "pg", "nonce": "made-up"})
+    assert relay.adapter.answers == []
     assert relay.bot_texts()[-2:] == [card_state.EXPIRED, card_state.EXPIRED]
-    await relay.press(card_msg.id, card, "Allow once")
-    assert relay.adapter.approvals == [("r1", "allow")]
+    await relay.press(card_msg.id, card, "Answer", choice="pg", custom="")
+    assert relay.adapter.answers == [("q1", "pg")]
 
 
-async def test_a_double_tap_on_the_wizard_starts_one_session(relay: Relay) -> None:
+async def test_a_double_tap_on_the_new_card_starts_one_session(relay: Relay) -> None:
     await relay.say("/new opencode proj m1")
     card_msg, card = relay.webex.last_card()
     await relay.tap(card_msg.id, card, "Start", prompt="go")
     await relay.tap(card_msg.id, card, "Start", prompt="go")
     assert [s.prompt for s in relay.adapter.started] == ["go"]
     assert relay.bot_texts()[-1] == card_state.EXPIRED
-
-
-async def test_approval_message_names_the_tool_and_the_deadline(relay: Relay) -> None:
-    await _ask_approval(relay, detail="rm -rf /tmp/x")
-    message, card = relay.webex.last_card()
-    assert message.markdown == "🔐 Approval needed: bash · auto-deny in 10m"
-    body = card["body"]
-    assert isinstance(body, list) and all(isinstance(b, dict) for b in body)
-    texts = [str(b["text"]) for b in body if isinstance(b, dict)]
-    assert texts[-1] == "Auto-deny in 10m."
-    detail = body[2]
-    assert (
-        isinstance(detail, dict) and detail["text"] == "rm -rf /tmp/x" and detail["fontType"] == "Monospace"
-    )
-
-
-async def test_the_deadline_is_the_pending_requests_not_the_configured_one(relay: Relay) -> None:
-    session = await _pending(relay, "approval", "r9", minutes=95)
-    await relay.frontend.renderer.handle(
-        ApprovalRequested(harness=H, session_key=session.session_key, request_id="r9", tool="bash")
-    )
-    message, _ = relay.webex.last_card()
-    assert message.markdown.endswith("auto-deny in 1h 35m")
-
-
-async def test_the_approval_detail_keeps_head_and_tail(relay: Relay) -> None:
-    detail = "echo start; " + "x" * 5000 + "; rm -rf ~"
-    await _ask_approval(relay, detail=detail)
-    _, card = relay.webex.last_card()
-    body = card["body"]
-    assert isinstance(body, list) and isinstance(body[2], dict)
-    shown = str(body[2]["text"])
-    assert shown.startswith("echo start;") and shown.endswith("; rm -rf ~")
-    assert "more chars" in shown and len(shown) < 1_600
 
 
 async def test_question_message_carries_the_question(relay: Relay) -> None:
@@ -237,8 +169,8 @@ async def test_question_card_answer_and_skip(relay: Relay) -> None:
     card_msg, card = relay.webex.last_card()
     await relay.press(card_msg.id, card, "Answer", choice="pg", custom="")
     assert relay.adapter.answers == [("q1", "pg")]
-    assert relay.webex.messages[card_msg.id].markdown == "💬 Answered: pg"
-    assert relay.webex.edits[card_msg.id] == 1
+    assert relay.webex.messages[card_msg.id].deleted  # deleted, not edited: it cannot be tapped again
+    assert relay.webex.edits.get(card_msg.id, 0) == 0
     assert await relay.registry.kv_get(f"{card_state.OFFER_PREFIX}q1") is None
 
 
@@ -272,80 +204,37 @@ async def test_an_over_long_answer_and_an_unknown_action_are_refused(relay: Rela
     assert relay.adapter.answers == []
 
 
-async def test_an_unknown_decision_is_refused(relay: Relay) -> None:
-    await _ask_approval(relay)
-    card_msg, card = relay.webex.last_card()
-    await relay.press(card_msg.id, card, "Allow once", decision="always")
-    assert relay.adapter.approvals == []
-    assert relay.bot_texts()[-1] == "⚠️ That is not a decision this card offers."
-
-
 async def test_a_relay_error_from_a_submit_is_shown_in_the_thread_and_can_be_retried(
     relay: Relay, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    session = await _ask_approval(relay)
+    session = await _ask_question(relay)
     card_msg, card = relay.webex.last_card()
-    real = relay.service.answer_approval
+    real = relay.service.answer_question
     failures = [DeliveryError("OpenCode could not be reached; the request is still open.")]
 
-    async def flaky(
-        request_id: str, decision: Decision, by: ResolvedBy = "phone", reason: str | None = None
-    ) -> bool:
+    async def flaky(request_id: str, answer: str | None, by: ResolvedBy = "phone") -> bool:
         if failures:
             raise failures.pop()
-        return await real(request_id, decision, by, reason)
+        return await real(request_id, answer, by)
 
-    monkeypatch.setattr(relay.service, "answer_approval", flaky)
-    await relay.press(card_msg.id, card, "Allow once")
+    monkeypatch.setattr(relay.service, "answer_question", flaky)
+    await relay.press(card_msg.id, card, "Answer", choice="pg", custom="")
     last = relay.webex.bot_messages()[-1]
     assert last.markdown == "⚠️ OpenCode could not be reached; the request is still open."
     assert last.parent_id == (await relay.service.session(session.session_key)).webex_thread_id
-    await relay.press(card_msg.id, card, "Allow once")
-    assert relay.adapter.approvals == [("r1", "allow")]
+    assert not relay.webex.messages[card_msg.id].deleted  # a failed tap leaves the card to try again
+    await relay.press(card_msg.id, card, "Answer", choice="pg", custom="")
+    assert relay.adapter.answers == [("q1", "pg")]
+    assert relay.webex.messages[card_msg.id].deleted
 
 
-async def test_cards_of_a_dead_agent_or_ended_session_say_so(relay: Relay) -> None:
-    session = await _ask_approval(relay)
-    card_msg, _ = relay.webex.last_card()
-    await relay.frontend.renderer.handle(
-        ApprovalResolved(
-            harness=H, session_key=session.session_key, request_id="r1", decision="deny", by="abandoned"
-        )
-    )
-    assert relay.webex.messages[card_msg.id].markdown == "🔌 The agent went away; request closed"
-
-    await _ask_question(relay)
+async def test_the_card_of_a_question_whose_session_ended_is_deleted(relay: Relay) -> None:
+    session = await _ask_question(relay)
     question_msg, _ = relay.webex.last_card()
     await relay.frontend.renderer.handle(
         QuestionAnswered(harness=H, session_key=session.session_key, request_id="q1", answer=None, by="ended")
     )
-    assert relay.webex.messages[question_msg.id].markdown == "🏁 The session ended; request closed"
-
-
-async def test_wizard_inputs_are_checked_on_the_server(relay: Relay) -> None:
-    await relay.say("/new opencode proj m1")
-    msg, card = relay.webex.last_card()
-
-    async def tap(**extra: JsonValue) -> str:
-        await relay.tap(msg.id, card, "Start", **{"prompt": "go", **extra})
-        return relay.bot_texts()[-1]
-
-    assert "Unknown workspace `elsewhere`" in await tap(ws="elsewhere")
-    assert "has no model `m9`" in await tap(model_opencode="m9")
-    assert "Unknown app `nope`" in await tap(app="nope")
-    assert "too long" in await tap(prompt="x" * (cards.MAX_PROMPT_CHARS + 1))
-    assert "unexpected" in await tap(ws=7)
-    assert relay.adapter.started == []
-    await relay.tap(msg.id, card, "Start", prompt="go")
-    assert [s.prompt for s in relay.adapter.started] == ["go"]
-
-
-async def test_a_disabled_app_cannot_be_started_from_a_card(relay: Relay) -> None:
-    await relay.say("/new")
-    msg, card = relay.webex.last_card()
-    await relay.tap(msg.id, card, "Start", prompt="go", app="cursor")
-    assert relay.bot_texts()[-1] == "⚠️ Cursor CLI is not enabled."
-    assert relay.adapter.started == []
+    assert relay.webex.messages[question_msg.id].deleted
 
 
 async def test_a_card_too_big_for_webex_goes_as_text(relay: Relay) -> None:

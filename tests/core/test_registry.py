@@ -203,7 +203,7 @@ async def test_a_thread_made_before_several_bots_reads_with_no_bot(relay_home: P
     await reg.close()
     raw = sqlite3.connect(db)
     raw.execute("ALTER TABLE sessions DROP COLUMN webex_bot")
-    raw.execute(f"PRAGMA user_version = {len(MIGRATIONS) - 1}")
+    raw.execute("PRAGMA user_version = 3")
     raw.commit()
     raw.close()
 
@@ -213,7 +213,7 @@ async def test_a_thread_made_before_several_bots_reads_with_no_bot(relay_home: P
     assert old is not None and (old.webex_thread_id, old.webex_bot) == ("thread-old", None)
     await migrated.create_session(_session("new").model_copy(update={"webex_bot": "cursor"}))
     await migrated.update_session_fields("old", webex_bot="control")
-    assert {(s.session_key, s.webex_bot) for s in await migrated.list_sessions()} == {
+    assert {(s.session_key, s.webex_bot) for s in await migrated.list_sessions(include_ended=True)} == {
         ("new", "cursor"),
         ("old", "control"),
     }
@@ -276,3 +276,114 @@ async def test_prune_stamped_reads_the_leading_timestamp(registry: Registry) -> 
     assert await registry.prune_stamped("p:", now - timedelta(minutes=1), drop_unparseable=True) == 1
     assert sorted(await registry.kv_prefix("p:")) == ["p:new"]
     assert await registry.kv_get("other:old") is not None
+
+
+def _downgrade(db: Path, version: int) -> sqlite3.Connection:
+    raw = sqlite3.connect(db)
+    raw.execute(f"PRAGMA user_version = {version}")
+    return raw
+
+
+async def test_migration_5_forgets_the_app_bots_and_ends_every_session(relay_home: Path) -> None:
+    db = paths.db_path()
+    reg = Registry(db)
+    await reg.open()
+    for key, bot, status in (
+        ("a", "cursor", SessionStatus.RUNNING),
+        ("b", "vscode", SessionStatus.PARKED),
+        ("c", "control", SessionStatus.IDLE),
+        ("d", None, SessionStatus.ACTIVE),
+        ("e", "opencode", SessionStatus.ENDED),
+    ):
+        await reg.create_session(_session(key))
+        await reg.update_session_fields(key, webex_thread_id=f"thread-{key}", webex_bot=bot)
+        await reg.set_session_status(key, status)
+    await reg.enqueue("c", "prompt", "waiting")
+    request = PendingRequest(
+        request_id="q1",
+        kind="question",
+        session_key="a",
+        payload={},
+        deadline=utcnow() + timedelta(hours=1),
+    )
+    await reg.add_pending(request)
+    await reg.add_pending(request.model_copy(update={"request_id": "p1", "kind": "approval"}))
+    kept = {
+        "webex.room_id": "room",
+        "webex.last_seen": "t",
+        "webex.hello": "1",
+        f"{SEEN_PREFIX}m1": utcnow().isoformat(),
+        "model:cursor": "auto",
+        "other:vscode": "x",
+    }
+    gone = {
+        "webex.room_id:cursor": "r",
+        "webex.last_seen:vscode": "t",
+        "webex.hello:opencode": "1",
+        f"{SEEN_PREFIX}m2:cursor": "1",
+        "allow_session:a:bash": "1",
+        "allow_ws:4:/tmp:bash": "x",
+        "approved_recent:a:abc": "x",
+    }
+    for key, value in {**kept, **gone}.items():
+        await reg.kv_set(key, value)
+    await reg.close()
+    raw = _downgrade(db, 4)
+    raw.commit()
+    raw.close()
+
+    migrated = Registry(db)
+    await migrated.open()
+    assert await migrated.schema_version() == len(MIGRATIONS)
+    sessions = {s.session_key: s for s in await migrated.list_sessions(include_ended=True)}
+    assert {s.status for s in sessions.values()} == {SessionStatus.ENDED}
+    assert await migrated.list_sessions() == []
+    assert [sessions[k].webex_thread_id for k in "abcde"] == [None, None, "thread-c", "thread-d", None]
+    for key in kept:
+        assert await migrated.kv_get(key) is not None, key
+    for key in gone:
+        assert await migrated.kv_get(key) is None, key
+    assert await migrated.open_pending() == []
+    assert (await migrated.get_pending("q1")) is not None
+    assert await migrated.list_queued("c") == []
+    await migrated.close()
+
+
+async def test_migration_5_leaves_a_fresh_database_alone(relay_home: Path) -> None:
+    reg = Registry(paths.db_path())
+    await reg.open()
+    await reg.create_session(_session("live"))
+    await reg.close()
+    again = Registry(paths.db_path())
+    await again.open()
+    assert [s.session_key for s in await again.list_sessions()] == ["live"], "it runs once, not at every open"
+    await again.close()
+
+
+@pytest.mark.parametrize(
+    ("rows", "expected"),
+    [
+        ({"*": False, "/w/a": True, "/w/b": False}, {GLOBAL_SCOPE: True}),
+        ({"*": True, "/w/a": False}, {GLOBAL_SCOPE: True}),
+        ({"*": False, "/w/a": False}, {}),
+        ({}, {}),
+    ],
+)
+async def test_migration_6_collapses_away_to_the_global_row(
+    relay_home: Path, rows: dict[str, bool], expected: dict[str, bool]
+) -> None:
+    db = paths.db_path()
+    reg = Registry(db)
+    await reg.open()
+    await reg.close()
+    raw = _downgrade(db, 5)
+    raw.execute("DELETE FROM away")
+    raw.executemany("INSERT INTO away (scope, enabled) VALUES (?, ?)", [(k, int(v)) for k, v in rows.items()])
+    raw.commit()
+    raw.close()
+
+    migrated = Registry(db)
+    await migrated.open()
+    assert await migrated.away_scopes() == expected
+    assert await migrated.schema_version() == len(MIGRATIONS)
+    await migrated.close()

@@ -120,6 +120,11 @@ def receipt_line(received: Received, attached: Collection[str] = ()) -> str:
     return f"📎 {line}"
 
 
+def skipped_line(skipped: Collection[str]) -> str:
+    """One `⚠️` line naming every file that could not be taken, and why. Empty when none."""
+    return f"⚠️ Skipped {', '.join(skipped)}" if skipped else ""
+
+
 def _inbox_parts(inbox_dir: str) -> tuple[str, ...]:
     posix = PurePosixPath(inbox_dir)
     parts = tuple(p for p in posix.parts if p != ".")
@@ -234,6 +239,10 @@ class Inbox:
     def max_bytes(self) -> int:
         return self._config.max_bytes
 
+    @property
+    def hold_s(self) -> int:
+        return self._config.hold_s
+
     def _staging(self) -> Path:
         return paths.app_support() / STAGING_DIR
 
@@ -322,8 +331,36 @@ class Inbox:
             return None
         return held.received
 
+    async def held_top_level(self) -> Received | None:
+        """The files waiting for the next `/new`, without releasing them. None when there are none."""
+        raw = await self._registry.kv_get(f"{HOLD_PREFIX}{TOP}")
+        held = _parse_held(raw) if raw else None
+        if held is None or held.expires <= utcnow() or not held.received.attachments:
+            return None
+        return held.received
+
+    async def restore_new(self, received: Received) -> None:
+        """Put files taken by `take_for_new` back in staging for the next `/new`, after a start that failed.
+
+        Nothing stays in the workspace: a retry takes them again, and a user who gives up finds the held
+        files swept like any other.
+        """
+        if not received.attachments:
+            return
+        folder = f"{NEW_PREFIX}{secrets.token_hex(4)}"
+        restored: list[Attachment] = []
+        for item in received.attachments:
+            incoming = Incoming(item.name, item.mime, _file_chunks(Path(item.local_path)))
+            try:
+                restored.append(await self.store(incoming, workspace=None, folder=folder))
+            except SkipFileError as exc:
+                log.warning(f"could not put {item.name} back for the next /new: {exc.describe()}")
+        await asyncio.to_thread(_remove_files, received.attachments)
+        if restored:
+            await self.hold(TOP, Received(attachments=tuple(restored)), staged=True)
+
     async def take_for_new(self, workspace: Path) -> Received | None:
-        """Files sent with `/new`, moved from staging into the new session's inbox folder."""
+        """Every file held at the top level, moved from staging into the new session's inbox folder."""
         held = await self.take(TOP)
         if held is None:
             return None

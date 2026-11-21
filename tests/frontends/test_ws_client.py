@@ -12,6 +12,7 @@ from pydantic import JsonValue
 from websockets.exceptions import ConnectionClosedError, InvalidStatus
 
 from agent_relay.frontends.webex.ws_client import DEVICE_DATA, Activity, WebexWsClient, WebSocketLike
+from agent_relay.models.events import utcnow
 from tests.fakes.webex import U2C, FakeWebex
 from tests.frontends.conftest import Relay
 
@@ -292,3 +293,20 @@ async def test_catch_up_after_reconnect_processes_missed_messages_exactly_once(r
     assert sum("**proj**" in r for r in replies) == 1
     assert sum("OpenCode" in r for r in replies) == 1
     assert sum(r == "No active sessions." for r in replies) == 1
+
+
+async def test_catch_up_drops_messages_that_are_too_old_and_runs_the_fresh_ones(relay: Relay) -> None:
+    webex = relay.webex
+    first = webex.user_says("/help")
+    await relay.frontend.handle_message(await relay.frontend.api.get_message(first))
+    stale = webex.user_says("/sessions")
+    fresh = webex.user_says("/apps")
+    webex.messages[stale].created = "2020-01-01T00:00:00.000Z"
+    webex.messages[fresh].created = utcnow().isoformat().replace("+00:00", "Z")
+    before = len(relay.bot_texts())
+    handled = await relay.frontend.catch_up()
+    await relay.frontend.drain()
+    replies = relay.bot_texts()[before:]
+    assert handled == 1
+    assert sum("OpenCode" in r for r in replies) == 1
+    assert "No active sessions." not in replies

@@ -40,14 +40,12 @@ from agent_relay.adapters.cursor_cli.rpc import (
     Params,
     RequestHandler,
 )
-from agent_relay.core.hooks import APPROVED_CALL_KEY
 from agent_relay.core.registry import Registry
 from agent_relay.log import get_logger
 from agent_relay.models.attachments import Attachment
 from agent_relay.models.capabilities import Capabilities
 from agent_relay.models.events import (
     ApprovalRequested,
-    ApprovalResolved,
     ErrorEvent,
     Event,
     Harness,
@@ -171,7 +169,9 @@ class CursorCliAdapter(Adapter):
             argv += ["--model", model]
         if isolation:
             argv.append("--worktree")
-        return [*argv, "acp"]
+        # `--force` is the CLI's own "run commands without asking"; the permission requests that still
+        # arrive are answered allow by the approval broker.
+        return [*argv, "--force", "acp"]
 
     async def _call(self, process: AcpProcess, method: str, params: Params) -> Params:
         try:
@@ -361,7 +361,7 @@ class CursorCliAdapter(Adapter):
             return
         self._settle_asks(live)
         stop = result.get("stopReason") if isinstance(result, dict) else None
-        reply = "".join(live.text).strip() or None
+        reply = "".join(live.text).strip()
         if stop == "cancelled":
             reply = f"{reply}\n\n{STOPPED_TEXT}" if reply else STOPPED_TEXT
         elif isinstance(stop, str) and stop not in ("end_turn", ""):
@@ -396,18 +396,13 @@ class CursorCliAdapter(Adapter):
                     live.text.append(text)
                     self._emit(TextDelta(**base, text=text))
                 case m.ToolStart(tool_id=tool_id, name=name, detail=detail):
+                    live.text.clear()  # what came before a tool call is narration, not the answer
                     self._emit(ToolStarted(**base, tool_id=tool_id, name=name, detail=detail))
                 case m.ToolEnd(tool_id=tool_id, name=name, ok=ok, summary=summary):
                     self._emit(ToolFinished(**base, tool_id=tool_id, name=name, ok=ok, summary=summary))
 
     async def _on_request(self, live: _Live, method: str, params: Params) -> JsonValue:
         if method == "session/request_permission":
-            call = params.get("toolCall")
-            call_id = call.get("toolCallId") if isinstance(call, dict) else None
-            if isinstance(call_id, str) and call_id:
-                prior = await self._registry.kv_get(APPROVED_CALL_KEY.format(call_id=call_id))
-                if prior in ("allow", "deny"):
-                    return m.permission_result(params.get("options"), "allow" if prior == "allow" else "deny")
             tool, detail = m.describe_permission(params)
             decision = await self._ask(live, "permission", params, tool=tool, detail=detail)
             return m.permission_result(params.get("options"), _decision(decision))
@@ -444,16 +439,14 @@ class CursorCliAdapter(Adapter):
             live.touched = time.monotonic()
 
     def _settle_asks(self, live: _Live) -> None:
-        """Answer every open ask as cancelled (turn over or stopped) and close it on the phone."""
+        """Answer every open ask as cancelled (turn over or stopped); a question also closes on the phone."""
         for request_id, ask in list(live.asks.items()):
             if ask.future.done():
                 continue
             ask.future.set_result(None)
-            base = {"harness": self.harness, "session_key": live.session_key, "workspace": live.workspace}
             if ask.kind == "question":
+                base = {"harness": self.harness, "session_key": live.session_key, "workspace": live.workspace}
                 self._emit(QuestionAnswered(**base, request_id=request_id, answer=None))
-            else:
-                self._emit(ApprovalResolved(**base, request_id=request_id, decision="deny", by="desk"))
         live.asks.clear()
 
     # the Adapter contract
@@ -544,7 +537,7 @@ class CursorCliAdapter(Adapter):
             return
         if reason:
             log.debug(f"{request_id}: ACP permission replies have no reason field; dropped")
-        ask.future.set_result("allow" if decision == "allow_workspace" else decision)
+        ask.future.set_result(decision)
 
     async def answer_question(self, session: SessionRecord, request_id: str, answer: str | None) -> None:
         ask = self._pending_ask(session, request_id)
@@ -568,8 +561,6 @@ class CursorCliAdapter(Adapter):
 def _decision(value: JsonValue) -> Decision | None:
     if value == "allow":
         return "allow"
-    if value == "allow_session":
-        return "allow_session"
     if value == "deny":
         return "deny"
     return None

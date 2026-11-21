@@ -20,7 +20,7 @@ async def test_new_card_starts_a_session_from_one_card(relay: Relay) -> None:
     await relay.say("/new")
     msg, card = relay.webex.last_card()
     assert cards.card_fallback(card) == "New session"
-    await relay.tap(msg.id, card, "Start", prompt="fix it", model_opencode="m2")
+    await relay.tap(msg.id, card, "Start", prompt="fix it", agent="opencode:m2")
     started = relay.adapter.started[-1]
     assert started.prompt == "fix it" and started.model == "m2"
     assert started.workspace == load_workspaces().workspaces[0].path
@@ -109,20 +109,22 @@ async def test_unsupported_command_is_refused_per_capability(relay: Relay) -> No
         assert "does not support" in relay.bot_texts()[-1]
 
 
-async def test_back_in_a_thread_releases_any_parked_session(relay: Relay) -> None:
-    """Relay's stop hook parks; the adapter's capabilities have no say in it."""
+async def test_back_in_a_thread_releases_parked_sessions_and_turns_away_off(relay: Relay) -> None:
+    """Relay's stop hook parks; the adapter's capabilities have no say in it. Nothing is posted about it
+    besides the reply: the root status line shows the release."""
     session = await relay.registry.create_session(
         SessionRecord(session_key="cursor_cdp:x", harness=Harness.CURSOR_CDP, harness_id="x", workspace="/w")
     )
     relay.router.add_adapter(CrashingAdapter())
     await relay.frontend.renderer.thread_for(session)
     stored = await relay.service.session(session.session_key)
-    await relay.say("/back", parent_id=stored.webex_thread_id)
-    assert relay.bot_texts()[-1] == "That session is not parked."
+    await relay.say("/away on")
     await relay.registry.set_session_status(session.session_key, SessionStatus.PARKED)
     await relay.say("/back", parent_id=stored.webex_thread_id)
-    assert set(relay.bot_texts()[-2:]) == {"Released.", "▶️ Released (/back)."}
-    assert await relay.registry.kv_get(f"release:{session.session_key}") == "/back"
+    assert not await away.is_away(relay.registry)
+    assert await relay.registry.kv_get(f"release:{session.session_key}") is not None
+    [reply] = relay.thread_texts()
+    assert "Released 1 parked session" in reply and "Away mode off." in reply
 
 
 async def test_unknown_thread_and_top_level_hint(relay: Relay) -> None:
@@ -147,18 +149,30 @@ async def test_listings(relay: Relay) -> None:
     assert "Unknown command `/frob`" in relay.bot_texts()[-1]
 
 
-async def test_away_global_and_per_thread(relay: Relay) -> None:
-    await relay.say("/away on")
-    assert await away.is_away(relay.registry, "/anything")
+async def test_away_is_one_global_switch_from_the_top_level_or_a_thread(relay: Relay) -> None:
+    await relay.say("/away")
+    assert await away.is_away(relay.registry)
+    assert not any(m.attachments for m in relay.webex.bot_messages())
     session = await _thread(relay)
     await relay.say("/away off", parent_id=session.webex_thread_id)
     assert not await away.is_away(relay.registry, session.workspace)
-    assert await away.is_away(relay.registry, "/elsewhere")
+    assert not await away.is_away(relay.registry, "/elsewhere")
     await relay.say("/away", parent_id=session.webex_thread_id)
-    assert await away.is_away(relay.registry, session.workspace)
-    await relay.say("/away off")
-    await relay.say("/away on")
     assert await away.is_away(relay.registry, "/elsewhere")
+    await relay.say("/back")
+    assert not await away.is_away(relay.registry)
+    await relay.say("/away on")
+    await relay.say("/back", parent_id=session.webex_thread_id)
+    assert not await away.is_away(relay.registry)
+
+
+async def test_status_in_a_thread_shows_the_island_while_away(relay: Relay) -> None:
+    session = await _thread(relay)
+    await relay.say("/status", parent_id=session.webex_thread_id)
+    assert "🏝️" not in relay.bot_texts()[-1]
+    await relay.say("/away on")
+    await relay.say("/status", parent_id=session.webex_thread_id)
+    assert relay.bot_texts()[-1].startswith("🏝️ Away mode is on.")
 
 
 async def test_panic_pauses_and_cancels(relay: Relay) -> None:
@@ -189,6 +203,25 @@ async def test_diff_attachment(relay: Relay) -> None:
     await relay.say("/diff", parent_id=session.webex_thread_id)
     last = relay.webex.bot_messages()[-1]
     assert last.files == ["changes.diff"] and b"+one" in last.file_bytes
+
+
+async def test_a_long_diff_goes_out_as_changes_html(relay: Relay) -> None:
+    workspace = Path(load_workspaces().workspaces[0].path)
+    git = ["git", "-C", str(workspace)]
+    subprocess.run([*git, "init", "-q"], check=True)
+    subprocess.run(
+        [*git, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "--allow-empty", "-m", "i"],
+        check=True,
+    )
+    session = await _thread(relay)
+    (workspace / "big.txt").write_text("".join(f"line {i}\n" for i in range(250)))
+    subprocess.run([*git, "add", "big.txt"], check=True)
+    await relay.say("/diff", parent_id=session.webex_thread_id)
+    last = relay.webex.bot_messages()[-1]
+    assert last.files == ["changes.html"]
+    assert (
+        b"<html" in last.file_bytes and b"line 249" in last.file_bytes and b"<script" not in last.file_bytes
+    )
 
 
 async def test_a_newly_registered_command_is_dispatched_and_listed_without_a_central_edit(

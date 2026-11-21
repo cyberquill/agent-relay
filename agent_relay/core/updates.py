@@ -1,8 +1,9 @@
 """Update handling: when an app's `Info.plist` version changes, re-run its adapters' self-tests.
 
 A failed self-test degrades the adapter (the AHP adapter is paused, the Cursor CDP adapter disabled):
-phone actions on it are refused with the reason until a later self-test passes. Each outcome is posted
-to the 1:1 space. A self-test that cannot run yet (the app is closed) is retried on the next check.
+phone actions on it are refused with the reason until a later self-test passes. Each outcome goes to the log
+and to the registry, where `relay doctor` and `/doctor` read it; nothing is posted to the phone. A self-test
+that cannot run yet (the app is closed) is retried on the next check.
 """
 
 from __future__ import annotations
@@ -18,16 +19,17 @@ from typing import Literal
 from agent_relay import paths
 from agent_relay.core.registry import Registry
 from agent_relay.log import get_logger
-from agent_relay.models.events import Harness
+from agent_relay.models.events import Harness, utcnow
 
 log = get_logger(__name__)
 
 Outcome = Literal["pass", "fail", "unknown"]
 type SelftestResult = tuple[Outcome, str]
 type Selftest = Callable[[], Awaitable[SelftestResult]]
-type Notify = Callable[[str], Awaitable[None]]
 
 DEGRADED_KEY = "adapter.degraded.{harness}"
+# The latest self-test outcome per harness, valued `<ISO-8601 UTC> <text>`; the doctor lists them.
+NOTICE_PREFIX = "updates.notice:"
 CHECK_EVERY_S = 600.0
 DEGRADED_VERB: dict[Harness, str] = {Harness.VSCODE_COPILOT: "paused", Harness.CURSOR_CDP: "disabled"}
 LABELS: dict[Harness, str] = {Harness.VSCODE_COPILOT: "VS Code agent host", Harness.CURSOR_CDP: "Cursor CDP"}
@@ -60,6 +62,15 @@ async def degraded_reason(registry: Registry, harness: Harness) -> str | None:
     return await registry.kv_get(DEGRADED_KEY.format(harness=harness.value))
 
 
+async def latest_notices(registry: Registry) -> dict[str, tuple[str, str]]:
+    """Harness value -> (when, text) of each recorded self-test outcome, from the registry."""
+    found: dict[str, tuple[str, str]] = {}
+    for key, value in (await registry.kv_prefix(NOTICE_PREFIX)).items():
+        when, _, text = value.partition(" ")
+        found[key[len(NOTICE_PREFIX) :]] = (when, text)
+    return found
+
+
 async def set_degraded(registry: Registry, harness: Harness, reason: str | None) -> None:
     key = DEGRADED_KEY.format(harness=harness.value)
     if reason is None:
@@ -72,7 +83,6 @@ async def set_degraded(registry: Registry, harness: Harness, reason: str | None)
 class UpdateWatcher:
     registry: Registry
     selftests: dict[Harness, Selftest]
-    notify: Notify
     apps: Sequence[WatchedApp] = DEFAULT_APPS
     versions_file: Path = field(default_factory=paths.versions_file)
 
@@ -100,13 +110,20 @@ class UpdateWatcher:
             await set_degraded(self.registry, harness, f"{why}: the {label} self-test failed ({detail})")
             log.warning(f"{label} self-test failed after {why}; {verb}")
             text = f"⚠️ {why}: the {label} self-test failed ({detail})."
-            return outcome, f"{text} It is {verb} until it passes; `/doctor` shows why."
+            return outcome, await self._record(harness, f"{text} It is {verb} until it passes.")
         if outcome == "pass":
             await set_degraded(self.registry, harness, None)
             if was is not None:
-                return outcome, f"✅ {label} passed its self-test again ({detail}); it is back on."
-            return outcome, f"✅ {why}: the {label} self-test passed ({detail})."
+                done = f"✅ {label} passed its self-test again ({detail}); it is back on."
+                return outcome, await self._record(harness, done)
+            return outcome, await self._record(harness, f"✅ {why}: the {label} self-test passed ({detail}).")
         return outcome, None
+
+    async def _record(self, harness: Harness, text: str) -> str:
+        """Keep the outcome where the doctor reads it, and in the log. Nothing goes to the phone."""
+        await self.registry.kv_set(f"{NOTICE_PREFIX}{harness.value}", f"{utcnow().isoformat()} {text}")
+        log.info(text)
+        return text
 
     async def check(self) -> list[str]:
         versions = self._load()
@@ -139,11 +156,6 @@ class UpdateWatcher:
                 if outcome == "pass" and notice:
                     notices.append(notice)
         self._save(versions)
-        for notice in notices:
-            try:
-                await self.notify(notice)
-            except Exception:
-                log.exception("could not post the update notice")
         return notices
 
     async def run(self, every_s: float = CHECK_EVERY_S) -> None:

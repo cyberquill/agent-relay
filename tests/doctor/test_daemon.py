@@ -1,4 +1,4 @@
-"""AC-37 (daemon half): adapters, the CDP gate, the Webex link, away mode, and the IPC/CLI wiring."""
+"""AC-37 (daemon half): adapters, the CDP gate, the Webex host, away mode, self-tests, the IPC wiring."""
 
 from __future__ import annotations
 
@@ -22,8 +22,8 @@ from agent_relay.doctor.daemon import (
     adapter_checks,
     away_checks,
     cdp_gate_check,
+    update_checks,
     webex_check,
-    webex_checks,
 )
 from agent_relay.doctor.model import Check, Report
 from agent_relay.models.config import CdpConfig, RelayConfig
@@ -34,7 +34,9 @@ from tests.fakes.apps import write_plist
 
 @dataclass
 class Link:
-    connected: bool = False
+    """Stands in for `WebexHost`: what the doctor reads."""
+
+    state: str = "starting"
     connections: int = 0
     last_error: str | None = None
 
@@ -87,46 +89,58 @@ async def test_cdp_gate_explains_why_it_is_closed_and_when_it_opens(
     assert moved.status == "warn" and "3.23.12 to 3.24.0" in moved.detail
 
 
-def test_webex_check_tracks_the_link(registry: Registry) -> None:
+def test_webex_check_tracks_the_host(registry: Registry) -> None:
     assert webex_check(view(registry)).status == "info"
-    assert webex_check(view(registry, webex=Link(connected=True, connections=2))).status == "ok"
+    assert webex_check(view(registry, webex=Link("connected", connections=2))).status == "ok"
     assert webex_check(view(registry, webex=Link())).status == "warn"
-    dropped = webex_check(view(registry, webex=Link(last_error="websocket dropped (ConnectionClosed)")))
-    assert dropped.status == "fail" and "ConnectionClosed" in dropped.detail
-
-
-def test_webex_checks_one_websocket_per_bot_when_there_are_several(registry: Registry) -> None:
-    control = Link(connected=True, connections=1)
-    single = webex_checks(view(registry, webex=control, webex_bots={"control": control}))
-    assert [(c.name, c.status) for c in single] == [("websocket", "ok")]
-    several = webex_checks(
-        view(registry, webex=control, webex_bots={"control": control, "cursor": Link(last_error="401")})
+    dropped = webex_check(
+        view(registry, webex=Link("unreachable", last_error="ConnectionClosed: websocket dropped"))
     )
-    assert [(c.name, c.status) for c in several] == [
-        ("websocket (control)", "ok"),
-        ("websocket (cursor)", "fail"),
-    ]
+    assert dropped.status == "fail" and "ConnectionClosed" in dropped.detail
+    assert dropped.fix is not None and "network" in dropped.fix
 
 
-async def test_away_checks_show_scopes_and_panic(registry: Registry, tmp_path: Path) -> None:
-    assert (await away_checks(view(registry)))[0].detail == "off globally"
+def test_doctor_reports_a_rejected_token_with_the_command_that_fixes_it(registry: Registry) -> None:
+    rejected = webex_check(view(registry, webex=Link("rejected", last_error="Webex token rejected (401)")))
+    assert rejected.status == "fail"
+    assert "rejected (401)" in rejected.detail and "retries" in rejected.detail
+    assert rejected.fix == "pbpaste | relay setup token --stdin"
+
+
+async def test_away_checks_show_the_global_flag_and_panic(registry: Registry, tmp_path: Path) -> None:
+    off = (await away_checks(view(registry)))[0]
+    assert off.status == "ok" and off.detail.startswith("off") and "/away" in off.detail
     await away.set_away(registry, True, str(tmp_path))
-    assert str(tmp_path.resolve()) in (await away_checks(view(registry)))[0].detail
+    on = (await away_checks(view(registry)))[0]
+    assert on.detail.startswith("on") and str(tmp_path) not in on.detail
     paths.pause_flag().parent.mkdir(parents=True, exist_ok=True)
     paths.pause_flag().touch()
     panic = (await away_checks(view(registry)))[0]
-    assert panic.status == "warn" and panic.fix == "send /away on"
+    assert panic.status == "warn" and panic.fix == "send /away"
+
+
+async def test_update_checks_list_the_selftest_outcomes_that_are_no_longer_posted(
+    registry: Registry,
+) -> None:
+    assert await update_checks(view(registry)) == []
+    stamp = "2026-11-21T10:00:00+00:00"
+    await registry.kv_set(f"{updates.NOTICE_PREFIX}vscode_copilot", f"{stamp} ✅ VS Code updated: passed")
+    await registry.kv_set(f"{updates.NOTICE_PREFIX}cursor_cdp", f"{stamp} ⚠️ Cursor updated: failed")
+    checks = {c.name: c for c in await update_checks(view(registry))}
+    assert checks["vscode_copilot"].status == "ok" and "2026-11-21 10:00" in checks["vscode_copilot"].detail
+    assert checks["cursor_cdp"].status == "warn"
+    assert checks["cursor_cdp"].fix == "relay selftest cursor-cdp"
 
 
 async def test_relayd_answers_the_doctor_op(registry: Registry) -> None:
     core = Core(RelayConfig(), registry)
     core.router.add_adapter(EmittingAdapter(count=0))
-    core.webex = Link(connected=True, connections=1)
+    core.webex = Link("connected", connections=1)
     reply = await core.handle_ipc({"op": "doctor"})
     raw = reply["checks"]
     assert isinstance(raw, list)
     names = {Check.model_validate(item).name for item in raw}
-    assert {"OpenCode", "websocket", "state"} <= names
+    assert {"OpenCode", "connection", "state"} <= names
     await core.router.stop()
 
 

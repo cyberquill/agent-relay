@@ -80,6 +80,10 @@ class Relay:
     def bot_texts(self) -> list[str]:
         return [m.markdown for m in self.webex.bot_messages()]
 
+    def thread_texts(self) -> list[str]:
+        """What the bot said inside session threads: the root status lines are not part of it."""
+        return [m.markdown for m in self.webex.bot_messages() if m.parent_id]
+
 
 @pytest.fixture
 async def relay(registry: Registry, tmp_path_factory: pytest.TempPathFactory) -> AsyncIterator[Relay]:
@@ -97,9 +101,7 @@ async def relay(registry: Registry, tmp_path_factory: pytest.TempPathFactory) ->
     adapter = EmittingAdapter(count=0)
     router.add_adapter(adapter)
     outbox = Outbox(api, registry, config.webex.allowed_email)
-    renderer = WebexRenderer(
-        outbox, registry, config.renderer, config.approvals.deadline_s, clock, clock.sleep
-    )
+    renderer = WebexRenderer(outbox, registry, config.renderer, clock, clock.sleep)
     router.subscribe(renderer)
     handlers = Handlers(service, renderer)
     access = AccessControl(registry, config.webex.allowed_email, webex.bot_id)

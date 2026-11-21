@@ -281,7 +281,7 @@ def abbreviate(text: str, limit: int = 600) -> str:
 
 
 def describe_tool(hook: HookInput, limit: int = 600) -> str:
-    """A human-readable summary of a tool call for approval cards, head and tail kept when long."""
+    """A human-readable summary of a tool call for the phone, head and tail kept when long."""
     name = hook.tool_name or hook.kind.value
     inp = hook.tool_input
     detail = ""

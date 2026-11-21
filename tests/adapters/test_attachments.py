@@ -269,17 +269,17 @@ async def test_cursor_cli_sends_images_as_image_blocks_only_when_the_agent_takes
             "size": 6,
         }
     )
-    assert blocks == [
-        {"type": "text", "text": "look"},
-        image,
-        {
-            "type": "resource_link",
-            "uri": (tmp_path / "run.log").resolve().as_uri(),
-            "name": "run.log",
-            "mimeType": "text/plain",
-            "size": 4,
-        },
-    ]
+    naming: list[dict[str, str]] = (
+        [{"type": "text", "text": "(the image above is shot.png)"}] if acp.images else []
+    )
+    log_link: dict[str, str | int] = {
+        "type": "resource_link",
+        "uri": (tmp_path / "run.log").resolve().as_uri(),
+        "name": "run.log",
+        "mimeType": "text/plain",
+        "size": 4,
+    }
+    assert blocks == [{"type": "text", "text": "look"}, image, *naming, log_link]
 
 
 async def test_cursor_cli_follow_up_prompts_carry_files_as_blocks(acp: AcpRig, tmp_path: Path) -> None:

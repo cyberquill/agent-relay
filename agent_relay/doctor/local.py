@@ -12,9 +12,10 @@ from collections.abc import Awaitable, Callable, Sequence
 from datetime import UTC, date, datetime
 from pathlib import Path
 
+import httpx
+
 from agent_relay import paths
 from agent_relay.adapters.ahp.endpoints import run_cli
-from agent_relay.core.presence import Probe, probe_lock_state
 from agent_relay.core.updates import DEFAULT_APPS, WatchedApp, app_version
 from agent_relay.doctor.model import Check, Status
 from agent_relay.fileops import PlannedWrite
@@ -27,11 +28,9 @@ from agent_relay.ops import launchd, stepping_away
 from agent_relay.ops.bundles import SKILL_NAME
 from agent_relay.settings import (
     KEYCHAIN_UNLOCK_COMMAND,
-    Item,
     KeychainLockedError,
     Secret,
-    bot_item,
-    configured_bots,
+    legacy_config_keys,
     lookup_secret,
     setup_command,
 )
@@ -226,29 +225,18 @@ PATCH_STATUS: dict[stepping_away.PatchState, tuple[Status, str]] = {
 
 
 def keychain_checks(config: RelayConfig) -> list[Check]:
-    bots = configured_bots(config.webex)
-    several = len(bots) > 1
-    wanted: list[tuple[Item, str, Status, str]] = []
-    for bot in bots:
-        item = bot_item(config.webex, bot)
-        named = f"{item.value} ({bot} bot)" if several else item.value
-        why = f"the {bot} bot cannot reach Webex" if several else "relayd cannot reach Webex"
-        wanted.append((item, named, "fail", why))
+    wanted: list[tuple[Secret, Status, str]] = [
+        (Secret.WEBEX_BOT_TOKEN, "fail", "relayd cannot reach Webex"),
+    ]
     if config.adapters.opencode:
         wanted.append(
-            (
-                Secret.OPENCODE_PASSWORD,
-                Secret.OPENCODE_PASSWORD.value,
-                "warn",
-                "the OpenCode launch agent will not start the server",
-            )
+            (Secret.OPENCODE_PASSWORD, "warn", "the OpenCode launch agent will not start the server")
         )
     if config.pwa.enabled:
-        wanted.append(
-            (Secret.PWA_TOKEN, Secret.PWA_TOKEN.value, "fail", "the PWA cannot authenticate the phone")
-        )
+        wanted.append((Secret.PWA_TOKEN, "fail", "the PWA cannot authenticate the phone"))
     checks: list[Check] = []
-    for secret, name, missing, why in wanted:
+    for secret, missing, why in wanted:
+        name = secret.value
         try:
             present = lookup_secret(secret) is not None
         except KeychainLockedError:
@@ -276,29 +264,61 @@ def keychain_checks(config: RelayConfig) -> list[Check]:
     return checks
 
 
-async def presence_check(config: RelayConfig, probe: Probe = probe_lock_state) -> Check:
-    """Whether away-on-lock is on, and whether this Mac's lock state can be read."""
-    name = "Away on screen lock"
-    if not config.presence.auto_away_on_lock:
-        return Check(
-            area="Presence",
-            name=name,
-            status="info",
-            detail="off (presence.auto_away_on_lock is false)",
-            fix="relay config set presence.auto_away_on_lock true",
+TOKEN_CHECK_TIMEOUT_S = 10.0
+
+
+async def webex_token_check(config: RelayConfig, client: httpx.AsyncClient | None = None) -> list[Check]:
+    """Ask Webex whether the stored bot token still works (`GET /people/me`), not just whether it exists.
+
+    A missing or unreadable item is the Keychain check's to report, so it adds nothing here.
+    """
+    name = "Webex token"
+    try:
+        token = lookup_secret(Secret.WEBEX_BOT_TOKEN)
+    except KeychainLockedError:
+        return []
+    if token is None:
+        return []
+    owned = client is None
+    http = client or httpx.AsyncClient(timeout=TOKEN_CHECK_TIMEOUT_S)
+    try:
+        response = await http.get(
+            f"{config.webex.api_base}/people/me", headers={"Authorization": f"Bearer {token}"}
         )
-    state = await probe()
-    if state == "unknown":
-        return Check(
-            area="Presence",
-            name=name,
+    except httpx.HTTPError as exc:
+        detail = f"could not reach Webex to test the token ({type(exc).__name__})"
+        return [Check(area="Webex", name=name, status="warn", detail=detail)]
+    finally:
+        if owned:
+            await http.aclose()
+    if response.status_code == 200:
+        return [Check(area="Webex", name=name, status="ok", detail="Webex accepts the token")]
+    if response.status_code in (401, 403):
+        return [
+            Check(
+                area="Webex",
+                name=name,
+                status="fail",
+                detail=f"Webex token rejected ({response.status_code})",
+                fix=setup_command(Secret.WEBEX_BOT_TOKEN),
+            )
+        ]
+    detail = f"Webex answered HTTP {response.status_code} when testing the token"
+    return [Check(area="Webex", name=name, status="warn", detail=detail)]
+
+
+def legacy_config_checks(file: Path | None = None) -> list[Check]:
+    """One line per relay.toml setting this build ignores, with the command that removes it."""
+    return [
+        Check(
+            area="Config",
+            name=key,
             status="warn",
-            detail=(
-                "on, but the lock state cannot be read (neither CoreGraphics nor `ioreg` answered); "
-                "away will not follow the lock"
-            ),
+            detail="ignored: this setting no longer exists in relay.toml",
+            fix=f"relay config unset {key}",
         )
-    return Check(area="Presence", name=name, status="ok", detail=f"on; the screen is {state}")
+        for key in legacy_config_keys(file)
+    ]
 
 
 async def launchd_checks(python: str, runner: Runner = run_cli, opencode: bool = True) -> list[Check]:

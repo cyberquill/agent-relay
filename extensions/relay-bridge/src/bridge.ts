@@ -179,11 +179,24 @@ export class Bridge {
   // reports its end (or failure) as an event.
   private turn(args: JsonObject): () => void {
     return () => {
-      Promise.resolve(this.api.executeCommand(COMMANDS.open, args)).then(
-        () => this.send({ event: "turn.done" }),
-        (err: unknown) => this.send({ event: "error", message: errorText(err) }),
-      );
+      this.withVendor(args)
+        .then((open) => this.api.executeCommand(COMMANDS.open, open))
+        .then(
+          () => this.send({ event: "turn.done" }),
+          (err: unknown) => this.send({ event: "error", message: errorText(err) }),
+        );
     };
+  }
+
+  // A selector with only an `id` makes VS Code refresh the models of every vendor before it picks one,
+  // and a vendor that needs a sign-in can leave that waiting for good. Naming the vendor limits it to one.
+  private async withVendor(args: JsonObject): Promise<JsonObject> {
+    const selector = args.modelSelector;
+    if (typeof selector !== "object" || selector === null || Array.isArray(selector)) return args;
+    const id = selector.id;
+    if (typeof id !== "string" || selector.vendor !== undefined) return args;
+    const found = (await this.api.selectChatModels()).find((m) => m.id === id);
+    return found ? { ...args, modelSelector: { vendor: found.vendor, id } } : args;
   }
 
   async handle(command: Command, followUps: Array<() => void> = []): Promise<Json> {

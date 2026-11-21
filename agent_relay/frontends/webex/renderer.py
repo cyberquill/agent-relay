@@ -1,12 +1,13 @@
 """Turn router events into Webex thread messages within the platform's limits.
 
-- One thread per session: the root is an editable markdown status line (edit budget 8).
-- `text.delta` is buffered, flushed at a paragraph boundary once ≥ flush_bytes, or after
-  flush_idle_s of quiet; no message exceeds max_message_bytes.
-- Tool events feed one progress message per turn, edited in place at most once per
-  progress_edit_interval_s and one edit short of Webex's cap until the closing edit; a spent message
-  is replaced by a fresh one.
-- A turn ends with a completion card. Final answers over the limit become `answer.md`.
+- One thread per session: the root is an editable markdown status line (edit budget 8), edited
+  silently as the session moves (⏳ running, ✅ done, 🅿️ parked, ▶️ released; 🏝️ while away mode is on).
+- A turn is one message: when it completes, its final answer (the last assistant message, not the
+  narration between tool calls) and a footer `⏱ 3m · 🔧 14 · 📝 4 files (+120 −8)`. Text deltas are
+  buffered and tool events only count; nothing is posted while the turn runs.
+- A long or rich answer is one message too: a short preview and a self-contained `answer.html`.
+- A desk session gets its thread at its first final result, question or error, not when it registers.
+- Questions are cards that are deleted once answered. Approvals never reach the phone.
 - Pacing: at most one message per pace_s per thread.
 """
 
@@ -15,27 +16,28 @@ from __future__ import annotations
 import asyncio
 import time
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
+import httpx
 from pydantic import JsonValue
 
+from agent_relay.core import away
 from agent_relay.core.registry import Registry
-from agent_relay.core.service.queue import HOOKED, mode_of
+from agent_relay.core.service import APP_LABELS
+from agent_relay.core.service.queue import mode_of
 from agent_relay.core.service.sessions import Changes, git_changes
-from agent_relay.frontends import card_state, request_cards
+from agent_relay.frontends import card_state, request_cards, rich
 from agent_relay.frontends.webex import cards
-from agent_relay.frontends.webex.api import MAX_EDITS, EditLimitError, Message, WebexApi, text_bytes
-from agent_relay.frontends.webex.bots import scoped
-from agent_relay.frontends.webex.cards import completion as completion_card
+from agent_relay.frontends.webex.api import EditLimitError, Message, WebexApi, WebexError, text_bytes
 from agent_relay.frontends.webex.links import neutralise_links
-from agent_relay.hook.shims import abbreviate
 from agent_relay.log import get_logger, log_body
-from agent_relay.models.config import CONTROL, BotName, QueueMode, RendererConfig
+from agent_relay.models.config import QueueMode, RendererConfig
 from agent_relay.models.events import (
     ApprovalRequested,
     ApprovalResolved,
     ErrorEvent,
     Event,
+    Origin,
     QuestionAnswered,
     QuestionAsked,
     SessionParked,
@@ -45,31 +47,23 @@ from agent_relay.models.events import (
     ToolFinished,
     ToolStarted,
     TurnCompleted,
+    utcnow,
 )
 from agent_relay.models.sessions import SessionRecord, SessionStatus
 
 log = get_logger(__name__)
 
 ROOM_KEY = "webex.room_id"
-TOOL_DETAIL_CHARS = 300
-PROGRESS_LINES = 10
-# One edit stays spare under Webex's cap for the closing "done" edit.
-PROGRESS_EDITS = MAX_EDITS - 1
 ROOT_POLL_S = 5.0
 ROOT_CLOSING_RESERVE = 2
-# Events after which the root status line is looked at again, besides a turn's first event.
-ROOT_MILESTONES = (TurnCompleted, SessionParked, SessionReleased)
-APPROVAL_OUTCOME = {
-    "allow": "✅ Allowed",
-    "allow_session": "✅ Allowed for this session",
-    "deny": "❌ Denied",
-    "desk": "🖥️ Away mode off; answer it at the desk",
-}
+# Events after which the root status line is looked at again, besides a turn's first work.
+ROOT_MILESTONES = (TurnCompleted, SessionParked, SessionReleased, ErrorEvent)
 CLOSED_OUTCOME = {
     "ended": "🏁 The session ended; request closed",
     "stopped": "⏹️ Stopped; request closed",
     "abandoned": "🔌 The agent went away; request closed",
 }
+NO_TEXT = "✅ Done."
 
 
 def chunk_text(text: str, max_bytes: int) -> list[str]:
@@ -86,6 +80,18 @@ def chunk_text(text: str, max_bytes: int) -> list[str]:
     if rest.strip():
         chunks.append(rest)
     return [c for c in chunks if c.strip()]
+
+
+def answer_meta(session: SessionRecord, footer: str) -> rich.AnswerMeta:
+    """What the HTML header of an answer or a diff says about the session."""
+    workspace = (session.workspace or "").rstrip("/").rsplit("/", 1)[-1]
+    return rich.AnswerMeta(
+        app=APP_LABELS.get(session.harness, session.harness.value),
+        workspace=workspace or "?",
+        model=session.model,
+        when=utcnow(),
+        footer=footer,
+    )
 
 
 def _worth_root_edit(status: SessionStatus, remaining: int) -> bool:
@@ -123,25 +129,23 @@ class Pacer:
 
 
 class Outbox:
-    """Posts to the user's 1:1 room with one bot, learning its id from the first reply."""
+    """Posts to the user's 1:1 room with the bot, learning its id from the first reply."""
 
-    def __init__(self, api: WebexApi, registry: Registry, allowed_email: str, bot: BotName = CONTROL) -> None:
+    def __init__(self, api: WebexApi, registry: Registry, allowed_email: str) -> None:
         self.api = api
-        self.bot = bot
         self._registry = registry
         self._email = allowed_email
         self._room_id: str | None = None
-        self._room_key = scoped(ROOM_KEY, bot)
 
     async def room_id(self) -> str | None:
         if self._room_id is None:
-            self._room_id = await self._registry.kv_get(self._room_key)
+            self._room_id = await self._registry.kv_get(ROOM_KEY)
         return self._room_id
 
     async def remember_room(self, room_id: str) -> None:
         if room_id and room_id != self._room_id:
             self._room_id = room_id
-            await self._registry.kv_set(self._room_key, room_id)
+            await self._registry.kv_set(ROOM_KEY, room_id)
 
     async def post(
         self,
@@ -173,35 +177,33 @@ class Outbox:
             return False
         return True
 
+    async def delete(self, message_id: str) -> bool:
+        """Delete one of the bot's messages. A failure (already gone, no right) is logged, never raised."""
+        try:
+            await self.api.delete_message(message_id)
+        except (WebexError, httpx.HTTPError, OSError) as exc:
+            log.debug(f"could not delete message {message_id}: {type(exc).__name__}")
+            return False
+        return True
+
 
 @dataclass
 class _Thread:
     session_key: str
     root_id: str
-    text: str = ""
-    streamed: bool = False
-    last_activity: float = 0.0
     root_edits: int = 0
     last_root: str = ""
-    # The turn in progress.
-    turn_started: float | None = None
-    working: bool = False
-    tool_count: int = 0
-    progress_lines: list[str] = field(default_factory=list)
-    progress_id: str | None = None
-    progress_edits: int = 0
-    progress_at: float = 0.0
-    progress_dirty: bool = False
     status_checked: float = float("-inf")
 
-    def reset_turn(self) -> None:
-        self.turn_started = None
-        self.working = False
-        self.tool_count = 0
-        self.progress_lines = []
-        self.progress_id = None
-        self.progress_edits = 0
-        self.progress_dirty = False
+
+@dataclass
+class _Turn:
+    """The turn in progress, kept apart from the thread: a desk session has none until its first post."""
+
+    started: float | None = None
+    tools: int = 0
+    working: bool = False
+    segment: str = ""  # the text since the last tool call: what the final answer falls back to
 
 
 class WebexRenderer:
@@ -210,27 +212,22 @@ class WebexRenderer:
         outbox: Outbox,
         registry: Registry,
         config: RendererConfig,
-        approval_deadline_s: int = 600,
         clock: Callable[[], float] = time.monotonic,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
         *,
         default_queue_mode: QueueMode = "queue",
     ) -> None:
         self._default_queue_mode = default_queue_mode
-        self._approval_deadline_s = approval_deadline_s
         self.outbox = outbox
         self._registry = registry
         self._config = config
         self._clock = clock
         self._pacer = Pacer(config.pace_s, clock, sleep)
         self._threads: dict[str, _Thread] = {}
+        self._turns: dict[str, _Turn] = {}
         self._has_threads = asyncio.Event()
         self._creating: dict[str, asyncio.Lock] = {}
         self._locks: dict[str, asyncio.Lock] = {}
-
-    @property
-    def bot(self) -> BotName:
-        return self.outbox.bot
 
     # threads
 
@@ -255,22 +252,25 @@ class WebexRenderer:
                     session.session_key,
                     root_id,
                     root_edits=edits if isinstance(edits, int) else 0,
-                    last_root=cards.root_markdown(session),
+                    last_root=cards.root_markdown(
+                        session, away=await away.is_away(self._registry, session.workspace)
+                    ),
                 )
             )
             return root_id
         await self._pacer.wait("root")
-        markdown = cards.root_markdown(session)
+        markdown = cards.root_markdown(session, away=await away.is_away(self._registry, session.workspace))
         message = await self.outbox.post(markdown)
-        await self._registry.update_session_fields(
-            session.session_key, webex_thread_id=message.id, webex_bot=self.bot
-        )
+        await self._registry.update_session_fields(session.session_key, webex_thread_id=message.id)
         self._track(_Thread(session.session_key, message.id, last_root=markdown))
         return message.id
 
     def _track(self, thread: _Thread) -> None:
         self._threads[thread.session_key] = thread
         self._has_threads.set()
+
+    def has_thread(self, session: SessionRecord) -> bool:
+        return session.session_key in self._threads or bool(session.webex_thread_id)
 
     async def refresh_root(self, session: SessionRecord) -> None:
         """Edit the root status line, within the edit budget. Unchanged lines cost nothing.
@@ -281,13 +281,14 @@ class WebexRenderer:
         """
         root_id = await self.thread_for(session)
         thread = self._threads[session.session_key]
-        base = cards.root_markdown(session)
+        is_away = await away.is_away(self._registry, session.workspace)
+        base = cards.root_markdown(session, away=is_away)
         remaining = self._config.root_edit_budget - thread.root_edits
         if base == thread.last_root or not _worth_root_edit(session.status, remaining):
             return
         waiting = len(await self._registry.list_queued(session.session_key))
         mode = mode_of(session, self._default_queue_mode)
-        if await self.outbox.edit(root_id, cards.root_markdown(session, waiting, mode)):
+        if await self.outbox.edit(root_id, cards.root_markdown(session, waiting, mode, is_away)):
             thread.root_edits += 1
             thread.last_root = base
             await self._registry.set_session_extra(session.session_key, "root_edits", thread.root_edits)
@@ -317,7 +318,7 @@ class WebexRenderer:
 
     async def handle(self, event: Event) -> None:
         if isinstance(event, ErrorEvent) and event.session_key.startswith("adapter:"):
-            await self.post_top(f"⚠️ {event.message}")
+            log.warning(f"adapter error, not posted to the phone: {event.message}")
             return
         session = await self._registry.get_session(event.session_key)
         if session is None:
@@ -327,226 +328,131 @@ class WebexRenderer:
             await self._render(session, event)
 
     async def _render(self, session: SessionRecord, event: Event) -> None:
-        await self.thread_for(session)
-        thread = self._threads[session.session_key]
-        thread.last_activity = self._clock()
-        if thread.turn_started is None and isinstance(event, SessionStarted | TextDelta | ToolStarted):
-            thread.turn_started = thread.last_activity
-        first_work = isinstance(event, TextDelta | ToolStarted) and not thread.working
-        thread.working = thread.working or first_work
+        key = session.session_key
+        now = self._clock()
+        turn = self._turns.get(key) or _Turn()
+        if isinstance(event, SessionStarted | TextDelta | ToolStarted):
+            self._turns[key] = turn
+            if turn.started is None:
+                turn.started = now
+        first_work = isinstance(event, TextDelta | ToolStarted) and not turn.working
+        turn.working = turn.working or first_work
         match event:
             case SessionStarted():
-                await self.refresh_root(session)
+                if session.origin is Origin.PHONE or self.has_thread(session):
+                    await self.thread_for(session)
+                    await self.refresh_root(session)
             case TextDelta(text=text):
-                thread.text += text
-                thread.streamed = True
-                await self._progress(session, thread)
-                await self._flush(session, thread, final=False)
-            case ToolStarted(name=name, detail=detail):
-                shown = f": {abbreviate(detail, TOOL_DETAIL_CHARS)}" if detail else ""
-                thread.tool_count += 1
-                await self._note_tool(session, thread, f"🔧 {name}{shown}")
-            case ToolFinished(name=name, ok=ok, summary=summary):
-                if not ok:
-                    await self._note_tool(session, thread, f"❌ {name}{f': {summary}' if summary else ''}")
+                turn.segment += text
+            case ToolStarted():
+                turn.tools += 1
+                turn.segment = ""
             case TurnCompleted(text=text):
                 try:
-                    await self._progress(session, thread, done=True)
-                    if not thread.streamed and text:
-                        thread.text += text
-                    await self._flush(session, thread, final=True)
-                    await self._post_completion(session, thread)
+                    await self._post_final(session, turn, text)
                 finally:
-                    thread.streamed = False
-                    thread.reset_turn()
-            case SessionParked():
-                await self._progress(session, thread)
-                await self._flush(session, thread, final=True)
-                await self.post_in_thread(session, "🅿️ Parked. Reply here to continue, or `/back` to release.")
-            case SessionReleased(reason=reason):
-                await self.post_in_thread(session, f"▶️ Released ({reason}).")
+                    self._turns.pop(key, None)
             case ErrorEvent(message=message):
-                await self._flush(session, thread, final=True)
+                self._turns.pop(key, None)
                 await self.post_in_thread(session, f"⚠️ {message}")
-            case ApprovalRequested() as asked:
-                await self._progress(session, thread)
-                await self._flush(session, thread, final=True)
-                markdown, card = await request_cards.approval_card(
-                    self._registry, session, asked, self._approval_deadline_s
-                )
-                posted = await self.post_in_thread(session, markdown, card=card)
-                await self._registry.set_pending_message(asked.request_id, posted.id)
-            case QuestionAsked() as asked_question:
-                await self._progress(session, thread)
-                await self._flush(session, thread, final=True)
-                safe = asked_question.model_copy(
-                    update={"question": neutralise_links(asked_question.question)}
-                )
+            case QuestionAsked() as asked:
+                turn.segment = ""
+                safe = asked.model_copy(update={"question": neutralise_links(asked.question)})
                 markdown, card = await request_cards.question_card(self._registry, session, safe)
                 posted = await self.post_in_thread(session, markdown, card=card)
-                await self._registry.set_pending_message(asked_question.request_id, posted.id)
-            case ApprovalResolved(request_id=request_id, decision=decision, by=by):
-                if by in CLOSED_OUTCOME:
-                    await self._close_card(request_id, CLOSED_OUTCOME[by], None)
-                else:
-                    await self._close_card(request_id, APPROVAL_OUTCOME[decision], by)
+                await self._registry.set_pending_message(asked.request_id, posted.id)
             case QuestionAnswered(request_id=request_id, answer=answer, by=by):
                 await card_state.drop_offer(self._registry, request_id)
-                if by in CLOSED_OUTCOME:
-                    await self._close_card(request_id, CLOSED_OUTCOME[by], None)
-                else:
-                    await self._close_card(
-                        request_id, f"💬 Answered: {answer}" if answer else "⏭️ Skipped", None
-                    )
-        if first_work or isinstance(event, ROOT_MILESTONES):
+                outcome = CLOSED_OUTCOME.get(by) or (f"💬 Answered: {answer}" if answer else "⏭️ Skipped")
+                await self._close_card(request_id, outcome)
+            case (
+                ToolFinished()
+                | ApprovalRequested()
+                | ApprovalResolved()
+                | SessionParked()
+                | SessionReleased()
+            ):
+                pass  # counted, ignored or shown only by the root line: nothing is posted
+        if self.has_thread(session) and (first_work or isinstance(event, ROOT_MILESTONES)):
             await self.refresh_root(await self._current(session))
 
     async def _current(self, session: SessionRecord) -> SessionRecord:
         """The session as stored now; its status may have moved while the event was handled."""
         return await self._registry.get_session(session.session_key) or session
 
-    async def _flush(self, session: SessionRecord, thread: _Thread, final: bool) -> None:
-        cfg = self._config
-        if not thread.text.strip():
-            thread.text = ""
-            return
-        if final:
-            text, thread.text = thread.text, ""
-            if text_bytes(text) > cfg.max_message_bytes and not thread.streamed:
-                await self.post_in_thread(
-                    session,
-                    "📎 The full answer is attached.",
-                    file=("answer.md", text.encode("utf-8"), "text/markdown"),
-                )
-                return
-            for piece in chunk_text(neutralise_links(text), cfg.max_message_bytes):
-                await self.post_in_thread(session, piece)
-            return
-        if text_bytes(thread.text) < cfg.flush_bytes:
-            return
-        boundary = thread.text.rfind("\n\n")
-        if boundary <= 0 and text_bytes(thread.text) < cfg.max_message_bytes:
-            return
-        if boundary <= 0:
-            boundary = len(thread.text)
-        ready, thread.text = thread.text[:boundary], thread.text[boundary:].lstrip("\n")
-        for piece in chunk_text(neutralise_links(ready), cfg.max_message_bytes):
-            await self.post_in_thread(session, piece)
+    # the final message
 
-    async def _note_tool(self, session: SessionRecord, thread: _Thread, line: str) -> None:
-        thread.progress_lines.append(line)
-        thread.progress_dirty = True
-        await self._progress(session, thread)
-
-    def _progress_text(self, thread: _Thread, now: float, done: bool) -> str:
-        calls = thread.tool_count
-        head = ["✅ Done" if done else "⏳ Working", f"{calls} tool call{'' if calls == 1 else 's'}"]
-        if thread.turn_started is not None:
-            head.append(completion_card.duration_text(now - thread.turn_started))
-        lines = thread.progress_lines[-PROGRESS_LINES:]
-        while True:
-            older = len(thread.progress_lines) - len(lines)
-            body = [f"**{' · '.join(head)}**", *([f"… {older} earlier"] if older else []), *lines]
-            text = neutralise_links("\n".join(body))
-            if text_bytes(text) <= self._config.max_message_bytes or len(lines) <= 1:
-                return text
-            lines = lines[1:]
-
-    async def _progress(self, session: SessionRecord, thread: _Thread, done: bool = False) -> None:
-        """Show the turn's tool calls in its one progress message.
-
-        Edits are held to progress_edit_interval_s, except the closing one (`done`), which may use the
-        edit kept spare under Webex's cap. When the message's edits are spent a new message takes over
-        rather than going quiet.
-        """
-        message_id = thread.progress_id
-        if not thread.progress_dirty and not (done and message_id is not None):
-            return
-        now = self._clock()
-        if (
-            not done
-            and message_id is not None
-            and now - thread.progress_at < self._config.progress_edit_interval_s
-        ):
-            return
-        text = self._progress_text(thread, now, done)
-        limit = MAX_EDITS if done else PROGRESS_EDITS
-        if message_id is not None and thread.progress_edits < limit:
-            if await self.outbox.edit(message_id, text):
-                thread.progress_edits += 1
-                thread.progress_at = self._clock()
-                thread.progress_dirty = False
-                return
-            thread.progress_edits = MAX_EDITS
-        posted = await self.post_in_thread(session, text)
-        thread.progress_id = posted.id
-        thread.progress_edits = 0
-        thread.progress_at = self._clock()
-        thread.progress_dirty = False
-
-    async def _post_completion(self, session: SessionRecord, thread: _Thread) -> None:
-        """The card that ends a turn: duration, tool calls, what changed, and what to do next."""
+    async def _footer(self, session: SessionRecord, turn: _Turn) -> str:
         changes: Changes | None = await git_changes(session.workspace)
-        files = changes.files if changes else ()
-        seconds = self._clock() - thread.turn_started if thread.turn_started is not None else None
-        stats = completion_card.stats_line(
+        seconds = self._clock() - turn.started if turn.started is not None else None
+        return cards.footer_line(
             seconds,
-            thread.tool_count,
-            len(files),
+            turn.tools,
+            len(changes.files) if changes else 0,
             changes.added if changes else 0,
             changes.removed if changes else 0,
         )
-        top = [
-            (f.path, "binary" if f.added is None else f"+{f.added} −{f.removed or 0}")
-            for f in files[: completion_card.TOP_FILES]
-        ]
-        can_back = session.extra.get(HOOKED) is True
-        quick = self._config.quick_reply
-        ops = ["diff", "continue", *(["back"] if can_back else []), *(["send"] if quick else [])]
-        nonces = {op: await card_state.issue_nonce(self._registry) for op in ops}
-        card = completion_card.completion(
-            session.session_key,
-            stats,
-            top,
-            max(0, len(files) - completion_card.TOP_FILES),
-            nonces=nonces,
-            can_back=can_back,
-            quick_reply=quick,
-        )
-        markdown = f"✅ Turn complete · {stats}"
-        await self.post_in_thread(session, markdown, card=cards.fit_card(markdown, card))
 
-    async def _close_card(self, request_id: str, outcome: str, by: str | None) -> None:
-        """Edit the card's message once with its outcome."""
+    async def _post_final(self, session: SessionRecord, turn: _Turn, completed_text: str | None) -> None:
+        """The turn's one message: the last assistant message and the footer, or a preview and answer.html."""
+        cfg = self._config
+        text = (completed_text or "").strip() or turn.segment.strip()
+        footer = await self._footer(session, turn)
+        if text and rich.wants_html(text, mode=cfg.html_threshold, max_bytes=cfg.max_message_bytes):
+            page = await self._html_answer(session, text, footer)
+            if page is not None:
+                preview, attachment = page
+                await self.post_in_thread(session, f"{preview}\n\n{footer}".strip(), file=attachment)
+                return
+        body = neutralise_links(text) if text else NO_TEXT
+        room = cfg.max_message_bytes - text_bytes(footer) - 2
+        pieces = chunk_text(body, max(room, 1))
+        if not pieces:
+            pieces = [NO_TEXT]
+        pieces[-1] = f"{pieces[-1]}\n\n{footer}" if footer else pieces[-1]
+        for piece in pieces:
+            await self.post_in_thread(session, piece)
+
+    async def _html_answer(
+        self, session: SessionRecord, text: str, footer: str
+    ) -> tuple[str, tuple[str, bytes, str]] | None:
+        try:
+            answer = rich.render_answer(text, answer_meta(session, footer))
+        except Exception:
+            log.exception("could not render answer.html; sending the answer as text")
+            return None
+        return answer.preview, (answer.filename, answer.html, answer.content_type)
+
+    async def _close_card(self, request_id: str, outcome: str) -> None:
+        """Delete the question card once it is closed; if Webex will not, edit it to say how it ended."""
         request = await self._registry.get_pending(request_id)
         if request is None or request.webex_message_id is None:
             return
-        suffix = f" ({by})" if by and by != "phone" else ""
-        await self.outbox.edit(request.webex_message_id, f"{outcome}{suffix}")
+        if await self.outbox.delete(request.webex_message_id):
+            return
+        try:
+            await self.outbox.edit(request.webex_message_id, outcome)
+        except (WebexError, httpx.HTTPError) as exc:
+            log.debug(f"question card {request_id} could not be closed: {type(exc).__name__}")
+
+    # housekeeping
 
     async def tick(self) -> None:
-        """Show pending tool calls once their interval is up, flush text that has gone quiet for
-        flush_idle_s, and notice status changes no event announced (a stop, an app ending a session).
-        Called about once a second."""
+        """Notice status changes no event announced (a stop, an app ending a session) and forget
+        threads that have settled. Called about once a second."""
         now = self._clock()
         for key, thread in list(self._threads.items()):
-            has_text = bool(thread.text.strip())
-            polled = now - thread.status_checked >= ROOT_POLL_S
-            if not (has_text or thread.progress_dirty or polled):
+            if now - thread.status_checked < ROOT_POLL_S:
                 continue
             session = await self._registry.get_session(key)
             if session is None:
                 continue
             async with self._lock(key):
-                if polled:
-                    thread.status_checked = now
-                    await self.refresh_root(session)
-                await self._progress(session, thread)
-                if has_text and now - thread.last_activity >= self._config.flush_idle_s:
-                    await self._flush(session, thread, final=True)
-                    thread.streamed = True
-                if polled and self._settled(session, thread):
+                thread.status_checked = now
+                await self.refresh_root(session)
+                if await self._settled(session, thread):
                     self._threads.pop(key, None)
+                    self._turns.pop(key, None)
         if not self._threads:
             self._has_threads.clear()
 
@@ -554,11 +460,10 @@ class WebexRenderer:
         """Return once there is a thread for `tick` to look after."""
         await self._has_threads.wait()
 
-    def _settled(self, session: SessionRecord, thread: _Thread) -> bool:
+    async def _settled(self, session: SessionRecord, thread: _Thread) -> bool:
         """An ended session with nothing left to show; a later event reopens its thread from the record."""
-        if session.status is not SessionStatus.ENDED or thread.text.strip() or thread.progress_dirty:
+        if session.status is not SessionStatus.ENDED:
             return False
         remaining = self._config.root_edit_budget - thread.root_edits
-        return thread.last_root == cards.root_markdown(session) or not _worth_root_edit(
-            session.status, remaining
-        )
+        shown = cards.root_markdown(session, away=await away.is_away(self._registry, session.workspace))
+        return thread.last_root == shown or not _worth_root_edit(session.status, remaining)

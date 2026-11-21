@@ -103,9 +103,11 @@ def structured(result: CallToolResult) -> dict[str, object]:
 async def test_tools_are_listed_with_their_schemas(relayd: Relayd, relay_home: Path) -> None:
     async with client(relay_home, relayd.workspace) as mcp:
         tools = {tool.name: tool for tool in (await mcp.list_tools()).tools}
-    assert set(tools) == {"notify_phone", "ask_phone"}
+    assert set(tools) == {"notify_phone", "ask_phone", "send_phone_file"}
     assert set(tools["ask_phone"].inputSchema["properties"]) == {"question", "options", "timeout_s"}
     assert tools["ask_phone"].inputSchema["required"] == ["question"]
+    assert set(tools["send_phone_file"].inputSchema["properties"]) == {"path", "caption"}
+    assert tools["send_phone_file"].inputSchema["required"] == ["path"]
 
 
 async def test_notify_reaches_the_phone_session_of_the_workspace(relayd: Relayd, relay_home: Path) -> None:
@@ -161,7 +163,7 @@ async def test_desk_sessions_need_away_mode(relayd: Relayd, relay_home: Path) ->
         assert denied == {
             "outcome": "denied",
             "answer": None,
-            "reason": "away mode is off for this workspace",
+            "reason": "away mode is off",
         }
         await away.set_away(relayd.registry, True, str(relayd.workspace))
         delivered = structured(await mcp.call_tool("notify_phone", {"text": "on it"}))
@@ -216,3 +218,80 @@ async def test_busy_sessions_win_over_idle_ones(relayd: Relayd, relay_home: Path
     async with client(relay_home, relayd.workspace) as mcp:
         structured(await mcp.call_tool("notify_phone", {"text": "x"}))
     assert relayd.notes == [(busy.session_key, "x")]
+
+
+# send_phone_file, against a stand-in relayd that records the op it is sent
+
+
+@dataclass
+class FakeRelayd:
+    seen: list[dict[str, object]] = field(default_factory=list)
+    reply: dict[str, object] = field(default_factory=lambda: {"delivered": True})
+
+    async def handle(self, message: dict[str, object]) -> dict[str, object]:
+        self.seen.append(message)
+        return self.reply
+
+
+@pytest.fixture
+async def fake_relayd(relay_home: Path) -> AsyncIterator[FakeRelayd]:
+    fake = FakeRelayd()
+    server = IpcServer(paths.socket_path(), fake.handle, expected_uid=os.getuid())
+    await server.start()
+    yield fake
+    await server.stop()
+
+
+async def test_send_phone_file_sends_the_op_with_the_workspace_path_and_caption(
+    fake_relayd: FakeRelayd, relay_home: Path
+) -> None:
+    workspace = relay_home / "ws"
+    workspace.mkdir()
+    async with client(relay_home, workspace) as mcp:
+        result = structured(
+            await mcp.call_tool("send_phone_file", {"path": "report.html", "caption": "the report"})
+        )
+    assert result == {"delivered": True, "reason": None, "error": None}
+    assert fake_relayd.seen == [
+        {"op": "send_file", "workspace": str(workspace), "path": "report.html", "caption": "the report"}
+    ]
+
+
+async def test_send_phone_file_without_a_caption_sends_none(
+    fake_relayd: FakeRelayd, relay_home: Path
+) -> None:
+    async with client(relay_home, relay_home) as mcp:
+        structured(await mcp.call_tool("send_phone_file", {"path": "a.txt"}))
+    assert fake_relayd.seen[0]["caption"] is None
+
+
+async def test_send_phone_file_passes_the_reason_when_it_was_not_delivered(
+    fake_relayd: FakeRelayd, relay_home: Path
+) -> None:
+    fake_relayd.reply = {"delivered": False, "reason": "no relay session is live for this workspace"}
+    async with client(relay_home, relay_home) as mcp:
+        result = structured(await mcp.call_tool("send_phone_file", {"path": "a.txt"}))
+    assert result == {
+        "delivered": False,
+        "reason": "no relay session is live for this workspace",
+        "error": None,
+    }
+
+
+async def test_send_phone_file_reports_a_refusal_from_relayd_as_an_error(
+    fake_relayd: FakeRelayd, relay_home: Path
+) -> None:
+    fake_relayd.reply = {"error": "../x is outside this session's workspace"}
+    async with client(relay_home, relay_home) as mcp:
+        result = structured(await mcp.call_tool("send_phone_file", {"path": "../x"}))
+    assert result == {
+        "delivered": False,
+        "reason": None,
+        "error": "../x is outside this session's workspace",
+    }
+
+
+async def test_send_phone_file_degrades_without_relayd(relay_home: Path) -> None:
+    async with client(relay_home, relay_home) as mcp:
+        told = structured(await mcp.call_tool("send_phone_file", {"path": "a.txt"}))
+    assert told["delivered"] is False and "relay start" in str(told["error"])

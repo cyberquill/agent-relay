@@ -16,7 +16,6 @@ from agent_relay.core.registry import Registry
 from agent_relay.core.signals import Signals
 from agent_relay.log import get_logger
 from agent_relay.models.events import (
-    ApprovalResolved,
     Harness,
     QuestionAnswered,
     ResolvedBy,
@@ -73,7 +72,6 @@ class Lifecycle:
         await self._registry.set_session_status(session_key, to)
         if to is SessionStatus.ENDED:
             await self._wind_down(session, "ended", reason)
-            await self._registry.drop_session_grants(session_key)
             await self._release_adapter(session)
         log.debug(f"{session_key}: {session.status.value} -> {to.value} ({reason})")
         return await self._session(session_key)
@@ -143,33 +141,23 @@ class Lifecycle:
         await self._registry.drop_queued(session.session_key)
 
     async def _close_request(self, session: SessionRecord, request: PendingRequest, by: ResolvedBy) -> None:
-        answer: dict[str, JsonValue]
-        if request.kind == "approval":
-            answer = {"decision": "deny", "by": by}
-        else:
-            answer = {"answer": None, "by": by}
+        """Close an open request of a session that ended or was stopped. Only a question has anyone to
+        tell; an approval row left by an older version is just closed."""
+        answer: dict[str, JsonValue] = (
+            {"answer": None, "by": by} if request.kind == "question" else {"decision": "deny", "by": by}
+        )
         if not await self._registry.resolve_pending(request.request_id, answer, status="expired"):
             return
         self._signals.notify(pending_key(request.request_id))
-        if request.kind == "approval":
-            await self._publisher.publish(
-                ApprovalResolved(
-                    harness=session.harness,
-                    session_key=session.session_key,
-                    workspace=session.workspace,
-                    request_id=request.request_id,
-                    decision="deny",
-                    by=by,
-                )
+        if request.kind != "question":
+            return
+        await self._publisher.publish(
+            QuestionAnswered(
+                harness=session.harness,
+                session_key=session.session_key,
+                workspace=session.workspace,
+                request_id=request.request_id,
+                answer=None,
+                by=by,
             )
-        else:
-            await self._publisher.publish(
-                QuestionAnswered(
-                    harness=session.harness,
-                    session_key=session.session_key,
-                    workspace=session.workspace,
-                    request_id=request.request_id,
-                    answer=None,
-                    by=by,
-                )
-            )
+        )

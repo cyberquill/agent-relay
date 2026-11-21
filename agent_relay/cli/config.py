@@ -1,4 +1,4 @@
-"""`relay config set|show|import|sync`: relay settings, and one MCP server list for every harness."""
+"""`relay config set|unset|show|import|sync`: relay settings, and one MCP server list for every harness."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from pydantic import JsonValue, ValidationError
 
 from agent_relay.cli.output import DRY_RUN_HINT, fail, note, notes, out, python_option, written
 from agent_relay.models.config import RelayConfig
-from agent_relay.settings import load_config, save_config
+from agent_relay.settings import load_config, save_config, unset_config_key
 from agent_relay.sync.plan import CatalogMissingError, Plan, plan_import, plan_sync
 from agent_relay.sync.secrets import MissingMcpSecretError
 
@@ -65,10 +65,6 @@ def parse_value(raw: str) -> JsonValue:
     return value
 
 
-# Settings that are a name -> value map: `relay config set webex.bots.vscode <account>` adds an entry.
-MAP_SETTINGS = frozenset({"webex.bots"})
-
-
 def with_setting(config: RelayConfig, key: str, raw: str) -> RelayConfig:
     data: dict[str, JsonValue] = config.model_dump(mode="json")
     *sections, leaf = key.split(".")
@@ -78,7 +74,7 @@ def with_setting(config: RelayConfig, key: str, raw: str) -> RelayConfig:
         if not isinstance(child, dict):
             raise ValueError(f"unknown section {section!r} in {key!r}")
         node = child
-    if leaf not in node and ".".join(sections) not in MAP_SETTINGS:
+    if leaf not in node:
         raise ValueError(f"unknown setting {key!r}")
     node[leaf] = parse_value(raw)
     return RelayConfig.model_validate(data)
@@ -95,6 +91,19 @@ def set_(
     except (ValueError, ValidationError) as exc:
         raise fail(str(exc)) from exc
     out(f"wrote {save_config(updated)}")
+    note("restart relayd to apply: `relay start`")
+
+
+@app.command("unset")
+def unset(
+    key: Annotated[str, typer.Argument(help="Dotted key, e.g. webex.bots or approvals.deadline_s")],
+) -> None:
+    """Remove one setting from relay.toml (it falls back to its default). Also clears ignored legacy keys."""
+    try:
+        target = unset_config_key(key)
+    except (ValueError, ValidationError) as exc:
+        raise fail(str(exc)) from exc
+    out(f"wrote {target}")
     note("restart relayd to apply: `relay start`")
 
 

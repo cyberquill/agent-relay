@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 from pydantic import JsonValue
 
+from agent_relay import paths
 from agent_relay.adapters.ahp import uris
 from agent_relay.adapters.ahp.adapter import CHAT_EXTRA, TURN_EXTRA, AhpAdapter
 from agent_relay.adapters.ahp.endpoints import SUPPORTED_VERSIONS, Endpoint
@@ -18,14 +19,13 @@ from agent_relay.adapters.ahp.rpc import AhpConnectionError, AhpRpcError, Connec
 from agent_relay.adapters.base import UnsupportedError
 from agent_relay.core import away
 from agent_relay.core.claims import take_claim
-from agent_relay.core.hooks import APPROVED_CALL_KEY, HOOKED
+from agent_relay.core.hooks import HOOKED
 from agent_relay.core.registry import Registry
 from agent_relay.core.service import RelayError
 from agent_relay.daemon import Core
 from agent_relay.models.config import RelayConfig, Workspace, WorkspacesConfig
 from agent_relay.models.events import (
     ApprovalRequested,
-    ApprovalResolved,
     ErrorEvent,
     Event,
     Harness,
@@ -124,7 +124,7 @@ async def test_phone_session_replays_the_recorded_turn(rig: Rig) -> None:
     await until(lambda: rig.rec.of(TurnCompleted))
     created = dict(rig.host.requests)["createSession"]
     assert created["provider"] == "copilotcli"
-    assert created["config"] == {"isolation": "folder"}
+    assert created["config"] == {"isolation": "folder", "autoApprove": "autoApprove"}
     assert created["workingDirectories"] == [Path(WORKSPACE).resolve().as_uri()]
     chat = rig.chat_of(record)
     assert uris.chat_session(chat) == uris.session_uri(record.harness_id)
@@ -228,6 +228,13 @@ async def test_set_model_validates_and_applies_to_the_next_turn(rig: Rig) -> Non
     assert isinstance(second, dict) and second["model"] == {"id": "claude-sonnet-5"}
 
 
+def pause_relay() -> None:
+    """The /panic flag: the relay answers no tool permission while it exists."""
+    flag = paths.pause_flag()
+    flag.parent.mkdir(parents=True, exist_ok=True)
+    flag.write_text("paused", encoding="utf-8")
+
+
 async def quiet_start(rig: Rig) -> tuple[SessionRecord, str, str]:
     """A phone session whose turn stays open, so the test drives the server side."""
     rig.host.auto_reply = False
@@ -273,14 +280,9 @@ async def test_steering_while_a_turn_runs(rig: Rig) -> None:
     assert rig.host.dispatched[-1]["channel"] == chat
 
 
-async def test_tool_approval_round_trip(rig: Rig) -> None:
+async def test_tool_permission_is_allowed_at_once_and_never_reaches_a_sink(rig: Rig) -> None:
     _, chat, turn = await quiet_start(rig)
     await ask_tool(rig, chat, turn, "call-1")
-    await until(lambda: rig.rec.of(ApprovalRequested))
-    (asked,) = rig.rec.of(ApprovalRequested)
-    assert (asked.request_id, asked.tool, asked.detail) == ("call-1", "Shell", "Run `rm -rf build`")
-    assert [t.name for t in rig.rec.of(ToolStarted)] == ["Shell"]
-    assert await rig.core.service.answer_approval("call-1", "allow")
     await until(lambda: rig.host.actions("chat/toolCallConfirmed"))
     (confirmed,) = rig.host.actions("chat/toolCallConfirmed")
     assert confirmed == {
@@ -290,73 +292,52 @@ async def test_tool_approval_round_trip(rig: Rig) -> None:
         "approved": True,
         "confirmed": "user-action",
     }
+    await rig.core.router.join()
+    assert rig.rec.of(ApprovalRequested) == []
+    assert [t.name for t in rig.rec.of(ToolStarted)] == ["Shell"]
+    assert await rig.core.registry.get_pending("call-1") is None
 
 
-async def test_deny_and_session_scoped_options(rig: Rig) -> None:
+async def test_the_plain_approve_option_is_picked(rig: Rig) -> None:
     _, chat, turn = await quiet_start(rig)
     options: list[JsonValue] = [
-        {"id": "once", "label": "Allow", "kind": "approve"},
         {"id": "session", "label": "Allow in this Session", "kind": "approve"},
+        {"id": "once", "label": "Allow", "kind": "approve"},
         {"id": "no", "label": "Deny", "kind": "deny"},
     ]
     await ask_tool(rig, chat, turn, "call-2", options)
-    await ask_tool(rig, chat, turn, "call-3", options)
-    await until(lambda: len(rig.rec.of(ApprovalRequested)) == 2)
-    assert await rig.core.service.answer_approval("call-2", "deny")
-    assert await rig.core.service.answer_approval("call-3", "allow_session")
-    await until(lambda: len(rig.host.actions("chat/toolCallConfirmed")) == 2)
-    denied, scoped = rig.host.actions("chat/toolCallConfirmed")
-    assert (denied["approved"], denied["reason"], denied["selectedOptionId"]) == (False, "denied", "no")
-    assert (scoped["approved"], scoped["selectedOptionId"]) == (True, "session")
+    await until(lambda: rig.host.actions("chat/toolCallConfirmed"))
+    (allowed,) = rig.host.actions("chat/toolCallConfirmed")
+    assert (allowed["approved"], allowed["selectedOptionId"]) == (True, "session")
 
 
-async def test_workspace_allow_picks_the_plain_approve_option_and_a_deny_reason_is_sent(rig: Rig) -> None:
-    _, chat, turn = await quiet_start(rig)
+async def test_a_stopped_session_denies_with_the_deny_option_and_reason(rig: Rig) -> None:
+    record, chat, turn = await quiet_start(rig)
+    pause_relay()
     options: list[JsonValue] = [
         {"id": "once", "label": "Allow", "kind": "approve"},
-        {"id": "session", "label": "Allow in this Session", "kind": "approve"},
         {"id": "no", "label": "Deny", "kind": "deny"},
     ]
-    await ask_tool(rig, chat, turn, "call-6", options)
-    await ask_tool(rig, chat, turn, "call-7", options)
-    await until(lambda: len(rig.rec.of(ApprovalRequested)) == 2)
-    assert await rig.core.service.answer_approval("call-6", "allow_workspace")
-    assert await rig.core.service.answer_approval("call-7", "deny", reason="use the staging db")
-    await until(lambda: len(rig.host.actions("chat/toolCallConfirmed")) == 2)
-    allowed, denied = rig.host.actions("chat/toolCallConfirmed")
-    assert (allowed["approved"], allowed["selectedOptionId"]) == (True, "once")
-    assert (denied["approved"], denied["reasonMessage"]) == (False, "use the staging db")
-
-
-async def test_approval_answered_at_the_desk_closes_the_card(rig: Rig) -> None:
-    _, chat, turn = await quiet_start(rig)
-    await ask_tool(rig, chat, turn, "call-4")
-    await until(lambda: rig.core.registry.get_pending("call-4"))
-    await rig.host.push(
-        chat,
-        {
-            "type": "chat/toolCallConfirmed",
-            "turnId": turn,
-            "toolCallId": "call-4",
-            "approved": True,
-            "confirmed": "user-action",
-        },
-    )
-    await until(lambda: rig.rec.of(ApprovalResolved))
-    (resolved,) = rig.rec.of(ApprovalResolved)
-    assert (resolved.decision, resolved.by) == ("allow", "desk")
-    pending = await rig.core.registry.get_pending("call-4")
-    assert pending is not None and pending.status != "open"
+    await ask_tool(rig, chat, turn, "call-3", options)
+    await until(lambda: rig.rec.of(ApprovalRequested))
     assert rig.host.actions("chat/toolCallConfirmed") == []
-
-
-async def test_earlier_phone_decision_is_reused_without_a_second_card(rig: Rig) -> None:
-    _, chat, turn = await quiet_start(rig)
-    await rig.core.registry.kv_set(APPROVED_CALL_KEY.format(call_id="call-5"), "deny")
-    await ask_tool(rig, chat, turn, "call-5")
+    await rig.adapter.answer_approval(record, "call-3", "deny", "use the staging db")
     await until(lambda: rig.host.actions("chat/toolCallConfirmed"))
-    assert rig.host.actions("chat/toolCallConfirmed")[0]["approved"] is False
-    assert rig.rec.of(ApprovalRequested) == []
+    (denied,) = rig.host.actions("chat/toolCallConfirmed")
+    assert (denied["approved"], denied["selectedOptionId"], denied["reasonMessage"]) == (
+        False,
+        "no",
+        "use the staging db",
+    )
+
+
+async def test_a_paused_relay_leaves_the_tool_permission_to_the_app(rig: Rig) -> None:
+    _, chat, turn = await quiet_start(rig)
+    pause_relay()
+    await ask_tool(rig, chat, turn, "call-4")
+    await until(lambda: rig.rec.of(ApprovalRequested))
+    await asyncio.sleep(0.05)
+    assert rig.host.actions("chat/toolCallConfirmed") == []
 
 
 async def test_tool_completion_and_errors(rig: Rig) -> None:
@@ -448,6 +429,7 @@ async def hook_session(rig: Rig, sid: str) -> SessionRecord:
 
 async def test_hooked_desk_session_is_refined_and_streams_text_only(rig: Rig) -> None:
     sid = "11111111-2222-3333-4444-555555555555"
+    await away.set_away(rig.registry, True)
     record = await hook_session(rig, sid)
     session = rig.host.add_session(sid, WORKSPACE)
     await rig.host.push(uris.ROOT, {"type": "root/activeSessionsChanged", "activeSessions": 1})
@@ -562,6 +544,7 @@ async def test_reconnect_clears_a_turn_on_a_session_the_host_forgot(rig: Rig) ->
 
 async def test_a_drop_clears_in_memory_turn_state(rig: Rig) -> None:
     _, chat, turn = await quiet_start(rig)
+    pause_relay()
     await ask_tool(rig, chat, turn, "call-9")
     await until(lambda: rig.rec.of(ApprovalRequested))
     assert rig.adapter._asks and rig.adapter._turn_started

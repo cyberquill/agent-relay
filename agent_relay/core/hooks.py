@@ -1,31 +1,25 @@
 """relayd's side of relay-hook: normalise, decide, and answer in the harness's own format.
 
-Nothing happens while away mode is off for the workspace (no noise at the desk): every event gets
-an empty reply and the harness carries on as if the relay were not installed.
+Nothing happens while away mode is off (no noise at the desk): every event of a desk session gets an
+empty reply and the harness carries on as if the relay were not installed. When the relay does answer a
+tool permission (a phone-held session, or a desk session while away) the answer is always allow, at
+once: there are no approval cards. After a panic the relay answers nothing and the app prompts.
 """
 
 from __future__ import annotations
 
 import hashlib
 import json
-from collections.abc import Callable
-from datetime import datetime
 
 from pydantic import JsonValue
 
 from agent_relay import paths
 from agent_relay.core import away
-from agent_relay.core.approvals import (
-    CLOSED_REASONS,
-    DEADLINE_REASON,
-    DENIED_REASON,
-    ApprovalBroker,
-    Outcome,
-)
+from agent_relay.core.approvals import ApprovalBroker
 from agent_relay.core.claims import UNCLAIMED_PREFIX, aliased, link_alias, take_claim
 from agent_relay.core.lifecycle import Lifecycle
 from agent_relay.core.parking import AWAY_OFF_REASON, ParkManager, phone_text
-from agent_relay.core.registry import RECENT_APPROVAL_PREFIX, RECENT_APPROVAL_TTL, Registry, stamped_at
+from agent_relay.core.registry import Registry
 from agent_relay.core.router import Router
 from agent_relay.hook import outputs, transcript
 from agent_relay.hook.shims import (
@@ -46,7 +40,6 @@ from agent_relay.models.events import (
     ToolFinished,
     ToolStarted,
     TurnCompleted,
-    utcnow,
 )
 from agent_relay.models.sessions import SessionRecord, SessionStatus
 
@@ -62,12 +55,11 @@ COPILOT_FAMILY = (Harness.VSCODE_COPILOT, Harness.VSCODE, Harness.COPILOT_CLI)
 CURSOR_FAMILY = (Harness.CURSOR, Harness.CURSOR_CLI)
 ACP_OWNED = frozenset({Harness.CURSOR_CLI})
 CURSOR_GATED = ("shell", "terminal", "mcp")
-RECENT_APPROVAL_KEY = f"{RECENT_APPROVAL_PREFIX}{{session_key}}:{{digest}}"
-APPROVED_CALL_KEY = "approved_call:{call_id}"
 OPENCODE_SERVER_PREFIX = "opencode.server:"
 LAST_TEXT = "last_text"
 RENEWING = "renewing"
 HOOKED = "hooked"
+ALLOW_REASON = "allowed by agent-relay"
 
 
 def _reply(stdout: dict[str, JsonValue] | None) -> Reply:
@@ -79,15 +71,6 @@ def _digest(hook: HookInput) -> str:
     return hashlib.sha256(raw.encode()).hexdigest()[:24]
 
 
-def _denial(outcome: Outcome) -> str:
-    """What the agent is told: the relay's own reason, or the user's words when they gave one."""
-    if outcome.by == "deadline":
-        return DEADLINE_REASON
-    if outcome.by in CLOSED_REASONS:
-        return CLOSED_REASONS[outcome.by]
-    return f"{DENIED_REASON[:-1]}: {outcome.reason}" if outcome.reason else DENIED_REASON
-
-
 class HookService:
     def __init__(
         self,
@@ -96,14 +79,12 @@ class HookService:
         broker: ApprovalBroker,
         parking: ParkManager,
         lifecycle: Lifecycle,
-        clock: Callable[[], datetime] = utcnow,
     ) -> None:
         self._registry = registry
         self._router = router
         self._broker = broker
         self._parking = parking
         self._lifecycle = lifecycle
-        self._clock = clock
 
     async def handle(self, message: dict[str, object]) -> Reply:
         family, event, payload = message.get("harness"), message.get("event"), message.get("payload")
@@ -146,10 +127,6 @@ class HookService:
             return await self._dispatch(session, hook)
         except Exception:
             log.exception(f"hook {hook.family.value}/{hook.event} failed")
-            if hook.kind in APPROVAL_KINDS:
-                return _reply(
-                    outputs.permission(hook, False, "agent-relay failed while asking the phone; denied.")
-                )
             return {}
 
     # sessions
@@ -220,6 +197,9 @@ class HookService:
 
     async def _dispatch(self, session: SessionRecord, hook: HookInput) -> Reply:
         kind = hook.kind
+        if hook.family is HookFamily.CURSOR and (kind in APPROVAL_KINDS or kind is HookKind.FILE_EDIT):
+            # A tool call follows the last reply Cursor reported, so that reply was narration.
+            await self._registry.set_session_extra(session.session_key, LAST_TEXT, None)
         if kind in APPROVAL_KINDS:
             return await self._approve(session, hook)
         if kind in AFTER_KINDS:
@@ -297,35 +277,15 @@ class HookService:
             )
 
     async def _approve(self, session: SessionRecord, hook: HookInput) -> Reply:
+        """The relay is answering this tool call: allow it, with no card and no wait."""
+        if paths.pause_flag().exists():
+            return {}
         tool = hook.tool_name or hook.kind.value
         if hook.family is HookFamily.CURSOR and hook.kind is HookKind.PRE_TOOL:
             if any(word in tool.lower() for word in CURSOR_GATED):
                 return {}
         await self._publish_tool(session, hook, None, started=True)
-        if self._broker.auto_allowed(tool):
-            return _reply(outputs.permission(hook, True, "read-only tool"))
-        recent = RECENT_APPROVAL_KEY.format(session_key=session.session_key, digest=_digest(hook))
-        if hook.kind is HookKind.PERMISSION and await self._recently_allowed(recent):
-            return _reply(outputs.permission(hook, True, "approved from the phone"))
-        outcome = await self._broker.request(session, tool, describe_tool(hook))
-        if outcome.deferred:
-            return {}
-        decision = "allow" if outcome.allowed else "deny"
-        await self._registry.kv_set(recent, f"{self._clock().isoformat()} {decision}")
-        if hook.tool_use_id:
-            await self._registry.kv_set(APPROVED_CALL_KEY.format(call_id=hook.tool_use_id), decision)
-        if outcome.allowed:
-            return _reply(outputs.permission(hook, True, "approved from the phone"))
-        return _reply(outputs.permission(hook, False, _denial(outcome)))
-
-    async def _recently_allowed(self, key: str) -> bool:
-        """True only for an allow stamped within the last RECENT_APPROVAL_TTL."""
-        stored = await self._registry.kv_get(key)
-        if stored is None:
-            return False
-        stamped = stamped_at(stored)
-        decision = stored.partition(" ")[2]
-        return stamped is not None and decision == "allow" and self._clock() - stamped < RECENT_APPROVAL_TTL
+        return _reply(outputs.allow(hook, ALLOW_REASON))
 
     async def _after_tool(self, session: SessionRecord, hook: HookInput) -> Reply:
         await self._publish_tool(session, hook, None, started=False)
@@ -351,7 +311,7 @@ class HookService:
             text = session.extra.get(LAST_TEXT)
             await self._registry.set_session_extra(session.session_key, LAST_TEXT, None)
             return text if isinstance(text, str) else None
-        return transcript.last_reply(hook.transcript_path)
+        return await transcript.wait_for_reply(hook.transcript_path)
 
     async def _stop(self, session: SessionRecord, hook: HookInput) -> Reply:
         text = await self._final_text(session, hook)

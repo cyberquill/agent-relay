@@ -13,7 +13,7 @@ def panic_confirm(*, nonce: str) -> dict[str, JsonValue]:
     body: list[JsonValue] = [
         text("Cancel everything?", weight="Bolder"),
         text(
-            "Denies open approvals, stops running turns and pauses the relay. "
+            "Closes open questions, stops running turns and pauses the relay. "
             f"This confirmation expires in {CONFIRM_WINDOW_S} seconds.",
             subtle=True,
         ),

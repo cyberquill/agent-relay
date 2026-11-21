@@ -150,8 +150,8 @@ def test_recall_skill_is_read_only_and_names_every_store() -> None:
 def test_commands_flip_away_mode(built: dict[str, Path]) -> None:
     away = (built["cursor"] / "commands" / "away.md").read_text(encoding="utf-8")
     back = (built["cursor"] / "commands" / "back.md").read_text(encoding="utf-8")
-    assert "relay away on --workspace" in away
-    assert "relay away off --workspace" in back
+    assert "relay away on`" in away and "--workspace" not in away
+    assert "relay away off`" in back and "--workspace" not in back
 
 
 def test_hooks_and_mcp_use_the_given_interpreter(tmp_path: Path) -> None:
@@ -195,4 +195,4 @@ async def test_bundled_mcp_command_starts_relay_mcp(built: dict[str, Path], harn
     async with stdio_client(params) as (read, write), ClientSession(read, write) as client:
         await client.initialize()
         names = {tool.name for tool in (await client.list_tools()).tools}
-    assert names == {"notify_phone", "ask_phone"}
+    assert names == {"notify_phone", "ask_phone", "send_phone_file"}

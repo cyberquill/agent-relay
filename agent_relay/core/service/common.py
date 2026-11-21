@@ -36,7 +36,6 @@ APP_LABELS: dict[Harness, str] = {
 }
 STICKY_MODEL_KEY = "model:{harness}"
 DIFF_LIMIT_BYTES = 2 * 1024 * 1024
-DESK_DECISION = "desk"
 
 
 class RelayError(RuntimeError):

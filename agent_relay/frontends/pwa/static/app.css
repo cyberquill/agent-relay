@@ -19,7 +19,6 @@ body { margin: 0; font: 15px/1.4 -apple-system, system-ui, sans-serif; backgroun
 #messages li { margin: 0 0 .6rem; padding: .5rem .7rem; border: 1px solid var(--line); border-radius: .5rem; white-space: pre-wrap; overflow-wrap: anywhere; }
 #messages li.mine { border-color: var(--accent); }
 #messages li.tool { color: var(--muted); font-size: .9em; border-style: dashed; }
-#messages li.live { border-style: dotted; }
 .card .subtle { color: var(--muted); }
 .card .bold { font-weight: 600; }
 .card .mono { font-family: ui-monospace, Menlo, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }

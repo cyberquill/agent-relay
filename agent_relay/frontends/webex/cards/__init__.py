@@ -3,8 +3,6 @@ and `nonce` (one use)."""
 
 from __future__ import annotations
 
-from agent_relay.frontends.webex.cards.approval import approval
-from agent_relay.frontends.webex.cards.away_scope import ALL_WORKSPACES, away_scope
 from agent_relay.frontends.webex.cards.common import (
     CARD_LIMIT_BYTES,
     MAX_ANSWER_CHARS,
@@ -13,8 +11,9 @@ from agent_relay.frontends.webex.cards.common import (
     SCHEMA,
     VERSION,
     card_fallback,
-    carry_fields,
+    duration_text,
     fit_card,
+    footer_line,
     is_hidden_model,
     message_bytes,
     minify,
@@ -22,13 +21,14 @@ from agent_relay.frontends.webex.cards.common import (
 from agent_relay.frontends.webex.cards.dashboard import OPS as DASHBOARD_OPS
 from agent_relay.frontends.webex.cards.dashboard import dashboard
 from agent_relay.frontends.webex.cards.model_switch import model_switch
-from agent_relay.frontends.webex.cards.new_session import AppOption, new_details, new_model, new_session
+from agent_relay.frontends.webex.cards.new_session import AGENT_LIMIT, attached_line, new_session
 from agent_relay.frontends.webex.cards.panic_confirm import CONFIRM_WINDOW_S, panic_confirm
 from agent_relay.frontends.webex.cards.question import question
-from agent_relay.frontends.webex.cards.root import STATUS_ICON, root_markdown, session_label
+from agent_relay.frontends.webex.cards.root import AWAY_ICON, STATUS_ICON, root_markdown, session_label
 
 __all__ = [
-    "ALL_WORKSPACES",
+    "AGENT_LIMIT",
+    "AWAY_ICON",
     "CARD_LIMIT_BYTES",
     "CONFIRM_WINDOW_S",
     "DASHBOARD_OPS",
@@ -38,19 +38,16 @@ __all__ = [
     "SCHEMA",
     "STATUS_ICON",
     "VERSION",
-    "AppOption",
-    "approval",
-    "away_scope",
+    "attached_line",
     "card_fallback",
-    "carry_fields",
     "dashboard",
+    "duration_text",
     "fit_card",
+    "footer_line",
     "is_hidden_model",
     "message_bytes",
     "minify",
     "model_switch",
-    "new_details",
-    "new_model",
     "new_session",
     "panic_confirm",
     "question",

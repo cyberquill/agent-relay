@@ -75,29 +75,25 @@ def test_describe_tool_names_mcp_server() -> None:
     assert describe_tool(hook) == "gh/t"
 
 
-def test_permission_outputs_per_format() -> None:
+def test_allow_output_per_format() -> None:
     vscode = normalize("copilot", "PreToolUse", {"session_id": "s", "tool_use_id": "t"})
-    assert outputs.permission(vscode, False, "no")["hookSpecificOutput"] == {
-        "hookEventName": "PreToolUse",
-        "permissionDecision": "deny",
-        "permissionDecisionReason": "no",
-    }
-    camel = normalize("copilot", "preToolUse", {"sessionId": "s"})
-    assert outputs.permission(camel, True, "ok") == {
+    assert outputs.allow(vscode, "ok") == {
         "permissionDecision": "allow",
         "permissionDecisionReason": "ok",
+        "hookSpecificOutput": {
+            "hookEventName": "PreToolUse",
+            "permissionDecision": "allow",
+            "permissionDecisionReason": "ok",
+        },
     }
+    camel = normalize("copilot", "preToolUse", {"sessionId": "s"})
+    assert outputs.allow(camel, "ok") == {"permissionDecision": "allow", "permissionDecisionReason": "ok"}
     perm = normalize("copilot", "permissionRequest", {"sessionId": "s"})
-    assert outputs.permission(perm, False, "no") == {"behavior": "deny", "message": "no"}
-    assert outputs.permission(perm, True, "") == {"behavior": "allow"}
+    assert outputs.allow(perm, "ok") == {"behavior": "allow"}
     cursor = normalize("cursor", "beforeShellExecution", {"conversation_id": "c", "command": "ls"})
-    assert outputs.permission(cursor, False, "no") == {
-        "permission": "deny",
-        "user_message": "no",
-        "agent_message": "no",
-    }
+    assert outputs.allow(cursor, "ok") == {"permission": "allow"}
     oc = normalize("opencode", "tool.execute.before", {"sessionID": "s"})
-    assert outputs.permission(oc, False, "no") == {"decision": "deny", "reason": "no"}
+    assert outputs.allow(oc, "ok") == {"decision": "allow", "reason": "ok"}
 
 
 def test_continue_and_context_outputs() -> None:

@@ -8,11 +8,12 @@ from collections.abc import Sequence
 from datetime import datetime
 from pathlib import Path
 
+import httpx
 import keyring
 import keyring.errors
 import pytest
 
-from agent_relay import paths
+from agent_relay import doctor, paths
 from agent_relay.core.updates import WatchedApp
 from agent_relay.doctor import local
 from agent_relay.doctor.model import Check
@@ -20,7 +21,7 @@ from agent_relay.fileops import Manifest, apply_writes
 from agent_relay.hook.installers import copilot as copilot_hooks
 from agent_relay.hook.installers import cursor as cursor_hooks
 from agent_relay.hook.installers import opencode as opencode_plugin
-from agent_relay.models.config import ApprovalConfig, PwaConfig, RelayConfig, WebexConfig
+from agent_relay.models.config import PwaConfig, QuestionsConfig, RelayConfig
 from agent_relay.ops import stepping_away
 from agent_relay.settings import KEYCHAIN_SERVICE, Secret
 from agent_relay.sync.plan import plan_import, plan_sync
@@ -109,7 +110,7 @@ def test_hooks_go_from_missing_to_current_to_stale() -> None:
     ]
     apply_writes(writes, Manifest())
     assert all(c.status == "ok" for c in local.hook_checks(config, PYTHON))
-    longer = RelayConfig(approvals=ApprovalConfig(deadline_s=1_200))
+    longer = RelayConfig(questions=QuestionsConfig(deadline_s=1_200))
     stale = by_name(local.hook_checks(longer, PYTHON))
     assert stale["Copilot hooks"].status == "warn"
     assert "out of date" in stale["Copilot hooks"].detail
@@ -164,6 +165,7 @@ def test_stepping_away_unpatched_is_a_warning() -> None:
 def test_keychain_checks_follow_the_config() -> None:
     checks = by_name(local.keychain_checks(RelayConfig()))
     assert checks["webex-bot-token"].status == "fail"
+    assert checks["webex-bot-token"].fix == "pbpaste | relay setup token --stdin"
     assert checks["opencode-password"].status == "warn"
     assert "pwa-token" not in checks
     keyring.set_password(KEYCHAIN_SERVICE, Secret.WEBEX_BOT_TOKEN.value, "fake-bot-value-0000")
@@ -171,18 +173,6 @@ def test_keychain_checks_follow_the_config() -> None:
     assert with_pwa["webex-bot-token"].status == "ok"
     assert with_pwa["pwa-token"].status == "fail"
     assert all("fake-bot-value" not in c.detail for c in with_pwa.values())
-
-
-def test_keychain_checks_one_per_bot_when_there_are_several() -> None:
-    config = RelayConfig(webex=WebexConfig(bots={"vscode": "webex-bot-vscode"}))
-    keyring.set_password(KEYCHAIN_SERVICE, Secret.WEBEX_BOT_TOKEN.value, "fake-bot-value-0000")
-    checks = by_name(local.keychain_checks(config))
-    assert checks["webex-bot-token (control bot)"].status == "ok"
-    vscode = checks["webex-bot-vscode (vscode bot)"]
-    assert vscode.status == "fail" and "vscode bot" in vscode.detail
-    assert vscode.fix == "pbpaste | relay setup bot vscode --stdin"
-    keyring.set_password(KEYCHAIN_SERVICE, "webex-bot-vscode", "fake-bot-value-1111")
-    assert by_name(local.keychain_checks(config))["webex-bot-vscode (vscode bot)"].status == "ok"
 
 
 def test_keychain_checks_say_locked_rather_than_missing(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -211,3 +201,76 @@ async def test_launchd_checks_report_opencode_off_without_asking_launchd() -> No
     checks = by_name(await local.launchd_checks(PYTHON, runner, opencode=False))
     assert checks["opencode"].status == "info" and "adapters.opencode" in checks["opencode"].detail
     assert not any("opencode" in call[-1] for call in runner.calls)
+
+
+def webex_http(status: int, seen: list[httpx.Request] | None = None) -> httpx.AsyncClient:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if seen is not None:
+            seen.append(request)
+        if status == 0:
+            raise httpx.ConnectError("no route to host")
+        return httpx.Response(status, json={"id": "bot", "message": "x"})
+
+    return httpx.AsyncClient(transport=httpx.MockTransport(handler))
+
+
+async def test_doctor_reports_rejected_token() -> None:
+    keyring.set_password(KEYCHAIN_SERVICE, Secret.WEBEX_BOT_TOKEN.value, "stale-token-0000")
+    seen: list[httpx.Request] = []
+    async with webex_http(401, seen) as http:
+        [check] = await local.webex_token_check(RelayConfig(), http)
+    assert check.status == "fail" and "rejected (401)" in check.detail
+    assert check.fix == "pbpaste | relay setup token --stdin"
+    assert [(r.method, r.url.path) for r in seen] == [("GET", "/v1/people/me")]
+    assert seen[0].headers["authorization"] == "Bearer stale-token-0000"
+    assert "stale-token-0000" not in check.detail and "stale-token-0000" not in (check.fix or "")
+
+
+async def test_doctor_accepts_a_working_token() -> None:
+    keyring.set_password(KEYCHAIN_SERVICE, Secret.WEBEX_BOT_TOKEN.value, "good-token-0000")
+    async with webex_http(200) as http:
+        [check] = await local.webex_token_check(RelayConfig(), http)
+    assert check.status == "ok" and "good-token" not in check.detail
+
+
+@pytest.mark.parametrize(("status", "word"), [(500, "HTTP 500"), (0, "could not reach")])
+async def test_doctor_only_warns_when_webex_cannot_say(status: int, word: str) -> None:
+    keyring.set_password(KEYCHAIN_SERVICE, Secret.WEBEX_BOT_TOKEN.value, "any-token-0000")
+    async with webex_http(status) as http:
+        [check] = await local.webex_token_check(RelayConfig(), http)
+    assert check.status == "warn" and word in check.detail
+
+
+async def test_the_token_check_adds_nothing_when_there_is_no_token_to_test(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async with webex_http(401) as http:
+        assert await local.webex_token_check(RelayConfig(), http) == []
+
+        def locked(service: str, username: str) -> str:
+            raise keyring.errors.KeyringLocked("(-25308, 'Unknown Error')")
+
+        monkeypatch.setattr(keyring, "get_password", locked)
+        assert await local.webex_token_check(RelayConfig(), http) == []
+
+
+async def test_local_checks_include_the_token_test() -> None:
+    keyring.set_password(KEYCHAIN_SERVICE, Secret.WEBEX_BOT_TOKEN.value, "stale-token-0000")
+    async with webex_http(401) as http:
+        checks = await doctor.local_checks(RelayConfig(), PYTHON, Runner({}), http)
+    token = by_name([c for c in checks if c.area == "Webex"])["Webex token"]
+    assert token.status == "fail"
+
+
+def test_legacy_settings_are_listed_with_the_command_that_removes_them() -> None:
+    assert local.legacy_config_checks() == []
+    paths.relay_toml().parent.mkdir(parents=True, exist_ok=True)
+    paths.relay_toml().write_text(
+        '[webex]\nallowed_email = "me@example.com"\n[webex.bots]\nvscode = "webex-bot-vscode"\n'
+        "[presence]\npoll_s = 5.0\n[approvals]\ndeadline_s = 30\n",
+        encoding="utf-8",
+    )
+    found = {c.name: c for c in local.legacy_config_checks()}
+    assert set(found) == {"webex.bots", "presence.poll_s", "approvals.deadline_s"}
+    assert all(c.status == "warn" for c in found.values())
+    assert found["webex.bots"].fix == "relay config unset webex.bots"

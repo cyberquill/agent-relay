@@ -46,20 +46,16 @@ def _section(name: str, icon: str, lines: list[str]) -> list[str]:
 
 async def _digest(h: Handlers, ctx: Context, cmd: Command) -> None:
     registry = h.service.registry
-    waiting: dict[str, list[str]] = {}
+    waiting: dict[str, int] = {}
     for request in await registry.open_pending():
-        waiting.setdefault(request.session_key, []).append(request.kind)
+        if request.kind == "question":
+            waiting[request.session_key] = waiting.get(request.session_key, 0) + 1
     now = utcnow()
     groups: dict[str, list[str]] = {"blocked": [], "running": [], "parked": [], "idle": [], "ended": []}
-    for session in h.scope.keep(await registry.list_sessions(include_ended=True)):
-        kinds = waiting.get(session.session_key)
-        if kinds:
-            parts = [
-                f"{n} open {word}{'' if n == 1 else 's'}"
-                for n, word in ((kinds.count("approval"), "approval"), (kinds.count("question"), "question"))
-                if n
-            ]
-            groups["blocked"].append(_line(session, f" — {', '.join(parts)}"))
+    for session in await registry.list_sessions(include_ended=True):
+        asked = waiting.get(session.session_key, 0)
+        if asked:
+            groups["blocked"].append(_line(session, f" — {asked} open question{'' if asked == 1 else 's'}"))
         elif session.status is SessionStatus.RUNNING:
             groups["running"].append(_line(session))
         elif session.status is SessionStatus.PARKED:
@@ -70,7 +66,7 @@ async def _digest(h: Handlers, ctx: Context, cmd: Command) -> None:
         else:
             groups["idle"].append(_line(session))
     lines = [
-        *_section("Blocked", "🔐", groups["blocked"]),
+        *_section("Waiting for you", "❓", groups["blocked"]),
         *_section("Running", "⏳", groups["running"]),
         *_section("Parked", "🅿️", groups["parked"]),
         *_section("Idle", "💤", groups["idle"]),

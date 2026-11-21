@@ -1,22 +1,17 @@
-"""Away mode, going back to the desk, and the panic button."""
+"""Away mode (one global flag), going back to the desk, and the panic button."""
 
 from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from pydantic import JsonValue
-
 from agent_relay import paths
 from agent_relay.core import away
-from agent_relay.core.keys import pending_key
-from agent_relay.core.presence import AUTO_KEY
 from agent_relay.core.registry import GLOBAL_SCOPE
 from agent_relay.core.service.approvals import Approvals
-from agent_relay.core.service.common import DESK_DECISION, Deps
+from agent_relay.core.service.common import Deps
 from agent_relay.core.service.discovery import Discovery
 from agent_relay.log import get_logger
 from agent_relay.models.capabilities import Capability
-from agent_relay.models.events import ApprovalResolved
 from agent_relay.models.sessions import SessionRecord, SessionStatus
 
 log = get_logger(__name__)
@@ -27,36 +22,31 @@ class AwayControl:
         self._deps = deps
         self._discovery = discovery
         self._approvals = approvals
+        # Desk sessions are the phone's business only while away mode is on (see core/away.py).
+        deps.router.set_desk_filter(away.DeskGate(deps.registry).visible)
 
     async def set_away(self, enabled: bool, session_key: str | None = None) -> str:
-        workspace = None
-        if session_key is not None:
-            workspace = (await self._discovery.session(session_key)).workspace
-        return await self.set_away_for(enabled, workspace)
+        """Away mode is global; `session_key` is accepted for old callers and ignored."""
+        return await self.set_away_for(enabled)
 
-    async def set_away_for(self, enabled: bool, workspace: str | None) -> str:
-        """Away on/off for one workspace scope (or all); off releases the parked sessions it covers."""
-        await away.set_away(self._deps.registry, enabled, workspace)
-        if workspace is None:
-            # A hand-made change to global away is no longer the lock's to undo.
-            await self._deps.registry.kv_delete(AUTO_KEY)
+    async def set_away_for(self, enabled: bool, workspace: str | None = None) -> str:
+        """Away on or off for the whole relay (`workspace` is ignored). Off releases parked sessions."""
+        await away.set_away(self._deps.registry, enabled)
         handed = 0
         if enabled:
             paths.pause_flag().unlink(missing_ok=True)
         else:
-            handed = await self._hand_matching(workspace)
-            await self._release_matching(workspace, "away mode off")
-            await self._return_to_desk()
-        scope = f"`{workspace}`" if workspace else "all workspaces"
-        reply = f"Away mode {'on' if enabled else 'off'} for {scope}."
+            handed = await self._hand_all()
+            await self._release_parked("away mode off")
+        reply = f"Away mode {'on' if enabled else 'off'}."
         if handed:
             reply += f" Handed {handed} phone session(s) to the desk."
         return reply
 
-    async def _hand_matching(self, workspace: str | None) -> int:
+    async def _hand_all(self) -> int:
         count = 0
         for session in await self._deps.registry.list_sessions():
-            if away.covers(workspace, session) and await self._hand_to_desk(session):
+            if await self._hand_to_desk(session):
                 count += 1
         return count
 
@@ -68,45 +58,10 @@ class AwayControl:
         log.info(f"handed {session.session_key} to the desk")
         return True
 
-    async def _return_to_desk(self) -> int:
-        """Hand hook-held approvals of desk sessions that are no longer away back to the desk.
-
-        Phone sessions keep theirs: nobody is at the desk for them. Adapter-held requests already
-        show their own prompt at the desk and are left to it or to the sweeper.
-        """
-        deps = self._deps
-        count = 0
-        for request in await deps.registry.open_pending():
-            if request.kind != "approval" or request.payload.get("source") == "adapter":
-                continue
-            session = await deps.registry.get_session(request.session_key)
-            if session is None or away.phone_held(session):
-                continue
-            if await away.is_away(deps.registry, session.workspace):
-                continue
-            answer: dict[str, JsonValue] = {"decision": DESK_DECISION, "by": "desk"}
-            if not await deps.registry.resolve_pending(request.request_id, answer):
-                continue
-            deps.signals.notify(pending_key(request.request_id))
-            await deps.router.publish(
-                ApprovalResolved(
-                    harness=session.harness,
-                    session_key=session.session_key,
-                    workspace=session.workspace,
-                    request_id=request.request_id,
-                    decision="desk",
-                    by="desk",
-                )
-            )
-            count += 1
-        return count
-
-    async def _release_matching(self, workspace: str | None, reason: str) -> int:
+    async def _release_parked(self, reason: str) -> int:
         count = 0
         for session in await self._deps.registry.list_sessions():
             if session.status is not SessionStatus.PARKED:
-                continue
-            if workspace is not None and away.scope_for(session.workspace) != away.scope_for(workspace):
                 continue
             await self.release(session.session_key, reason)
             count += 1
@@ -119,13 +74,11 @@ class AwayControl:
         if session_key is not None:
             session = await self._discovery.session(session_key)
             handed = await self._hand_to_desk(session)
-            if handed:
-                await self._return_to_desk()
             if session.status is not SessionStatus.PARKED:
                 return "Handed to the desk." if handed else "That session is not parked."
             await self.release(session_key, "/back")
             return "Released and handed to the desk." if handed else "Released."
-        count = await self._release_matching(None, "/back")
+        count = await self._release_parked("/back")
         return f"Released {count} parked session(s)."
 
     async def panic(self) -> str:
@@ -138,19 +91,17 @@ class AwayControl:
         except OSError:
             log.exception("panic: could not write the pause flag")
             failed.append("pause flag")
-        denied = 0
+        closed = 0
         try:
             requests = await deps.registry.open_pending()
         except Exception:
             log.exception("panic: could not list pending requests")
             requests, failed = [], [*failed, "pending requests"]
         for request in requests:
+            if request.kind != "question":
+                continue
             try:
-                if request.kind == "approval":
-                    done = await self._approvals.answer_approval(request.request_id, "deny", by="panic")
-                else:
-                    done = await self._approvals.answer_question(request.request_id, None, by="panic")
-                denied += int(done)
+                closed += int(await self._approvals.answer_question(request.request_id, None, by="panic"))
             except Exception:
                 log.exception(f"panic: could not answer {request.request_id}")
                 failed.append(f"request {request.request_id}")
@@ -184,12 +135,11 @@ class AwayControl:
                 failed.append(f"wind down {session.session_key}")
         try:
             await deps.registry.set_away(False, GLOBAL_SCOPE)
-            await deps.registry.kv_delete(AUTO_KEY)
         except Exception:
             log.exception("panic: could not clear away mode")
             failed.append("away mode")
         deps.signals.notify_all()
-        summary = f"🛑 Paused. Cancelled {cancelled} turn(s), denied {denied} request(s). `/away on` resumes."
+        summary = f"🛑 Paused. Cancelled {cancelled} turn(s), closed {closed} question(s). `/away` resumes."
         if failed:
             summary += (
                 f"\n⚠️ {len(failed)} step(s) failed: {', '.join(failed[:5])}{' …' if len(failed) > 5 else ''}."

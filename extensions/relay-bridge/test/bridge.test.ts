@@ -79,6 +79,23 @@ test("start opens a new Local chat then sends the prompt in agent mode", async (
   });
 });
 
+test("a model is selected with its vendor, so VS Code does not refresh every vendor first", async () => {
+  api.models = [
+    { id: "claude", name: "Claude", vendor: "copilot", family: "claude" },
+    { id: "gpt", name: "GPT", vendor: "other", family: "gpt" },
+  ];
+  await connected();
+  await relayd.call(8, "prompt", { query: "again", model: "gpt" });
+  assert.deepEqual(await relayd.next(), { event: "turn.done" });
+  assert.deepEqual(api.calls[0]?.args[0], {
+    query: "again",
+    mode: "agent",
+    blockOnResponse: true,
+    preserveInput: true,
+    modelSelector: { vendor: "other", id: "gpt" },
+  });
+});
+
 test("start replies before the turn finishes", async () => {
   api.blockOpen = true;
   await connected();

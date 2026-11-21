@@ -1,4 +1,4 @@
-"""`relay install|uninstall|start|stop|status|away|ws|config set|selftest`, and relayd's start-up post."""
+"""`relay install|uninstall|start|stop|status|away|ws|config set|selftest`."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from agent_relay import paths
 from agent_relay.cli import app
 from agent_relay.cli import daemon as cli_daemon
 from agent_relay.core.registry import Registry
-from agent_relay.daemon import Core, online_message
+from agent_relay.daemon import Core
 from agent_relay.ipc import JsonObj
 from agent_relay.models.config import AdaptersConfig, RelayConfig
 from agent_relay.models.events import Harness, Origin
@@ -64,8 +64,8 @@ def test_config_set_validates_and_saves() -> None:
         ("webex.nope", "1", "unknown setting"),
         ("nope.port", "1", "unknown section"),
         ("pwa.port", "not-a-port", "pwa.port"),
-        ("approvals.auto_allow", '["*"]', "global auto-approve"),
-        ("approvals.auto_allow", '["read", "?*"]', "global auto-approve"),
+        ("approvals.auto_allow", '["*"]', "unknown section"),
+        ("webex.bots.vscode", "webex-bot-vscode", "unknown section"),
     ],
 )
 def test_config_set_rejects_bad_values_and_leaves_the_file(key: str, value: str, message: str) -> None:
@@ -73,6 +73,21 @@ def test_config_set_rejects_bad_values_and_leaves_the_file(key: str, value: str,
     assert result.exit_code == 1
     assert message in result.output
     assert not paths.relay_toml().exists()
+
+
+def test_config_unset_removes_legacy_keys_and_writes_a_clean_file() -> None:
+    paths.relay_toml().parent.mkdir(parents=True, exist_ok=True)
+    paths.relay_toml().write_text(
+        '[webex]\nallowed_email = "me@example.com"\n\n[webex.bots]\nvscode = "webex-bot-vscode"\n'
+        "\n[presence]\npoll_s = 5.0\n",
+        encoding="utf-8",
+    )
+    result = runner.invoke(app, ["config", "unset", "webex.bots"])
+    assert result.exit_code == 0, result.output
+    assert "bots" not in paths.relay_toml().read_text(encoding="utf-8")
+    assert load_config().webex.allowed_email == "me@example.com"
+    missing = runner.invoke(app, ["config", "unset", "webex.bots"])
+    assert missing.exit_code == 1 and "not set" in missing.output
 
 
 def test_workspaces_add_list_and_remove(tmp_path: Path) -> None:
@@ -118,7 +133,9 @@ def test_away_without_relayd_points_at_relay_start() -> None:
     assert "relay start" in result.output
 
 
-def test_away_sends_the_resolved_workspace(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_away_is_global_and_a_workspace_option_is_ignored(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     sent: list[JsonObj] = []
 
     def fake(message: JsonObj, sock_path: Path, timeout: float | None) -> JsonObj:
@@ -128,8 +145,9 @@ def test_away_sends_the_resolved_workspace(monkeypatch: pytest.MonkeyPatch, tmp_
     monkeypatch.setattr(cli_daemon, "request", fake)
     result = runner.invoke(app, ["away", "off", "--workspace", str(tmp_path)])
     assert result.exit_code == 0, result.output
-    assert sent == [{"op": "away", "enabled": False, "workspace": str(tmp_path.resolve())}]
-    assert f"away mode off for {tmp_path.resolve()}" in result.output
+    assert sent == [{"op": "away", "enabled": False}]
+    assert "away mode off" in result.output
+    assert str(tmp_path) not in result.output
 
 
 def test_status_renders_the_daemon_reply(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -314,12 +332,3 @@ async def test_away_off_over_ipc_releases_parked_sessions(registry: Registry) ->
     assert await core.handle_ipc({"op": "away", "enabled": True, "workspace": "/w"}) == {"away": True}
     assert await core.handle_ipc({"op": "away", "enabled": False, "workspace": "/w"}) == {"away": False}
     assert await registry.kv_get("release:cursor:K1") == "away mode off"
-
-
-def test_online_message_mentions_recovery_and_pause() -> None:
-    assert online_message(0) == "🖥️ **Mac online** — relayd started."
-    paths.pause_flag().parent.mkdir(parents=True)
-    paths.pause_flag().write_text("now")
-    text = online_message(2)
-    assert "2 session(s) were parked" in text
-    assert "`/away on` resumes" in text

@@ -18,7 +18,6 @@ MULTI_HINT = (
 )
 OPTION_KINDS: dict[str, tuple[str, str]] = {
     "allow": ("allow_once", "allow-once"),
-    "allow_session": ("allow_always", "allow-always"),
     "deny": ("reject_once", "reject-once"),
 }
 

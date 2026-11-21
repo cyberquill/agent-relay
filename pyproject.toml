@@ -19,6 +19,7 @@ dependencies = [
     "pyyaml~=6.0",
     "tomli-w~=1.2",
     "certifi>=2026.7.22",
+    "markdown-it-py>=3",
 ]
 
 [project.optional-dependencies]
@@ -62,7 +63,7 @@ markers = ["live: needs RELAY_LIVE=1 and the real apps"]
 [tool.mypy]
 python_version = "3.13"
 cache_dir = ".cache/mypy"
-files = ["agent_relay", "tests", "scripts/smoke_live.py"]
+files = ["agent_relay", "tests", "scripts/phone_e2e.py"]
 strict = true
 warn_unreachable = true
 enable_error_code = ["ignore-without-code", "possibly-undefined", "redundant-expr"]

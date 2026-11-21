@@ -112,6 +112,7 @@ class FakeWebex:
         self.violations: list[str] = []
         self.rate_limit_next = 0
         self.rate_limited = 0
+        self.refuse_delete = False
         self.requests: list[str] = []
         self.contents: dict[str, FakeContent] = {}
         self.authorized_hosts: dict[str, set[str | None]] = {}
@@ -191,8 +192,13 @@ class FakeWebex:
         }
         return action_id
 
-    def bot_messages(self) -> list[FakeMessage]:
-        return [self.messages[i] for i in self.order if self.messages[i].person_id == self.bot_id]
+    def bot_messages(self, *, include_deleted: bool = False) -> list[FakeMessage]:
+        """What the bot posted, oldest first. A message the bot deleted afterwards is left out."""
+        return [
+            self.messages[i]
+            for i in self.order
+            if self.messages[i].person_id == self.bot_id and (include_deleted or not self.messages[i].deleted)
+        ]
 
     def last_card(self) -> tuple[FakeMessage, dict[str, JsonValue]]:
         for msg in reversed(self.bot_messages()):
@@ -391,6 +397,8 @@ class FakeWebex:
                 self.violations.append("edit too long")
             return httpx.Response(200, json=msg.as_json("direct"))
         if request.method == "DELETE":
+            if self.refuse_delete:
+                return httpx.Response(403, json={"message": "not allowed"})
             msg.deleted = True
             return httpx.Response(204)
         return httpx.Response(405)

@@ -2,12 +2,19 @@
 
 An exception in one sink or one adapter is logged and contained: other sessions keep flowing
 and other adapters keep running.
+
+Desk rule (decision U5): once a desk filter is set, the events of a desk-started session are withheld
+from every sink while away mode is off, so an adopted desk chat never reaches the phone at the desk.
+Gates (adapter-held request handling) still see every event, and a sink subscribed with `desk=True`
+(bookkeeping, not presentation) does too. Phone-held sessions and `adapter:` pseudo-sessions always
+pass: the filter itself decides, see `agent_relay.core.away.DeskGate`.
 """
 
 from __future__ import annotations
 
 import asyncio
 import contextlib
+from collections.abc import Awaitable, Callable
 from typing import Protocol
 
 from agent_relay.adapters.base import Adapter, StatusReporter
@@ -32,6 +39,8 @@ class Router:
         self, idle_worker_s: float = 300.0, restart_backoff: tuple[float, float] = (1.0, 60.0)
     ) -> None:
         self._sinks: list[EventSink] = []
+        self._desk_sinks: set[int] = set()
+        self._desk_filter: Callable[[Event], Awaitable[bool]] | None = None
         self._gates: list[EventGate] = []
         self._queues: dict[str, asyncio.Queue[Event]] = {}
         self._workers: dict[str, asyncio.Task[None]] = {}
@@ -42,8 +51,15 @@ class Router:
         self.adapter_failures: dict[Harness, int] = {}
         self._lifecycle: StatusReporter | None = None
 
-    def subscribe(self, sink: EventSink) -> None:
+    def subscribe(self, sink: EventSink, *, desk: bool = False) -> None:
+        """Add a sink. `desk=True` also delivers the events of desk sessions at the desk."""
         self._sinks.append(sink)
+        if desk or getattr(sink, "handles_desk_events", False):
+            self._desk_sinks.add(id(sink))
+
+    def set_desk_filter(self, visible: Callable[[Event], Awaitable[bool]]) -> None:
+        """Install the test that says whether the phone may see an event (see the module docstring)."""
+        self._desk_filter = visible
 
     def add_gate(self, gate: EventGate) -> None:
         self._gates.append(gate)
@@ -71,12 +87,24 @@ class Router:
                     return
                 continue
             if not await self._gated(event, session_key):
+                visible = await self._phone_may_see(event, session_key)
                 for sink in list(self._sinks):
+                    if not visible and id(sink) not in self._desk_sinks:
+                        continue
                     try:
                         await sink.handle(event)
                     except Exception:
                         log.exception(f"sink {type(sink).__name__} failed on {event.type} for {session_key}")
             queue.task_done()
+
+    async def _phone_may_see(self, event: Event, session_key: str) -> bool:
+        if self._desk_filter is None:
+            return True
+        try:
+            return await self._desk_filter(event)
+        except Exception:
+            log.exception(f"desk filter failed on {event.type} for {session_key}")
+            return True
 
     async def _gated(self, event: Event, session_key: str) -> bool:
         for gate in list(self._gates):

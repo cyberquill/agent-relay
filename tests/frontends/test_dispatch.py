@@ -6,6 +6,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Callable
+from datetime import UTC, datetime, timedelta
 
 import httpx
 import pytest
@@ -15,8 +16,9 @@ from agent_relay.core.registry import SEEN_PREFIX
 from agent_relay.frontends.webex.api import AttachmentAction, Room, WebexError
 from agent_relay.frontends.webex.handlers import Context
 from agent_relay.frontends.webex.ws_client import Activity
-from agent_relay.models.sessions import SessionRecord
-from tests.frontends.conftest import Relay
+from agent_relay.models.events import Harness, QuestionAsked
+from agent_relay.models.sessions import PendingRequest, SessionRecord
+from tests.frontends.conftest import Relay, submit_data
 
 
 async def until(condition: Callable[[], bool], timeout: float = 2.0) -> None:
@@ -156,15 +158,32 @@ async def test_closing_cancels_outstanding_handlers(relay: Relay, monkeypatch: p
 
 
 async def _card_tap(relay: Relay) -> AttachmentAction:
-    """A tap on the first `/new` card, as Webex would deliver it."""
-    await relay.say("/new")
-    msg, _ = relay.webex.last_card()
-    inputs: dict[str, JsonValue] = {
-        "relay": "new",
-        "step": "app",
-        "value": "opencode",
-        "nonce": await relay.nonce(),
-    }
+    """A tap on a question card, as Webex would deliver it."""
+    session = await relay.registry.create_session(
+        SessionRecord(
+            session_key="opencode:tap", harness=Harness.OPENCODE, harness_id="tap", workspace="/w/proj"
+        )
+    )
+    await relay.registry.add_pending(
+        PendingRequest(
+            request_id="q1",
+            kind="question",
+            session_key=session.session_key,
+            payload={"source": "adapter"},
+            deadline=datetime.now(UTC) + timedelta(minutes=10),
+        )
+    )
+    await relay.frontend.renderer.handle(
+        QuestionAsked(
+            harness=Harness.OPENCODE,
+            session_key=session.session_key,
+            request_id="q1",
+            question="Which?",
+            options=("pg",),
+        )
+    )
+    msg, card = relay.webex.last_card()
+    inputs: dict[str, JsonValue] = {**submit_data(card, "Answer"), "choice": "pg"}
     return await relay.frontend.api.get_attachment_action(relay.webex.user_clicks(msg.id, inputs))
 
 
@@ -190,7 +209,7 @@ async def test_a_tap_whose_room_lookup_fails_once_is_retried(
     await relay.frontend.on_activity(Activity("cardAction", action.id))
     await relay.frontend.drain()
     assert waits == [1.0]
-    assert sum(1 for m in relay.webex.bot_messages() if m.attachments) == 2
+    assert relay.adapter.answers == [("q1", "pg")]
 
 
 async def test_a_tap_that_could_not_be_looked_up_is_not_marked_as_seen(
@@ -208,7 +227,7 @@ async def test_a_tap_that_could_not_be_looked_up_is_not_marked_as_seen(
     assert await relay.registry.kv_get(f"{SEEN_PREFIX}{action.id}") is None
     monkeypatch.setattr(relay.frontend.api, "get_room", real)
     await relay.frontend.handle_action(action)
-    assert sum(1 for m in relay.webex.bot_messages() if m.attachments) == 2
+    assert relay.adapter.answers == [("q1", "pg")]
 
 
 async def test_a_client_error_is_not_retried(relay: Relay, monkeypatch: pytest.MonkeyPatch) -> None:

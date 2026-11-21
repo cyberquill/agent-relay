@@ -9,32 +9,25 @@ from agent_relay.hook.shims import HookInput, HookKind, PayloadFormat
 type HookStdout = dict[str, JsonValue]
 
 
-def permission(hook: HookInput, allow: bool, reason: str) -> HookStdout:
-    decision = "allow" if allow else "deny"
+def allow(hook: HookInput, reason: str) -> HookStdout:
+    """The harness's own "allow this tool call" answer. The relay never denies a tool call."""
     if hook.format is PayloadFormat.CURSOR:
-        out: HookStdout = {"permission": decision}
-        if not allow:
-            out["user_message"] = reason
-            out["agent_message"] = reason
-        return out
+        return {"permission": "allow"}
     if hook.format is PayloadFormat.OPENCODE:
-        return {"decision": decision, "reason": reason}
+        return {"decision": "allow", "reason": reason}
     if hook.kind is HookKind.PERMISSION:
-        result: HookStdout = {"behavior": decision}
-        if not allow:
-            result["message"] = reason
-        return result
+        return {"behavior": "allow"}
     if hook.format is PayloadFormat.SNAKE:
         return {
-            "permissionDecision": decision,
+            "permissionDecision": "allow",
             "permissionDecisionReason": reason,
             "hookSpecificOutput": {
                 "hookEventName": hook.event,
-                "permissionDecision": decision,
+                "permissionDecision": "allow",
                 "permissionDecisionReason": reason,
             },
         }
-    return {"permissionDecision": decision, "permissionDecisionReason": reason}
+    return {"permissionDecision": "allow", "permissionDecisionReason": reason}
 
 
 def continue_with(hook: HookInput, text: str) -> HookStdout:

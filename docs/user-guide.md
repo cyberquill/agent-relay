@@ -1,18 +1,18 @@
 # User guide
 
 agent-relay lets you drive the coding agents on your Mac from your phone. You chat with a Webex bot. Each
-agent session gets its own thread in that chat: you see the agent's replies, answer its approval cards and
-send it new prompts. The agents keep running on the Mac, in the same apps you use at the desk, so you can
-pick a session up again at the desk.
+agent session gets its own thread in that chat: you see the result of each turn, answer the agent's
+questions and send it new prompts. The relay never asks you to approve a tool. The agents keep running on
+the Mac, in the same apps you use at the desk, so you can pick a session up again at the desk.
 
 It works with these apps:
 
 | App | What the phone can do | Word to use in `/new` |
 |---|---|---|
-| VS Code, Copilot agent (Agent Host) | Start sessions, stream replies, approve tools, park and wake | `copilot` |
-| VS Code, its own agent chat (VS Code calls it "Local"; through the relay-bridge extension) | Start sessions, stream replies, approve tools, park and wake | `vscode` |
-| Cursor CLI (`cursor-agent`) | Start sessions, stream replies, approve tools, wake an idle session | `cursor` |
-| OpenCode | Start sessions, stream replies, approve tools, wake an idle session | `opencode` |
+| VS Code, Copilot agent (Agent Host) | Start sessions, get each turn's result, park and wake | `copilot` |
+| VS Code, its own agent chat (VS Code calls it "Local"; through the relay-bridge extension) | Start sessions, get each turn's result, park and wake | `vscode` |
+| Cursor CLI (`cursor-agent`) | Start sessions, get each turn's result, wake an idle session | `cursor` |
+| OpenCode | Start sessions, get each turn's result, wake an idle session | `opencode` |
 | Cursor desktop app | Sessions you start at the desk are handed to the phone while away mode is on | (started at the desk) |
 | GitHub Copilot CLI (`copilot` in a terminal) | Sessions you start at the desk are handed to the phone while away mode is on | (started at the desk) |
 
@@ -24,12 +24,14 @@ model, see [security.md](security.md).
 
 - **relayd** is a small background service on the Mac, run by launchd. It holds the Webex connection,
   talks to each app and keeps track of the sessions in a local database.
-- **Hooks and plugins** inside each app ask relayd before a risky tool runs. When the session belongs to
-  the phone, or you are away, relayd sends you an approval card and waits for your answer.
-- **The Webex bot** is how the phone reaches relayd. relayd answers only your own Webex account.
-- **Away mode** says "I am not at the desk". With away mode on, sessions you started at the desk also
-  send their approvals to the phone, and a finished turn is *parked* (held open) so you can reply to it
-  from the phone.
+- **Hooks and plugins** inside each app tell relayd what happens. When the session belongs to the phone,
+  or you are away, relayd lets every tool call run (there are no approvals); otherwise the app asks you
+  at the desk as it always does.
+- **The Webex bot** is how the phone reaches relayd: one bot, one chat. relayd answers only your own Webex
+  account.
+- **Away mode** says "I am not at the desk". With away mode on, sessions you started at the desk also come
+  to the phone, and a finished turn is *parked* (held open) so you can reply to it from the phone. You
+  switch it by hand, with `/away` and `/back`.
 
 Nothing listens on the network: relayd connects out to Webex, and every app talks to relayd over a socket
 on the Mac.
@@ -41,8 +43,6 @@ on the Mac.
 - An Android or iPhone with the Webex app, signed in to your account.
 - A Webex bot of your own, created at [developer.webex.com](https://developer.webex.com/my-apps)
   (**Create a New App → Create a Bot**). Keep the bot's access token: you need it once, during setup.
-  Optionally, one more bot per app gives each app its own space on the phone; see
-  [One bot per app](#optional-one-bot-per-app).
 - The apps you want to drive, installed and signed in at the desk first: VS Code with GitHub Copilot,
   Cursor (desktop app and/or `cursor-agent`), and OpenCode.
 
@@ -84,12 +84,13 @@ uv sync --frozen --all-extras
 
 ### 4. Put the secrets in the Keychain
 
-The relay reads secrets only from the login Keychain, never from files. Each command prompts for the value,
-so it never lands in your shell history.
+The relay reads secrets only from the login Keychain, never from files. Each command takes the value
+without it landing in your shell history.
 
 ```bash
-# The Webex bot's access token.
-security add-generic-password -U -s agent-relay -a webex-bot-token -w
+# The Webex bot's access token: on the bot's page press "Copy Token", then
+pbpaste | uv run relay setup token --stdin
+# (copy something else afterwards so the token does not stay on the clipboard)
 # A password for the local OpenCode server (only if you use OpenCode). Any long random value works,
 # for example the output of `openssl rand -base64 32`.
 security add-generic-password -U -s agent-relay -a opencode-password -w
@@ -123,7 +124,8 @@ the relay-bridge extension. relayd then starts by itself at every login.
 
 In the Webex app, start a direct chat with your bot (its address ends in `@webex.bot`) and send `/help`.
 The first message from your `allowed_email` pins your Webex account; from then on relayd ignores everyone
-else. When relayd starts it posts **🖥️ Mac online** in this chat, so you can tell the Mac is reachable.
+else. relayd posts nothing by itself when it starts, so `/help` (or `/doctor`) is how you check that
+the Mac is reachable.
 
 ### Keeping the Mac reachable
 
@@ -137,10 +139,10 @@ relayd can only work while the Mac is awake and online.
   in the meantime.
 - **Screen lock**: locking the screen does not stop anything. VS Code Copilot, VS Code, OpenCode
   and the Cursor CLI all ran a full session from the phone with the screen locked (see
-  [spikes.md](spikes.md#s7--does-anything-stop-working-with-the-screen-locked)). Locking it also turns
-  away mode on (see [Away mode follows the screen lock](#away-mode-follows-the-screen-lock)). Logging
-  out of macOS is different: it stops your apps and relayd with them. A brief network drop may happen
-  as the screen locks; relayd reconnects within seconds.
+  [spikes.md](spikes.md#s7--does-anything-stop-working-with-the-screen-locked)). Locking it does not
+  change away mode either: you switch that by hand. Logging out of macOS is different: it stops your
+  apps and relayd with them. A brief network drop may happen as the screen locks; relayd reconnects
+  within seconds.
 - **Network**: the Mac needs to reach Webex (`webexapis.com` and `*.wbx2.com`). On VPN, check that Webex
   works in a browser.
 
@@ -153,14 +155,17 @@ relayd can only work while the Mac is awake and online.
 ```
 
 The parts are the app (`copilot`, `vscode`, `cursor`, `opencode`), the workspace name, an optional model
-and the prompt in quotes. With a prompt but no model, the app's default model is used. The bot answers
-with a session card, and **everything about that session happens in the card's thread**.
+and the prompt in quotes. With a prompt but no model, the app's default model is used. The bot opens a
+thread for the session ("🟦 Copilot · myproject · <title>"), and **everything about that session happens
+in that thread**.
 
-`/new` on its own sends one card: pick the workspace, type the prompt, optionally turn away mode on for
-that workspace, then open the app you want and pick its model. If your phone handles that card badly
-(a button inside an opened section loses what you typed), set `uv run relay config set
-webex.new_card_layout two`: the card then splits into app, workspace and prompt first, and the model
-second.
+`/new` on its own sends one flat card with four things: **Workspace** (the last one you used is
+preselected), **Agent** (one list of "app · model", with each app's own *Default* first and the one you
+used last preselected), **Prompt** (required) and **Start**. There are no sections to open and no model
+step. When you tap Start the card disappears and the thread's first line is your confirmation; if the
+start fails, the card stays and a `⚠️` line says why, so you can tap Start again. An app that is down is
+left out of the list, with one line saying so. A partial command (`/new copilot myproject`) opens the
+same card with those parts filled in.
 
 ### Talk to a session
 
@@ -168,14 +173,25 @@ Reply in the session's thread:
 
 - Plain text is a prompt. What happens while the agent is still working depends on the session's
   queue mode (below).
-- `/stop` cancels the current turn. `/status` shows what it is doing, `/diff` shows the changes it made
-  in the workspace, and `/model [name]` changes the model for the next turn (a bare `/model` sends a
-  picker).
+- `/stop` cancels the current turn. `/status` shows what it is doing (and starts with 🏝️ while away
+  mode is on), `/diff` shows the changes it made in the workspace, and `/model [name]` changes the model
+  for the next turn: a bare `/model` sends a picker with the current model selected, and when you apply
+  it the card disappears and the thread says `Model → X from the next turn.` A typed `/model x` is
+  checked against the app's list (id or name) and answers the same way.
 
-Replies stream into the thread in chunks. The turn's tool calls are collected in one progress message
-that is edited as they happen (at most every 30 s, `renderer.progress_edit_interval_s`). When the turn
-ends, a **✅ Turn complete** card shows how long it took, how many tool calls it made and which files
-changed, with **Diff**, **Continue** and, for sessions that park, **Back**.
+**One message per turn.** While the agent works the phone is silent: no streamed text, no tool
+lines, nothing when a turn parks. When the turn ends you get **one message**: the agent's final answer
+(what it said after its last tool call, not its narration) and a footer such as `⏱ 3m · 🔧 14 · 📝 4
+files (+120 −8)`. The thread's first line is edited quietly as things change: ⏳ running, ✅ idle, 🅿️
+parked, ▶️ active, ⚫ ended, plus 🏝️ while away mode is on. Only a few things notify you besides the
+answer: a question, a `⚠️` line when a turn fails, and replies to commands you just sent. Use `/diff`
+to see what changed.
+
+**Long answers arrive as `answer.html`.** An answer over about 6 KB, or one with a table, three or more
+code blocks or over 60 lines, comes as one message with a short preview and a file, `answer.html`: open it
+in the phone's browser. It is a self-contained page that works in light and dark mode; links in it are plain
+text, and it runs no script. A `/diff` of more than 200 lines arrives as `changes.html` the same way. To turn
+this off or on for every answer, set `renderer.html_threshold` to `never` or `always` (default `auto`).
 
 ### Messages sent while a turn runs: `/queue` and `/steer`
 
@@ -198,42 +214,46 @@ and messages queue instead.
 
 ### Send photos and files
 
-Attach a photo or file to a message in a session's thread, or to a `/new` message, and it goes to the
-agent with the text. It is saved in the workspace under `.agent-relay/inbox/` (kept out of `git status`).
-The Copilot agent, OpenCode and the Cursor CLI receive the file itself; the other apps get its path in
-the prompt. A file sent on its own waits up to 10 minutes for the text it belongs to. Files over 20 MB
-are skipped, and a session's files are deleted a day after it ends. Files sent outside a thread are
-refused with a pointer to a thread or `/new`. Settings: [operations.md](operations.md#settings-added-in-the-october-round).
+There are two ways to hand the agent a photo or file:
 
-### Approve tools
+- **In a session's thread**: attach it to a message there. It goes to the agent with the text. A file sent
+  on its own waits up to 10 minutes for the text it belongs to. In the thread of a *parked* desk session,
+  a reply with a file reaches the chat at once, with the file's path in the text (the desk apps cannot
+  take a file themselves).
+- **With `/new`**: attach it to a `/new` message, or send it on its own at the top level first. A file
+  sent at the top level is **held for 10 minutes** (`attachments.hold_s`) and goes with the next `/new`,
+  whether you start it from the card or with a one-line command; the bot says "📎 Got N file(s); it'll go with
+  your next /new (within 10 min)" and the `/new` card shows "📎 2 files will be attached". If the start fails, the files
+  are kept for your next try.
 
-Before a tool that changes something runs (a shell command, a file edit, an MCP call), the thread gets an
-**Approval needed** card with what the agent wants to run (the start and end of a long command) and when
-it auto-denies. The choices:
+The file is saved in the workspace under `.agent-relay/inbox/` (kept out of `git status`). The Copilot
+agent, OpenCode and the Cursor CLI receive the file itself; the other apps get its path in the prompt.
+A file that cannot be used (too large, over 20 MB, or the download failed) gets one `⚠️ Skipped …` line
+naming it, and the text still goes. A session's files are deleted a day after it ends. Settings:
+[operations.md](operations.md#settings-added-in-the-october-and-november-rounds).
 
-| Button | Effect |
-|---|---|
-| Allow once | Runs this call |
-| Allow for this session | The same tool is not asked again in this session |
-| Allow this tool in this workspace for 4 h | The same tool is not asked again in this workspace, by any session, for 4 hours (`approvals.workspace_grant_s`) |
-| Deny | Refuses the call |
-| Deny with reason… | Refuses it and tells the agent why |
+Agents can send you a file too: an agent that writes a report can save it as HTML in the workspace and
+send it with its `send_phone_file` tool (only from a session that reaches the phone, and only a file
+inside its own workspace).
 
-Read-only tools such as reading files and searching are allowed without asking (`approvals.auto_allow`).
-Each card works once: a second tap, or a tap from another device, says the card was already answered.
+### No approval cards
 
-An unanswered card is **denied after 10 minutes** (`approvals.deadline_s`), and the agent is told so. If
-you come back to the desk and turn away mode off, cards from desk sessions move back to the desk prompt
-(🖥️ on the card).
+The relay never asks you to approve a tool. While a session belongs to the phone, or you are away, every
+tool call it handles is allowed at once, and phone sessions are started with each app's own auto-approve
+flag where there is one. A session you are sitting at, with away mode off, keeps the app's own prompt at
+the desk. `/panic` stops the relay answering: while paused the desk apps ask you themselves. What the
+agent may do while you are away is bounded by the `agent-relay-away` skill's "never do while away" list,
+not by the relay. The thread is quiet during a turn; use `/diff` afterwards to see what changed.
 
 ### When a turn ends
 
 For a session started from the phone, a reply in its thread always works: when the turn has ended, the
 relay starts a new one with your message.
 
-With away mode on, VS Code (both `vscode` and `copilot`) and the Cursor desktop app also *park* the finished turn:
-the thread shows **🅿️ Parked** and the agent's turn is held open, so your reply continues the same turn
-instead of starting a new one. This is what lets you answer a session you started **at the desk**,
+With away mode on, VS Code (both `vscode` and `copilot`), the Copilot CLI and the Cursor desktop app also
+*park* the finished turn: the final answer arrives as usual, the thread's first line shows **🅿️**, and the
+agent's turn is held open, so your reply continues the same turn instead of starting a new one. Nothing
+extra is posted for the parking. This is what lets you answer a session you started **at the desk**,
 which the relay cannot start turns for. `/back` in the thread releases a parked turn without a reply,
 and a parked turn is released by itself after 4 hours (`park.deadline_s`). OpenCode and the Cursor CLI
 never park; they go idle and your reply wakes them.
@@ -248,16 +268,17 @@ Most choices come as cards with buttons, so you rarely type ids:
 
 | Card | Sent by | What it offers |
 |---|---|---|
-| New session | `/new` | Workspace, prompt, away toggle, then the app and its model |
-| Approval needed | an agent's tool call | The five choices above, and when it auto-denies |
-| Question | an agent's `ask_phone` | Its options, a free-text answer, or Skip |
-| Turn complete | the end of a turn | Diff, Continue, Back |
+| New session | `/new` | One flat card: Workspace, Agent (app · model), Prompt, Start |
+| Question | an agent's question (`ask_phone`, or an app's own) | Its options, a free-text answer, or Skip |
 | Queue | `/queue` | The queue mode, and each waiting message with Remove |
-| Model | `/model` in a thread | The app's models |
-| Sessions | `/sessions` | Status, Diff, Stop, Back or Away for the session you pick |
-| Away mode | `/away` at the top level | All workspaces or one, then On or Off |
+| Model | `/model` in a thread | The app's models, with the current one selected |
+| Sessions | `/sessions` | Status, Diff, Stop or Back for the session you pick |
 | Cancel everything? | `/panic` | Confirm or cancel, within 60 s |
 | Workspaces | `/ws` (with `ws.roots`) | Add a folder, clone a repo, add a repo to a workspace |
+
+A card that has done its job **disappears**: `/new` after Start, `/model` after Apply, a question after
+you answer it, `/panic` after you confirm. `/sessions` and `/queue` stay, because you use them again.
+If a tap fails, the card stays so you can tap again.
 
 The line of text above each card is what the phone's notification shows, so it names what needs you.
 Links in an agent's text arrive as plain code, never as tappable links.
@@ -266,20 +287,21 @@ Links in an agent's text arrive as plain code, never as tappable links.
 
 | Command | What it does |
 |---|---|
-| `/sessions` | A card: pick a session, then Status, Diff, Stop, Back or Away. The card keeps working for 15 minutes |
-| `/digest` | Every session in one message, grouped by what needs you |
+| `/sessions` | A card: pick a session, then Status, Diff, Stop or Back. The card keeps working for 15 minutes |
+| `/digest` | Every session in one message; the "Waiting for you" part lists open questions |
 | `/apps` | Lists the apps and whether each one is reachable |
 | `/ws` | Lists the workspaces; with `ws.roots` set, a menu to add one (see below) |
 | `/models <app>` | Lists the models an app offers |
-| `/away [on\|off]` | Turns away mode on or off (see below). A bare `/away` sends a card at the top level (all workspaces or one, then On or Off) and means on in a thread |
-| `/back` | In a thread: releases that parked session, and hands a VS Code or Cursor desktop chat started from the phone to the desk |
+| `/away [on\|off]` | Turns away mode on (or off); the same at the top level and in a thread (see below) |
+| `/back` | Turns away mode off: releases parked desk sessions and hands VS Code and Cursor desktop chats started from the phone to the desk. In a thread it also says what it released |
 | `/queue`, `/steer` | In a thread: see [Messages sent while a turn runs](#messages-sent-while-a-turn-runs-queue-and-steer) |
 | `/doctor` | The same health report as `relay doctor` |
-| `/panic` | Asks first with a card (good for 60 s), then cancels every running turn, denies every open card, releases parked turns, turns away mode off and pauses the relay. `/panic now` skips the question |
+| `/panic` | Asks first with a card (good for 60 s), then cancels every running turn, closes every open question, releases parked turns, turns away mode off and pauses the relay. `/panic now` skips the question |
 | `/help` | The command list |
 
-While paused, away mode counts as off everywhere, so desk sessions stay at the desk, and agents cannot
-message the phone through `notify_phone` or `ask_phone`. Send `/away on` to resume.
+While paused, away mode counts as off everywhere, so desk sessions stay at the desk, the relay answers no
+tool call, and agents cannot message the phone through `notify_phone`, `ask_phone` or `send_phone_file`.
+Send `/away` to resume.
 
 ### Add workspaces from the phone: `/ws`
 
@@ -305,42 +327,21 @@ Names are letters, digits, `.`, `_` and `-`, up to 40 characters. The card can t
 
 ## Away mode: handing desk sessions to the phone
 
-Sessions started from the phone always report to the phone. Sessions you started **at the desk** stay at
-the desk until you turn away mode on for their workspace. Then each one gets its own thread on the phone,
-its approvals go to the phone instead of the desk prompt, and its finished turns park.
+`/away` when you leave: your desk chats come to the phone, and a reply continues them. `/back` when you
+return.
 
-A chat you started from the phone in VS Code (or Cursor over CDP) also opens on the desktop. Turning away
-mode off, or `/back` in its thread, hands it to the desk: its open approvals move to the desk prompt, and
-from then on it behaves like a desk session. OpenCode and Cursor CLI sessions have no desk window, so they
-stay with the phone.
+That is the whole feature. It is one switch for the whole Mac, and **you** flip it: nothing turns it on
+when the screen locks or the Mac sleeps. Send `/away` or `/back` from the phone (in a thread or in the main
+chat, the same either way), type `/away` or `/back` in any agent chat at the desk (the `agent-relay-away`
+skill runs `relay away on|off`), or run `uv run relay away on` (or `off`) in a terminal. While it is on,
+`/status` and every thread's first line show 🏝️, so you do not forget it. Sessions you start from the
+phone work the same with away mode on or off.
 
-Turn it on just before you leave, in any of these ways:
-
-- **In the agent chat at the desk**: type `/away` (and `/back` when you return). relay install puts the
-  `agent-relay-away` skill in `~/.agents/skills`, which Copilot, Cursor and OpenCode all read; it switches
-  away mode for the chat's workspace.
-- **In a terminal**: `uv run relay away on --workspace "$PWD"` (or `off`). Without `--workspace`, it
-  covers every workspace.
-- **From the phone**: `/away on` inside a session's thread covers that session's workspace. `/away on`
-  in the main chat covers every workspace.
-
-Turning away mode off releases the parked desk sessions it covers and hands their open approvals back to
-the desk prompt, so nothing waits for a phone you are no longer watching. `relay doctor` and `/doctor`
-show which workspaces are away.
-
-### Away mode follows the screen lock
-
-With `presence.auto_away_on_lock` on (the default), locking the Mac turns away mode on for every
-workspace, and unlocking turns it off again. The relay checks the lock state every 10 seconds
-(`presence.poll_s`). It only undoes what it did: if you turned away mode on yourself, unlocking leaves it
-on, and if you change it by hand while locked, the unlock leaves your choice alone. A lock while the relay
-is paused by `/panic` does nothing. When a session is live, the phone gets **🔒 Mac locked: away on** and
-**🔓 Mac unlocked: away off**. To turn it off: `uv run relay config set presence.auto_away_on_lock false`.
-
-While away mode is on, agents can also reach you themselves: relay install registers the `relay-mcp`
-server, whose `notify_phone` tool posts a line in the session's thread and whose `ask_phone` tool asks a
-question and waits up to 15 minutes for your reply. The `/away` command tells the agent to use them,
-and to decide for itself rather than block on small questions.
+While away mode is on, agents can also reach you themselves with the `relay-mcp` tools: `notify_phone`
+posts a line in the session's thread, `ask_phone` asks a question and waits up to 15 minutes for your
+reply, and `send_phone_file` sends a file from the workspace (for a report: write HTML, send it). The
+skill tells the agent to use them, to decide for itself rather than block on small questions, and to
+follow its "never do while away" list.
 
 ## Picking work up at the desk
 
@@ -382,47 +383,6 @@ and breaks when Cursor's UI changes. To try it:
 
 After every Cursor update, run the self-test again; until it passes, the adapter refuses to run.
 
-### Optional: one bot per app
-
-With one bot, every session's thread is in one chat. With a bot per app, VS Code, Cursor and OpenCode
-each get their own 1:1 space, so their notifications and threads stay apart. The first bot becomes the
-**control** bot. Apps without their own bot stay in the control space.
-
-| Bot | Serves |
-|---|---|
-| `vscode` | VS Code, VS Code Copilot, Copilot CLI |
-| `cursor` | Cursor desktop, Cursor CLI, Cursor over CDP |
-| `opencode` | OpenCode |
-| `control` | Everything else, and every app without its own bot |
-
-1. At [developer.webex.com](https://developer.webex.com/my-apps), create one bot per app you want apart
-   (**Create a New App → Create a Bot**), for example "Relay · VS Code".
-2. On each bot's page, press **Copy Token**, then at once, in the checkout:
-
-   ```bash
-   pbpaste | uv run relay setup bot vscode --stdin
-   uv run relay config set webex.bots.vscode webex-bot-vscode
-   ```
-
-   The token goes from the clipboard into the Keychain and is never shown. Copy something else
-   afterwards so the token does not stay on the clipboard.
-3. Repeat for `cursor` and `opencode`, then `uv run relay start`.
-4. Each new bot sends you a one-time hello, which creates its space. `uv run relay doctor` shows one
-   Keychain line and one websocket line per bot.
-
-How the spaces behave:
-
-- A session's thread stays in the space that created it. Threads from before you added bots stay in the
-  control space.
-- `/panic`, `/away` and `/back` work from every space.
-- In an app's space, `/new`, `/sessions`, `/digest`, `/apps` and the `/new` card show only that app.
-  `/new` for another app there is refused: start it in that app's space.
-- `/new` in the control space for an app with its own bot opens the thread in the app's space and says
-  **🧵 Started in the <App> space.**
-
-Tip: in Webex desktop, make a space section called "Agent Relay" and drag the bot spaces into it; the
-section syncs to the phone.
-
 ### Optional: a browser front end
 
 The relay also has a small web app (the PWA) with the same commands as the Webex bot. It is off by
@@ -437,15 +397,17 @@ names the fix.
 
 | Symptom | What to do |
 |---|---|
-| The bot does not answer at all | The Mac is asleep or offline, or relayd is down. At the desk: `relay status`; if it fails, `relay start`. The **🖥️ Mac online** post confirms it is back. |
-| The bot answers "paused" | `/panic` was used. Send `/away on`. |
+| The bot does not answer at all | The Mac is asleep or offline, or relayd is down. At the desk: `relay status`; if it fails, `relay start`. `relay doctor` also shows whether Webex is connected. |
+| `relay doctor` says "Webex token rejected (401)" | The bot's token is dead or was regenerated. Copy the new one and run `pbpaste \| uv run relay setup token --stdin`. relayd keeps running meanwhile and picks the token up on its next retry (within about 5 minutes); no restart is needed. |
+| `relay doctor` lists a setting such as `webex.bots` or `approvals.*` | It was removed in the November round and is ignored. Run the `relay config unset <key>` command it prints. |
+| The bot answers "paused" | `/panic` was used. Send `/away`. |
 | `relay start` says launchd still lists relayd | A stop is still finishing. Wait a few seconds and run it again. |
-| A desk session never shows up on the phone | Away mode is off for its workspace (`relay doctor` shows the state), or the app was opened before `relay install --apply`. Reload VS Code or restart Cursor. |
-| `/new` says an app is unavailable | Open the app (VS Code must be running for both VS Code apps) and check `/apps`. For the Cursor CLI, run `cursor-agent login`. |
-| An approval card says "That request was already answered" | It was answered at the desk, or its 10 minutes ran out and it was denied. |
+| A desk session never shows up on the phone | Away mode is off (`/status` or `relay doctor` shows it), or the app was opened before `relay install --apply`. Send `/away`; reload VS Code or restart Cursor if needed. |
+| `/new` says an app is unavailable, or the app is missing from the Agent list | Open the app (VS Code must be running for both VS Code apps) and check `/apps`. For the Cursor CLI, run `cursor-agent login`. The card names the apps it left out. |
+| `/new` shows only "Default" for Cursor over CDP | The card never opens Cursor's model menu. Run `/models cursor-ide` once; it saves the list for the cards. |
+| A file I sent at the top level "never arrived" | It waits up to 10 minutes for your next `/new`; after that it is left behind. Send it again with `/new`, or in the session's thread. |
+| A file got a `⚠️ Skipped …` line | The line names the file and why (too large, an unsupported type, or the download failed). Send it again, smaller or in another format. |
 | A Cursor CLI reply ends with "RetriableError: WritableIterable is closed" | A known `cursor-agent` issue; the reply itself is complete. |
-| relayd stops at start with `pbpaste \| relay setup bot <name> --stdin` | An app bot is in `webex.bots` but its token is not in the Keychain. Copy the token and run that command. |
-| `/new` says an app "has its own space" | You are in another app's space. Start it in that app's space, or from the control space. |
 | A follow-up to a `vscode` chat says its window is closed | Follow-ups go only to the window the chat was opened in, and a window reload counts as closing it. Start a new chat with `/new`. |
 
 Logs are in `~/Library/Logs/agent-relay/` (`relayd.log` for the daemon). Tokens and passwords are
@@ -468,8 +430,6 @@ relay, run `uv sync --frozen --all-extras`, rebuild relay-bridge, then `relay in
   ```bash
   security delete-generic-password -s agent-relay -a webex-bot-token
   security delete-generic-password -s agent-relay -a opencode-password
-  # and, if you added app bots:
-  security delete-generic-password -s agent-relay -a webex-bot-vscode
   ```
 
 ## Security in short
@@ -481,7 +441,10 @@ relay, run `uv sync --frozen --all-extras`, rebuild relay-bridge, then `relay in
   `127.0.0.1` only.
 - Secrets live only in the login Keychain and are scrubbed from logs and from every message posted to
   Webex.
-- Anything that changes your files or runs a command needs your approval, from the phone while you are
-  away or at the desk otherwise. `/panic` stops everything at once.
-- Treat each bot token like a password. If one leaks, regenerate it at developer.webex.com and store the
-  new one with `pbpaste | uv run relay setup bot <name> --stdin`.
+- The relay has **no approvals**: whoever controls your Webex account can run anything on the Mac, and
+  nothing slows them down. What is left is the pinned account, one-to-one chats only, `/panic`, which
+  stops everything at once, and the logs. A session at the desk with away mode off keeps the app's own
+  prompts. See [security.md](security.md).
+- `answer.html` runs no script and loads nothing from the internet; links in it are plain text.
+- Treat the bot token like a password. If it leaks, regenerate it at developer.webex.com and store the
+  new one with `pbpaste | uv run relay setup token --stdin`.

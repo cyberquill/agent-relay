@@ -1,6 +1,6 @@
-// agent-relay OpenCode plugin: forwards tool calls to relayd for phone approval while away mode
-// is on, and registers this OpenCode server with the relay. Fails open when relayd is unreachable,
-// but denies when the connection drops after it was made, since the approval may be mid-flight.
+// agent-relay OpenCode plugin: reports tool calls to relayd while away mode is on (relayd allows every
+// one at once; it never waits on the phone) and registers this OpenCode server with the relay. Fails
+// open when relayd is unreachable, but denies when the connection drops after it was made.
 // OpenCode calls every exported function of a plugin file as a plugin, so only the plugin itself is
 // exported; the helpers ride on it as properties for the tests.
 import { connect } from "node:net";

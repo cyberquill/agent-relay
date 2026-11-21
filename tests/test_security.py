@@ -12,17 +12,13 @@ import pytest
 from agent_relay import log as relay_log
 from agent_relay.adapters.factory import build_adapters
 from agent_relay.adapters.vscode.hub import BridgeHub
-from agent_relay.core.approvals import ALLOW_SESSION_KEY, ApprovalBroker, is_read_only
 from agent_relay.core.registry import Registry
-from agent_relay.core.router import Router
-from agent_relay.core.service import RelayService
-from agent_relay.core.signals import Signals
 from agent_relay.frontends.pwa import server as pwa_server
 from agent_relay.frontends.webex.api import scrub_attachment
-from agent_relay.models.config import READ_ONLY_TOOLS, ApprovalConfig, CdpConfig, RelayConfig
-from agent_relay.models.events import Harness, Origin
-from agent_relay.models.sessions import SessionRecord, SessionStatus
+from agent_relay.models.config import CdpConfig, RelayConfig
+from agent_relay.models.events import Harness
 from agent_relay.scrub import REDACTED
+from agent_relay.settings import legacy_config_keys, load_config
 
 PACKAGE = Path(__file__).resolve().parents[1] / "agent_relay"
 LISTENERS = re.compile(
@@ -44,38 +40,23 @@ def test_only_the_pwa_opens_a_tcp_listener_and_only_on_loopback() -> None:
     assert "start_unix_server" in (PACKAGE / "ipc.py").read_text(encoding="utf-8")
 
 
-@pytest.mark.parametrize("pattern", ["*", "**", "?*", "[a]*", " * ", "!*"])
-def test_no_global_auto_approve(pattern: str) -> None:
-    with pytest.raises(ValueError, match="global auto-approve"):
-        ApprovalConfig(auto_allow=["read", pattern])
+def test_there_is_no_approval_config_and_a_legacy_one_is_ignored(tmp_path: Path) -> None:
+    """U2: the relay answers every tool call it handles, so there is nothing to configure."""
+    assert not hasattr(RelayConfig(), "approvals")
+    assert "approvals" not in RelayConfig.model_fields
+    assert "presence" not in RelayConfig.model_fields
+    toml = tmp_path / "relay.toml"
+    toml.write_text('[approvals]\nauto_allow = ["*"]\ndeadline_s = 30\n', encoding="utf-8")
+    assert load_config(toml) == RelayConfig()
+    assert legacy_config_keys(toml) == ["approvals.auto_allow", "approvals.deadline_s"]
 
 
-@pytest.mark.parametrize("tool", ["bash", "shell", "run_in_terminal", "edit", "write", "apply_patch", "task"])
-def test_approvals_are_manual_by_default_for_anything_that_acts(tool: str) -> None:
-    assert ApprovalConfig().auto_allow == list(READ_ONLY_TOOLS)
-    assert not is_read_only(tool, ApprovalConfig().auto_allow)
-
-
-async def test_allow_for_session_ends_with_the_session(registry: Registry) -> None:
+def test_questions_are_the_only_thing_that_waits_for_the_phone() -> None:
     config = RelayConfig()
-    router, signals = Router(), Signals()
-    service = RelayService(registry, router, signals, config)
-    broker = ApprovalBroker(registry, router, signals, service, config.approvals)
-    session = SessionRecord(
-        session_key="copilot:S1",
-        harness=Harness.COPILOT_CLI,
-        harness_id="S1",
-        workspace="/w",
-        origin=Origin.DESK,
-    )
-    await registry.create_session(session)
-    key = ALLOW_SESSION_KEY.format(session_key=session.session_key, tool="bash")
-    await registry.kv_set(key, "1")
-    assert await broker.allowed_for_session(session.session_key, "bash")
-    await service.lifecycle.transition(session.session_key, SessionStatus.ENDED, "test")
-    assert await registry.kv_get(key) is None
-    await registry.kv_set(key, "1")
-    assert not await broker.allowed_for_session(session.session_key, "bash")
+    assert config.questions.deadline_s == 600
+    assert config.question_hook_timeout_s() == 660
+    with pytest.raises(ValueError):
+        RelayConfig.model_validate({"questions": {"deadline_s": 1}})
 
 
 def test_attachments_are_scrubbed_as_text_and_binary_is_refused() -> None:

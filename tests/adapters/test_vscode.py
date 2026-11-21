@@ -195,6 +195,7 @@ async def test_start_opens_a_local_chat_through_the_bridge(rig: Rig) -> None:
     assert record.extra[WINDOW_KEY] == "win-1"
     assert record.model == "gpt-5"
     assert await rig.registry.kv_get(claim_key(WORKSPACE)) is not None
+    await rig.core.router.join()
     assert [s.origin for s in rig.rec.of(SessionStarted)] == [Origin.PHONE]
 
 
@@ -455,7 +456,7 @@ async def test_approvals_are_not_advertised_and_never_reach_the_bridge(rig: Rig)
     bridge = await rig.bridge()
     record = await rig.start()
     assert not rig.adapter.capabilities.has(Capability.APPROVE)
-    for decision in ("allow", "allow_session", "deny"):
+    for decision in ("allow", "deny"):
         with pytest.raises(UnsupportedError):
             await rig.adapter.answer_approval(record, "r1", decision)
     assert bridge.commands() == ["start"]

@@ -1,4 +1,4 @@
-"""`/sessions` as a card: pick one session, then Status, Diff, Stop, Back or Away on it."""
+"""`/sessions` as a card: pick one session, then Status, Diff, Stop or Back on it."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from agent_relay.frontends.webex.cards.common import MAX_CHOICES, card, choice_s
 from agent_relay.frontends.webex.cards.root import STATUS_ICON
 from agent_relay.models.sessions import SessionRecord
 
-OPS = ("status", "diff", "stop", "back", "away")
+OPS = ("status", "diff", "stop", "back")
 
 
 def session_choice(session: SessionRecord) -> tuple[str, str]:

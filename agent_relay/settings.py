@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import tomllib
-from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
 
@@ -12,17 +11,16 @@ import keyring.errors
 import tomli_w
 
 from agent_relay import paths
+from agent_relay.log import get_logger
 from agent_relay.models.config import (
-    BOT_NAMES,
-    CONTROL,
-    CONTROL_ACCOUNT,
-    BotName,
     RelayConfig,
-    WebexConfig,
     Workspace,
     WorkspacesConfig,
+    split_legacy,
 )
 from agent_relay.sync import jsonc
+
+log = get_logger(__name__)
 
 CODE_WORKSPACE_SUFFIX = ".code-workspace"
 
@@ -36,51 +34,19 @@ class Secret(StrEnum):
     OPENCODE_PASSWORD = "opencode-password"
 
 
-@dataclass(frozen=True)
-class BotItem:
-    """The Keychain item of a Webex bot other than the default control bot's `webex-bot-token`."""
-
-    bot: BotName
-    account: str
-
-    @property
-    def value(self) -> str:
-        return self.account
-
-
-type Item = Secret | BotItem
+type Item = Secret
 
 SECRET_SETUP_COMMAND: dict[Secret, str] = {
     secret: f"security add-generic-password -U -s {KEYCHAIN_SERVICE} -a {secret.value} -w"
     for secret in Secret
 }
+# The Webex token is piped in, so it never sits in argv or shell history.
+SECRET_SETUP_COMMAND[Secret.WEBEX_BOT_TOKEN] = "pbpaste | relay setup token --stdin"
 
 
-def setup_command(item: Item) -> str:
-    """The command that stores `item`; a bot token is piped in so it never sits in argv or history."""
-    if isinstance(item, Secret):
-        return SECRET_SETUP_COMMAND[item]
-    return f"pbpaste | relay setup bot {item.bot} --stdin"
-
-
-def bot_account(webex: WebexConfig, bot: BotName) -> str:
-    """The Keychain account for `bot`: its `webex.bots` entry, else the default name."""
-    configured = webex.bots.get(bot)
-    if configured:
-        return configured
-    return CONTROL_ACCOUNT if bot == CONTROL else f"webex-bot-{bot}"
-
-
-def bot_item(webex: WebexConfig, bot: BotName) -> Item:
-    account = bot_account(webex, bot)
-    if bot == CONTROL and account == Secret.WEBEX_BOT_TOKEN.value:
-        return Secret.WEBEX_BOT_TOKEN
-    return BotItem(bot, account)
-
-
-def configured_bots(webex: WebexConfig) -> list[BotName]:
-    """The bots relayd runs: control always, then each app bot named in `webex.bots`."""
-    return [CONTROL, *(b for b in BOT_NAMES if b != CONTROL and b in webex.bots)]
+def setup_command(item: Secret) -> str:
+    """The command that stores `item`."""
+    return SECRET_SETUP_COMMAND[item]
 
 
 class MissingSecretError(RuntimeError):
@@ -145,23 +111,54 @@ def set_secret(secret: Item, value: str) -> None:
     keyring.set_password(KEYCHAIN_SERVICE, secret.value, value)
 
 
-def require_bot_token(webex: WebexConfig, bot: BotName) -> str:
-    return require_secret(bot_item(webex, bot))
+def _read_toml(target: Path) -> dict[str, object]:
+    with target.open("rb") as fh:
+        return dict(tomllib.load(fh))
 
 
-def set_bot_token(webex: WebexConfig, bot: BotName, token: str) -> Item:
-    """Store `bot`'s token in the Keychain; returns the item it went into."""
-    item = bot_item(webex, bot)
-    set_secret(item, token)
-    return item
+def legacy_config_keys(file: Path | None = None) -> list[str]:
+    """Dotted names of the keys in relay.toml that this build ignores (sorted); empty when none or no file."""
+    target = file or paths.relay_toml()
+    if not target.exists():
+        return []
+    return split_legacy(_read_toml(target))[1]
 
 
 def load_config(file: Path | None = None) -> RelayConfig:
+    """The effective config. Legacy keys are ignored; one warning names them (`relay config unset <key>`)."""
     target = file or paths.relay_toml()
     if not target.exists():
         return RelayConfig()
-    with target.open("rb") as fh:
-        return RelayConfig.model_validate(tomllib.load(fh))
+    clean, legacy = split_legacy(_read_toml(target))
+    if legacy:
+        log.warning(f"relay.toml has settings this build ignores: {', '.join(legacy)}")
+    return RelayConfig.model_validate(clean)
+
+
+def unset_config_key(key: str, file: Path | None = None) -> Path:
+    """Remove one dotted key from relay.toml, whether current or legacy, and rewrite it clean.
+
+    A current key falls back to its default. Raises ValueError when the key is not in the file.
+    """
+    target = file or paths.relay_toml()
+    data = _read_toml(target) if target.exists() else {}
+    *sections, leaf = key.split(".")
+    node: dict[str, object] = data
+    trail: list[tuple[dict[str, object], str]] = []
+    for section in sections:
+        child = node.get(section)
+        if not isinstance(child, dict):
+            raise ValueError(f"{key!r} is not set in relay.toml")
+        trail.append((node, section))
+        node = child
+    if leaf not in node:
+        raise ValueError(f"{key!r} is not set in relay.toml")
+    del node[leaf]
+    for parent, section in reversed(trail):
+        child = parent[section]
+        if isinstance(child, dict) and not child:
+            del parent[section]
+    return save_config(RelayConfig.model_validate(split_legacy(data)[0]), target)
 
 
 def save_config(config: RelayConfig, file: Path | None = None) -> Path:

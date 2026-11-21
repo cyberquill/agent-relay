@@ -86,7 +86,7 @@ class InputDone:
 class TurnDone:
     chat: str
     turn_id: str
-    text: str | None
+    text: str
 
 
 @dataclass(frozen=True)
@@ -272,7 +272,8 @@ class _ChatState:
 
 class ActionMapper:
     """Turns `action` notifications into records. Only markdown parts count as reply text; reasoning,
-    tool and system parts are not forwarded."""
+    tool and system parts are not forwarded. The text of a finished turn is the last assistant message:
+    what the agent wrote after its final tool call."""
 
     def __init__(self) -> None:
         self._chats: dict[str, _ChatState] = {}
@@ -317,6 +318,8 @@ class ActionMapper:
                 state.parts[part_id] += content
                 return [Delta(channel, content)]
             case m.ChatToolCallStartAction(tool_call_id=call_id, tool_name=name, display_name=label):
+                # Narration before a tool call is not the answer: the turn's text restarts here.
+                state.parts.clear()
                 state.tools[call_id] = label or name
                 return [ToolStart(channel, call_id, label or name, "")]
             case m.ChatToolCallReadyAction() if action.confirmed is None:
@@ -349,7 +352,7 @@ class ActionMapper:
                     text = summarize_answers(raw) or "accepted"
                 return [InputDone(channel, request_id, text)]
             case m.ChatTurnCompleteAction(turn_id=turn_id):
-                text = "\n\n".join(t for t in state.parts.values() if t.strip()) or None
+                text = "\n\n".join(t for t in state.parts.values() if t.strip())
                 state.parts.clear()
                 return [TurnDone(channel, turn_id, text)]
             case m.ChatTurnCancelledAction(turn_id=turn_id):

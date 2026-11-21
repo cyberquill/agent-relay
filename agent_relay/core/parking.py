@@ -31,7 +31,6 @@ RENEW_TEXT = (
     "with the single word: waiting."
 )
 PHONE_PREFIX = "Message from the user, sent from their phone:\n\n"
-LIMIT_TEXT = "Parking limit reached for this session. Reply here to wake it."
 AWAY_OFF_REASON = "away mode off"
 BLOCKS_KEY = "stop_blocks"
 DEADLINE_KEY = "park_deadline"
@@ -60,7 +59,7 @@ class ParkManager:
         router: Router,
         signals: Signals,
         config: ParkConfig,
-        notify: Notify,
+        notify: Notify | None,  # accepted for old callers; parking never posts to the phone itself
         lifecycle: Lifecycle,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
     ) -> None:
@@ -68,7 +67,6 @@ class ParkManager:
         self._router = router
         self._signals = signals
         self._config = config
-        self._notify = notify
         self._lifecycle = lifecycle
         self._clock = clock
 
@@ -103,8 +101,7 @@ class ParkManager:
         limit = self.block_limit(session.harness)
         if limit is not None and blocks >= limit:
             await self._set(session, SessionStatus.IDLE, 0, None)
-            await self._notify(session, LIMIT_TEXT)
-            log.info(f"{session.session_key}: parking limit ({limit}) reached")
+            log.info(f"{session.session_key}: parking limit ({limit}) reached; the phone is not told (D118)")
             return ParkResult("limit")
 
         now = self._clock()

@@ -2,24 +2,27 @@
 
 from __future__ import annotations
 
-import json
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 
 from pydantic import JsonValue
 
 from agent_relay import paths
-from agent_relay.core import away
 from agent_relay.core.inbox import Inbox, receipt_line
-from agent_relay.core.service import APP_LABELS, AppInfo, RelayError, RelayService, resolve_app
+from agent_relay.core.service import APP_LABELS, STICKY_MODEL_KEY, RelayError, RelayService, resolve_app
+from agent_relay.core.service.discovery import (
+    DEFAULT_CHOICE,
+    LAST_APP_KEY,
+    AgentOffer,
+    agent_value,
+    visible_models,
+)
 from agent_relay.frontends import card_state, commands, registry
 from agent_relay.frontends.apps import app_emoji
 from agent_relay.frontends.card_state import InvalidInput
 from agent_relay.frontends.commands import Command, HelpHint, Invalid, Prompt, Unknown
 from agent_relay.frontends.surface import Surface
 from agent_relay.frontends.webex import cards
-from agent_relay.frontends.webex.bots import BOT_LABELS, BotScope
-from agent_relay.frontends.webex.routing import BotRenderers
 from agent_relay.log import get_logger
 from agent_relay.models.attachments import Received
 from agent_relay.models.capabilities import Capability
@@ -32,7 +35,7 @@ log = get_logger(__name__)
 DEFAULT_MODEL = "__default__"
 NO_MODEL = ("", DEFAULT_MODEL, "default", "-")
 LAST_WORKSPACE_KEY = "new.last_workspace"
-DRAFT_PREFIX = "new.draft:"  # card 1 of the two-card layout leaves its answers here for card 2
+DRAFT_PREFIX = "new.draft:"  # drafts the old two-card layout left; core.housekeeping still sweeps them
 
 
 @dataclass(frozen=True)
@@ -54,11 +57,7 @@ async def health_summary(service: RelayService) -> str:
 
 
 class Handlers:
-    """Commands and card taps for one bot's space.
-
-    `scope` says which apps this space serves; `sessions` is the router that finds a session's own bot,
-    so a reply about a session lands in that session's thread whichever space the command came from.
-    """
+    """Commands and card taps for the one Webex space (or the PWA); replies go through `renderer`."""
 
     def __init__(
         self,
@@ -66,26 +65,21 @@ class Handlers:
         renderer: Surface,
         doctor: Callable[[], Awaitable[str]] | None = None,
         inbox: Inbox | None = None,
-        scope: BotScope | None = None,
-        sessions: BotRenderers | None = None,
     ) -> None:
         self.service = service
         self.renderer = renderer
-        self.scope = scope or BotScope()
-        self._sessions = sessions
-        self.threads: Surface = sessions or renderer
         self.doctor = doctor or (lambda: health_summary(service))
         self.inbox = inbox
 
     async def reply(self, ctx: Context, markdown: str, file: tuple[str, bytes, str] | None = None) -> None:
         if ctx.session is not None:
-            await self.threads.post_in_thread(ctx.session, markdown, file=file)
+            await self.renderer.post_in_thread(ctx.session, markdown, file=file)
         else:
             await self.renderer.post_top(markdown)
 
     async def card(self, ctx: Context, fallback: str, card: dict[str, JsonValue]) -> None:
         if ctx.session is not None:
-            await self.threads.post_in_thread(ctx.session, fallback, card=card)
+            await self.renderer.post_in_thread(ctx.session, fallback, card=card)
         else:
             await self.renderer.post_top(fallback, card=card)
 
@@ -133,13 +127,13 @@ class Handlers:
             raise RelayError(f"{label} does not support {what}.")
         return ctx.session
 
-    # /new: one card (or two), or the typed one-liner
+    # /new: one flat card, or the typed one-liner
 
     async def _nonce(self) -> str:
         return await card_state.issue_nonce(self.service.registry)
 
-    async def _validate(self, carry: dict[str, JsonValue]) -> None:
-        """Whatever a card (or a typed `/new`) carries must be something the relay offers."""
+    async def _validate(self, carry: dict[str, JsonValue]) -> str | None:
+        """Whatever a typed `/new` carries must be something the relay offers. Returns the model id."""
         svc = self.service
         values = [carry.get(f) for f in ("app", "ws", "model", "prompt")]
         if any(v is not None and not isinstance(v, str) for v in values):
@@ -150,28 +144,34 @@ class Handlers:
         label = APP_LABELS.get(harness, harness.value) if harness else ""
         if harness and adapter is None:
             raise InvalidInput(f"{label} is not enabled.")
-        if harness and not self.scope.serves(harness):
-            raise InvalidInput(f"{label} has its own space; start it there.")
         if adapter and not adapter.capabilities.has(Capability.COLD_START):
             raise InvalidInput(f"{label} cannot start sessions from the phone.")
         if ws and resolve_workspace(ws, load_workspaces()) is None:
             raise InvalidInput(f"Unknown workspace `{ws}`. Try `/ws`.")
-        if harness and adapter and model not in NO_MODEL:
-            if not adapter.capabilities.has(Capability.MODEL_SELECT):
-                raise InvalidInput(f"{label} does not offer model selection.")
-            if not any(
-                model in (m.id, m.label)
-                for m in await svc.models(harness.value)
-                if not cards.is_hidden_model(m.id, m.label)
-            ):
-                raise InvalidInput(f"{label} has no model `{model}`. Try `/models {harness.value}`.")
         if len(prompt) > cards.MAX_PROMPT_CHARS:
             raise InvalidInput(f"That prompt is too long ({cards.MAX_PROMPT_CHARS} characters at most).")
+        if not (harness and adapter) or model in NO_MODEL:
+            return None
+        if not adapter.capabilities.has(Capability.MODEL_SELECT):
+            raise InvalidInput(f"{label} does not offer model selection.")
+        return await self.valid_model(harness, model)
 
-    async def wizard(self, ctx: Context, carry: dict[str, JsonValue]) -> None:
+    async def valid_model(self, harness: Harness, model: str) -> str:
+        """The id of the app's model that `model` (an id or a label) names, or an error with a hint."""
+        listed = visible_models(await self.service.models(harness.value))
+        found = next((m.id for m in listed if model in (m.id, m.label)), None)
+        if found is None:
+            label = APP_LABELS.get(harness, harness.value)
+            hint = f"Try `/models {harness.value}`."
+            if harness is Harness.CURSOR_CDP and not listed:
+                hint = f"Its models are not known yet: `/models {harness.value}` lists and saves them."
+            raise InvalidInput(f"{label} has no model `{model}`. {hint}")
+        return found
+
+    async def start_or_card(self, ctx: Context, carry: dict[str, JsonValue]) -> None:
         """Start the session when the typed `/new` has app, workspace and prompt; otherwise one card."""
-        await self._validate(carry)
-        app, ws, model, prompt = (carry.get(f) for f in ("app", "ws", "model", "prompt"))
+        model = await self._validate(carry)
+        app, ws, prompt = (carry.get(f) for f in ("app", "ws", "prompt"))
         if (
             isinstance(app, str)
             and isinstance(ws, str)
@@ -180,7 +180,7 @@ class Handlers:
             and ws
             and prompt.strip()
         ):
-            await self._start(app, ws, model if isinstance(model, str) else "", prompt)
+            await self._start(app, ws, model, prompt)
             return
         await self._new_card(carry)
 
@@ -198,7 +198,11 @@ class Handlers:
     async def _start_session(
         self, harness: Harness, ws: str, text: str, model: str | None, workspace: str
     ) -> SessionRecord:
-        """Start the session with any files that came with `/new`, and tell the thread what happened."""
+        """Start the session with any files that came with `/new`.
+
+        Raises only while there is no session; once it exists, a failure after it is logged, so a tap
+        is never reported as failed (and retried) when a session is already running.
+        """
         svc = self.service
         received = None
         if self.inbox is not None:
@@ -209,26 +213,22 @@ class Handlers:
             )
         except BaseException:
             if received is not None and self.inbox is not None:
-                await self.inbox.discard(received)
+                await self.inbox.restore_new(received)
             raise
-        if received is not None and self.inbox is not None:
-            await self.inbox.claim(session.session_key, received)
-        await self.threads.thread_for(session)
-        if received is not None:
-            await self._report_files(Context(session), harness, received, True)
-        await self.say_where(session, "Started")
+        try:
+            if received is not None and self.inbox is not None:
+                await self.inbox.claim(session.session_key, received)
+            await self.renderer.thread_for(session)
+            if received is not None:
+                await self._report_files(Context(session), harness, received, True)
+        except Exception:
+            log.exception(f"session {session.session_key} started, but its thread was not set up")
         return session
 
-    async def say_where(self, session: SessionRecord, what: str) -> None:
-        """When `session`'s thread is in another bot's space, say so in this one, or the tap looks lost."""
-        if self._sessions is None:
-            return
-        owner = self._sessions.owner(session)
-        if owner != self.scope.bot:
-            await self.reply(Context(None), f"🧵 {what} in the {BOT_LABELS[owner]} space.")
-
-    async def _start(self, app: str, ws: str, model: str, prompt: str, *, away_on: bool = False) -> None:
-        svc = self.service
+    async def _start(
+        self, app: str, ws: str, model: str | None, prompt: str, *, reset_sticky: bool = False
+    ) -> SessionRecord:
+        registry = self.service.registry
         text = prompt.strip()
         if not text:
             raise InvalidInput("Say what the session should do.")
@@ -236,59 +236,16 @@ class Handlers:
         if target is None:
             raise InvalidInput(f"Unknown workspace `{ws}`. Try `/ws`.")
         harness = resolve_app(app)
-        session = await self._start_session(
-            harness, ws, text, None if model in NO_MODEL else model, target.path
-        )
-        if away_on and not await away.is_away(svc.registry, target.path):
-            try:
-                await svc.set_away_for(True, target.path)
-            except RelayError as exc:
-                await self.reply(
-                    Context(session), f"⚠️ The session started, but away mode is still off: {exc}"
-                )
-        await svc.registry.kv_set(LAST_WORKSPACE_KEY, target.name)
-        await self.threads.thread_for(session)
-
-    async def _app_option(self, info: AppInfo, preferred: JsonValue) -> cards.AppOption:
-        """One app for the card: its listed models (utility ones hidden) and which to preselect."""
-        svc = self.service
-        base = cards.AppOption(info.harness.value, info.label, app_emoji(info.harness))
-        if Capability.MODEL_SELECT not in info.capabilities:
-            return base
+        if reset_sticky:
+            # The app's own default was picked: not the model last used with it.
+            await registry.kv_delete(STICKY_MODEL_KEY.format(harness=harness.value))
+        session = await self._start_session(harness, ws, text, model, target.path)
         try:
-            listed = {
-                m.id: m.label
-                for m in await svc.models(info.harness.value)
-                if not cards.is_hidden_model(m.id, m.label)
-            }
-            sticky = await svc.sticky_model(info.harness)
-        except RelayError:
-            return base
-        if not listed:
-            return base
-        by_label = {label: mid for mid, label in listed.items()}
-        selected = DEFAULT_MODEL
-        if isinstance(preferred, str) and preferred in NO_MODEL[1:]:
-            selected = DEFAULT_MODEL
-        elif isinstance(preferred, str) and preferred in {**listed, **by_label}:
-            selected = preferred if preferred in listed else by_label[preferred]
-        elif sticky is not None and sticky in listed:
-            selected = sticky
-        models = ((DEFAULT_MODEL, "Default"), *listed.items())
-        return cards.AppOption(base.harness, base.label, base.emoji, models, selected)
-
-    async def _app_options(self, carry: dict[str, JsonValue]) -> list[cards.AppOption]:
-        wanted = carry.get("app")
-        only = resolve_app(wanted) if isinstance(wanted, str) and wanted else None
-        options: list[cards.AppOption] = []
-        for info in await self.service.apps():
-            if (
-                self.scope.serves(info.harness)
-                and Capability.COLD_START in info.capabilities
-                and only in (None, info.harness)
-            ):
-                options.append(await self._app_option(info, carry.get("model")))
-        return options
+            await registry.kv_set(LAST_WORKSPACE_KEY, target.name)
+            await registry.kv_set(LAST_APP_KEY, harness.value)
+        except Exception:
+            log.exception("could not remember the last workspace and app")
+        return session
 
     async def _default_workspace(self, carry: dict[str, JsonValue], names: list[str]) -> str:
         wanted = carry.get("ws")
@@ -297,102 +254,78 @@ class Handlers:
         last = await self.service.registry.kv_get(LAST_WORKSPACE_KEY)
         return last if last in names else names[0]
 
+    def _prefilled_agent(self, offer: AgentOffer, carry: dict[str, JsonValue]) -> str | None:
+        """The agent a partial `/new app ws model` already names, else the offer's own preselection."""
+        app, model = carry.get("app"), carry.get("model")
+        if isinstance(app, str) and app:
+            harness = resolve_app(app).value
+            typed = None if not isinstance(model, str) or model in NO_MODEL else model
+            for value in (agent_value(harness, typed), agent_value(harness, None)):
+                if offer.find(value) is not None:
+                    return value
+        return offer.preselected
+
+    async def _held_files(self) -> int:
+        """How many files sent at the top level wait for the next `/new`."""
+        held = await self.inbox.held_top_level() if self.inbox is not None else None
+        return len(held.attachments) if held is not None else 0
+
     async def _new_card(self, carry: dict[str, JsonValue]) -> None:
         top = Context(None)
         spaces = self.service.workspaces()
         if not spaces:
             await self.reply(top, "No workspaces. Add one with `relay ws add <name> <path>`.")
             return
-        options = await self._app_options(carry)
-        if not options:
+        offer = await self.service.agent_offer()
+        if not offer.entries:
             await self.reply(top, "No app that can start sessions is available. `/doctor` shows why.")
             return
-        choices = [(w.name, f"{w.name} · {w.file or w.path}") for w in spaces]
         workspace = await self._default_workspace(carry, [w.name for w in spaces])
         prompt = carry.get("prompt")
-        draft = prompt if isinstance(prompt, str) else None
         nonce = await self._nonce()
-        if self.service.config.webex.new_card_layout == "two":
-            app = options[0].harness if len(options) == 1 else None
-            card = cards.new_details(choices, workspace, draft, options, app, nonce=nonce)
-        else:
-            card = cards.new_session(choices, workspace, draft, options, nonce=nonce)
+        await card_state.store_offer(self.service.registry, nonce, tuple(e.value for e in offer.entries))
+        card = cards.new_session(
+            [(w.name, f"{w.name} · {w.file or w.path}") for w in spaces],
+            workspace,
+            [(e.value, f"{app_emoji(Harness(e.harness))} {e.label}") for e in offer.entries],
+            self._prefilled_agent(offer, carry),
+            prompt if isinstance(prompt, str) else None,
+            nonce=nonce,
+            unavailable=offer.unavailable,
+            files=await self._held_files(),
+        )
         await self.card(top, "New session", card)
 
-    async def _start_from_card(self, carry: dict[str, JsonValue], away_on: object) -> None:
-        """Re-check everything a card carried, then start."""
-        await self._validate(carry)
-        app, ws = carry.get("app"), carry.get("ws")
-        if not isinstance(app, str) or not app:
-            raise InvalidInput("Pick an app.")
-        if not isinstance(ws, str) or not ws:
+    async def new_submit(self, inputs: dict[str, JsonValue]) -> None:
+        """A `/new` card's Start button. Raises (so the card stays tappable) until a session exists."""
+        if "agent" not in inputs:
+            # The `/ws` card's "Start a session here" button: open the card with that workspace chosen.
+            if inputs.get("step") != "ws":
+                raise InvalidInput("Pick an agent.")
+            ws = inputs.get("value")
+            await self._new_card({"ws": ws if isinstance(ws, str) else None})
+            return
+        registry = self.service.registry
+        agent, ws, prompt, nonce = (inputs.get(k) for k in ("agent", "ws", "prompt", "nonce"))
+        if not isinstance(agent, str) or not isinstance(ws, str) or not isinstance(prompt, (str, type(None))):
+            raise InvalidInput("That card carried something unexpected.")
+        if agent not in await card_state.load_offer(registry, nonce if isinstance(nonce, str) else ""):
+            raise InvalidInput("That agent was not one this card offered. Send `/new` again.")
+        if not ws:
             raise InvalidInput("Pick a workspace.")
-        model, prompt = carry.get("model"), carry.get("prompt")
-        await self._start(
-            app,
-            ws,
-            model if isinstance(model, str) else "",
-            prompt if isinstance(prompt, str) else "",
-            away_on=away_on in (True, "true"),
-        )
-
-    async def _new_start(self, inputs: dict[str, JsonValue]) -> None:
-        app = inputs.get("app")
-        if not isinstance(app, str) or not app:
-            raise InvalidInput("Pick an app.")
-        carry: dict[str, JsonValue] = {
-            "app": app,
-            "ws": inputs.get("ws"),
-            "prompt": inputs.get("prompt"),
-            "model": inputs.get(f"model_{resolve_app(app).value}"),
-        }
-        await self._start_from_card(carry, inputs.get("away"))
-
-    async def _new_details(self, inputs: dict[str, JsonValue]) -> None:
-        carry: dict[str, JsonValue] = {k: inputs.get(k) for k in ("app", "ws", "prompt")}
-        await self._validate(carry)
-        prompt = carry.get("prompt")
-        if not isinstance(prompt, str) or not prompt.strip():
-            raise InvalidInput("Say what the session should do.")
-        options = await self._app_options(carry)
-        if not options:
-            raise InvalidInput("Pick an app.")
-        away_on = inputs.get("away")
-        if not options[0].models:
-            await self._start_from_card(carry, away_on)
-            return
-        nonce = await self._nonce()
-        await self.service.registry.kv_set(
-            f"{DRAFT_PREFIX}{nonce}", json.dumps({**carry, "away": away_on in (True, "true")})
-        )
-        await self.card(Context(None), "Pick a model", cards.new_model(options[0], nonce=nonce))
-
-    async def _new_go(self, inputs: dict[str, JsonValue]) -> None:
-        nonce = inputs.get("nonce")
-        raw = await self.service.registry.kv_get(f"{DRAFT_PREFIX}{nonce}") if isinstance(nonce, str) else None
-        draft = json.loads(raw) if raw else None
-        if not isinstance(draft, dict):
-            raise InvalidInput("That draft expired. Send `/new` again.")
-        carry: dict[str, JsonValue] = {k: draft.get(k) for k in ("app", "ws", "prompt")}
-        carry["model"] = inputs.get("model")
-        await self._start_from_card(carry, draft.get("away"))
-        await self.service.registry.kv_delete(f"{DRAFT_PREFIX}{nonce}")
-
-    async def new_step(self, inputs: dict[str, JsonValue]) -> None:
-        step = inputs.get("step")
-        if step == "start":
-            await self._new_start(inputs)
-            return
-        if step == "details":
-            await self._new_details(inputs)
-            return
-        if step == "go":
-            await self._new_go(inputs)
-            return
-        value = inputs.get("value")
-        carry = cards.carry_fields(inputs)
-        if isinstance(step, str) and step in ("app", "ws", "model", "prompt"):
-            carry[step] = value if isinstance(value, str) else ""
-            if step == "model" and not carry[step]:
-                carry[step] = DEFAULT_MODEL
-        await self.wizard(Context(None), carry)
+        if len(prompt or "") > cards.MAX_PROMPT_CHARS:
+            raise InvalidInput(f"That prompt is too long ({cards.MAX_PROMPT_CHARS} characters at most).")
+        app, _, model = agent.partition(":")
+        resolve_app(app)
+        chosen = None if model == DEFAULT_CHOICE else model
+        try:
+            await self._start(app, ws, chosen, prompt or "", reset_sticky=chosen is None)
+        except RelayError:
+            raise
+        except Exception as exc:
+            log.exception("starting a session from the card failed")
+            raise RelayError(
+                f"The session could not be started ({type(exc).__name__}). `/doctor` may help."
+            ) from exc
+        if isinstance(nonce, str):
+            await card_state.drop_offer(registry, nonce)

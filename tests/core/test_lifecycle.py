@@ -11,8 +11,6 @@ import pytest
 
 from agent_relay.adapters.base import UnsupportedError
 from agent_relay.core import away
-from agent_relay.core.approvals import ALLOW_SESSION_KEY
-from agent_relay.core.hooks import RECENT_APPROVAL_KEY
 from agent_relay.core.keys import RELEASE_KEY, session_signal
 from agent_relay.core.lifecycle import ALLOWED, InvalidTransitionError, UnknownSessionError
 from agent_relay.core.registry import Registry
@@ -149,11 +147,6 @@ async def test_ending_a_session_cleans_up_after_it(core: tuple[Core, Recorder]) 
     await _pending(built, key, "a1")
     await _pending(built, key, "q1", "question")
     await built.registry.enqueue(key, "prompt", "hello")
-    allow = ALLOW_SESSION_KEY.format(session_key=key, tool="bash")
-    recent = RECENT_APPROVAL_KEY.format(session_key=key, digest="d1")
-    other = RECENT_APPROVAL_KEY.format(session_key="opencode:other", digest="d1")
-    for flag in (allow, recent, other):
-        await built.registry.kv_set(flag, "1")
     woken = asyncio.create_task(built.signals.wait(session_signal(key), 5))
     await asyncio.sleep(0)
 
@@ -169,37 +162,33 @@ async def test_ending_a_session_cleans_up_after_it(core: tuple[Core, Recorder]) 
     question = await built.registry.get_pending("q1")
     assert question is not None and question.answer == {"answer": None, "by": "ended"}
     assert await built.registry.pop_queued(key, ("prompt",)) == []
-    assert await built.registry.kv_get(allow) is None and await built.registry.kv_get(recent) is None
-    assert await built.registry.kv_get(other) == "1", "another session's flags stay"
-    assert [e.by for e in rec.events if isinstance(e, ApprovalResolved)] == ["ended"]
+    assert [e.by for e in rec.events if isinstance(e, ApprovalResolved)] == [], "nothing waits on an approval"
     assert [e.by for e in rec.events if isinstance(e, QuestionAnswered)] == ["ended"]
     assert any(isinstance(e, SessionReleased) for e in rec.events)
 
 
-async def test_a_hook_waiting_on_an_approval_is_denied_when_its_session_ends(
+async def test_a_hook_waiting_on_a_question_is_released_when_its_session_ends(
     core: tuple[Core, Recorder],
 ) -> None:
     built, _ = core
     session = await _session(built, "opencode:s1", SessionStatus.RUNNING)
-    waiting = asyncio.create_task(built.broker.request(session, "bash", "rm -rf x", 30))
+    waiting = asyncio.create_task(built.broker.ask_outcome(session, "Proceed?", ("yes", "no"), 30))
     for _ in range(100):
         if await built.registry.open_pending():
             break
         await asyncio.sleep(0.01)
     await built.lifecycle.transition(session.session_key, SessionStatus.ENDED, "session ended")
-    outcome = await asyncio.wait_for(waiting, 2)
-    assert (outcome.decision, outcome.by) == ("deny", "ended")
+    answer, by = await asyncio.wait_for(waiting, 2)
+    assert (answer, by) == (None, "ended")
 
 
-async def test_stop_closes_requests_and_queue_but_keeps_grants(core: tuple[Core, Recorder]) -> None:
+async def test_stop_closes_requests_and_queue(core: tuple[Core, Recorder]) -> None:
     built, rec = core
     key = "opencode:s1"
     await _session(built)
     built.router.add_adapter(EmittingAdapter(count=0))
     await _pending(built, key, "a1")
     await built.registry.enqueue(key, "steer", "later")
-    allow = ALLOW_SESSION_KEY.format(session_key=key, tool="bash")
-    await built.registry.kv_set(allow, "1")
 
     await built.service.stop(key)
     await built.router.join()
@@ -208,8 +197,7 @@ async def test_stop_closes_requests_and_queue_but_keeps_grants(core: tuple[Core,
     pending = await built.registry.get_pending("a1")
     assert pending is not None and pending.answer == {"decision": "deny", "by": "stopped"}
     assert await built.registry.pop_queued(key, ("steer",)) == []
-    assert await built.registry.kv_get(allow) == "1"
-    assert [e.by for e in rec.events if isinstance(e, ApprovalResolved)] == ["stopped"]
+    assert [e.by for e in rec.events if isinstance(e, ApprovalResolved)] == []
 
 
 async def test_revive_moves_ended_to_idle_only(core: tuple[Core, Recorder]) -> None:
@@ -256,7 +244,7 @@ async def test_panic_keeps_going_after_an_error_and_reports_it(core: tuple[Core,
     await _session(built, "opencode:bad")
     await _session(built, "opencode:good")
     await _session(built, "opencode:parked", SessionStatus.PARKED)
-    await _pending(built, "opencode:good", "a1")
+    await _pending(built, "opencode:good", "q1", "question")
     await built.registry.enqueue("opencode:good", "prompt", "x")
     adapter = FlakyAdapter("opencode:bad")
     built.router.add_adapter(adapter)
@@ -265,7 +253,7 @@ async def test_panic_keeps_going_after_an_error_and_reports_it(core: tuple[Core,
     summary = await built.service.panic()
 
     assert adapter.cancelled == ["opencode:good"], "the failing cancel did not stop the others"
-    assert "Cancelled 1 turn(s), denied 1 request(s)" in summary
+    assert "Cancelled 1 turn(s), closed 1 question(s)" in summary
     assert "1 step(s) failed: cancel opencode:bad" in summary
     good = await built.service.session("opencode:good")
     assert good.status is SessionStatus.IDLE

@@ -36,7 +36,7 @@ from agent_relay.adapters.base import (
 )
 from agent_relay.core import away
 from agent_relay.core.claims import make_claim
-from agent_relay.core.hooks import APPROVED_CALL_KEY, HOOKED
+from agent_relay.core.hooks import HOOKED
 from agent_relay.core.registry import Registry
 from agent_relay.core.service import RelayError
 from agent_relay.log import get_logger
@@ -44,7 +44,6 @@ from agent_relay.models.attachments import Attachment
 from agent_relay.models.capabilities import Capabilities, Capability
 from agent_relay.models.events import (
     ApprovalRequested,
-    ApprovalResolved,
     ErrorEvent,
     Event,
     Harness,
@@ -71,6 +70,8 @@ IN_PROGRESS = 8
 READY_TIMEOUT_S = 10.0
 MAX_LIST_PAGES = 50
 DEFAULT_MODEL = "auto"
+# The session config value that runs tool calls without asking (the host's own "Allow all").
+AUTO_APPROVE = "autoApprove"
 
 type Sleep = Callable[[float], Awaitable[None]]
 type Discover = Callable[[], Awaitable[Endpoint]]
@@ -431,12 +432,8 @@ class AhpAdapter(Adapter):
                     await self._emit(ToolStarted, session, tool_id=call_id, name=name, detail=detail)
             case mp.ToolAsk():
                 await self._ask(session, record)
-            case mp.ToolConfirmed(call_id=call_id, approved=approved):
-                if self._asks.pop(call_id, None) is not None and await self._still_open(call_id):
-                    decision: Decision = "allow" if approved else "deny"
-                    await self._emit(
-                        ApprovalResolved, session, request_id=call_id, decision=decision, by="desk"
-                    )
+            case mp.ToolConfirmed(call_id=call_id):
+                self._asks.pop(call_id, None)
             case mp.ToolEnd(call_id=call_id, name=name, ok=ok, summary=summary):
                 if not hooked:
                     await self._emit(
@@ -467,12 +464,6 @@ class AhpAdapter(Adapter):
 
     async def _ask(self, session: SessionRecord, ask: mp.ToolAsk) -> None:
         self._asks[ask.call_id] = ask
-        prior = await self._registry.kv_get(APPROVED_CALL_KEY.format(call_id=ask.call_id))
-        if prior in ("allow", "deny"):
-            decision: Decision = "allow" if prior == "allow" else "deny"
-            await self.answer_approval(session, ask.call_id, decision)
-            log.info(f"agent host tool call {ask.call_id} answered from the earlier phone decision")
-            return
         await self._emit(ApprovalRequested, session, request_id=ask.call_id, tool=ask.tool, detail=ask.detail)
 
     # the Adapter contract
@@ -512,7 +503,10 @@ class AhpAdapter(Adapter):
                     channel=session,
                     provider=PROVIDER,
                     working_directories=[uris.file_uri(request.workspace)],
-                    config={"isolation": "worktree" if request.isolation else "folder"},
+                    config={
+                        "isolation": "worktree" if request.isolation else "folder",
+                        "autoApprove": AUTO_APPROVE,
+                    },
                 ),
             )
             await self._subscribe(conn, session)
@@ -619,9 +613,6 @@ class AhpAdapter(Adapter):
             return None
         wanted = "deny" if decision == "deny" else "approve"
         matching = [o for o in ask.options if o.kind == wanted]
-        if decision == "allow_session":
-            scoped = [o for o in matching if "session" in f"{o.id} {o.label}".lower()]
-            matching = scoped or matching
         return matching[0].id if matching else None
 
     async def answer_approval(

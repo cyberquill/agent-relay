@@ -132,7 +132,7 @@ def test_copilot_timeouts_follow_config() -> None:
     assert isinstance(pre, list) and isinstance(stop, list)
     entry = pre[0]
     assert isinstance(entry, dict)
-    assert entry["timeoutSec"] == entry["timeout"] == config.approval_hook_timeout_s()
+    assert entry["timeoutSec"] == entry["timeout"] == config.question_hook_timeout_s()
     assert isinstance(stop[0], dict) and stop[0]["timeoutSec"] == config.park_hook_timeout_s()
 
 

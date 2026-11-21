@@ -136,15 +136,12 @@ def status(as_json: Annotated[bool, typer.Option("--json")] = False) -> None:
 def away(
     switch: Annotated[Switch, typer.Argument(help="on or off")],
     workspace: Annotated[
-        str | None, typer.Option("--workspace", help="Limit to one workspace (path).")
+        str | None,
+        typer.Option("--workspace", hidden=True, help="Ignored: away mode is global (old skill copies)."),
     ] = None,
 ) -> None:
-    """Turn away mode on or off, for every workspace or one."""
-    scope = str(paths.expand_user(workspace).resolve()) if workspace else None
-    message: JsonObj = {"op": "away", "enabled": switch is Switch.on}
-    if scope is not None:
-        message["workspace"] = scope
-    reply = ask(message)
+    """Turn away mode on or off. It is one global switch."""
+    reply = ask({"op": "away", "enabled": switch is Switch.on})
     if "error" in reply:
         raise fail(str(reply["error"]))
-    out(f"away mode {'on' if reply.get('away') else 'off'} for {scope or 'all workspaces'}")
+    out(f"away mode {'on' if reply.get('away') else 'off'}")
