@@ -1,0 +1,21 @@
+docs/operations.md
+  s_9b9895e5773c7f::t_4a27b593ed9f02 435
+TODO.md
+  s_9b9895e5773c7f::t_72cf8061ef9982 66-73
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "161f3560ac33adec898ecb97bcec8e419375ed10",
+  "prompts": {},
+  "sessions": {
+    "s_9b9895e5773c7f": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "687049ce-e73a-4d10-96dd-46ee735f4af5",
+        "model": "gpt-5.3-codex"
+      },
+      "human_author": "Brijgopal Bharadwaj <brijgopalbharadwaj1999@gmail.com>"
+    }
+  }
+}
