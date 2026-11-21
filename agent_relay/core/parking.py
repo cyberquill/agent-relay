@@ -30,7 +30,10 @@ RENEW_TEXT = (
     "Parking renewed: the user is away and has not replied yet. Do nothing else and end your turn now "
     "with the single word: waiting."
 )
-PHONE_PREFIX = "Message from the user, sent from their phone:\n\n"
+PHONE_PREFIX = (
+    "Message from the user, sent from their phone (this chat does not show it). "
+    "Start your reply on a new line:\n\n"
+)
 AWAY_OFF_REASON = "away mode off"
 BLOCKS_KEY = "stop_blocks"
 DEADLINE_KEY = "park_deadline"

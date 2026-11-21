@@ -430,7 +430,7 @@ the table is the last result per cell.
 | 5 long table arrives as `answer.html` (CSP, no script, no href) | ✅ VS Code, Copilot, Cursor IDE (CDP), Cursor CLI, OpenCode |
 | 6 `/model` card, next turn uses it | ✅ VS Code (claude-haiku-4.5), Copilot (claude-sonnet-5.5), Cursor IDE (Grok 4.7 High), Cursor CLI, OpenCode |
 | 7 shell command, no approval card | ✅ VS Code, Copilot, Cursor IDE (CDP), Cursor CLI (`--force`), OpenCode (`always`) |
-| 8 away: desk chat reaches the phone, reply continues it, `/back` releases it | not run: it needs the owner to run a desk turn |
+| 8 away: desk chat reaches the phone, reply continues it, `/back` releases it | ✅ VS Code Copilot chat (owner, 2026-11-21 20:14): `OK` reached the phone and parked, the reply `BACK` was delivered and answered, `/back` released it. Cosmetic: the desk shows `OKBACK` in one bubble and not the phone message; the thread root says `copilot_cli` (see `TODO.md`). Not checked: Cursor, Copilot CLI |
 | 9 `/panic` | ✅ everything stopped, `/away` resumed, away left off |
 | Cursor CDP on Cursor 3.31.15 (selectors v4, D133, D134) | ✅ self-test passes; scenarios 2 to 7 pass (`/new cursor-ide`, reply, image and PDF, `answer.html`, `/model` Grok 4.7 High, shell). Not run: scenario 8 on a Cursor desk chat |
 | Android look of the `/new` and `/model` cards (by the owner) | not run: owner |

@@ -14,7 +14,7 @@ from agent_relay import paths
 from agent_relay.core import away
 from agent_relay.core.claims import CURSOR_SCOPE, make_claim, take_claim
 from agent_relay.core.hooks import ALLOW_REASON, HOOKED
-from agent_relay.core.parking import RENEW_TEXT
+from agent_relay.core.parking import PHONE_PREFIX, RENEW_TEXT
 from agent_relay.core.registry import Registry
 from agent_relay.daemon import Core
 from agent_relay.models.config import RelayConfig
@@ -309,7 +309,7 @@ async def test_cursor_park_uses_followup_and_last_response(core: tuple[Core, Rec
     await _wait_status(built, "cursor:K1", SessionStatus.PARKED)
     await built.service.prompt("cursor:K1", "ship it")
     reply = await task
-    assert reply["stdout"] == {"followup_message": "Message from the user, sent from their phone:\n\nship it"}
+    assert reply["stdout"] == {"followup_message": f"{PHONE_PREFIX}ship it"}
     assert rec.of(TurnCompleted)[-1].text == "Fixed it."
 
 
@@ -389,7 +389,7 @@ async def test_steering_goes_out_on_next_post_tool(core: tuple[Core, Recorder, l
     assert reply["stdout"] == {
         "hookSpecificOutput": {
             "hookEventName": "PostToolUse",
-            "additionalContext": "Message from the user, sent from their phone:\n\nuse pytest, not unittest",
+            "additionalContext": f"{PHONE_PREFIX}use pytest, not unittest",
         }
     }
     again = await hook(built, "copilot", "PostToolUse", {**LOCAL_PRE, "tool_name": "read_file"})
@@ -415,9 +415,7 @@ async def test_agent_idle_notification_wakes_with_queued_text(core: tuple[Core, 
         "notification",
         {"session_id": "C3", "cwd": "/w/proj", "notification_type": "agent_idle", "message": "idle"},
     )
-    assert reply["stdout"] == {
-        "additionalContext": "Message from the user, sent from their phone:\n\nwake up"
-    }
+    assert reply["stdout"] == {"additionalContext": f"{PHONE_PREFIX}wake up"}
 
 
 async def test_opencode_register_records_server(core: tuple[Core, Recorder, list[str]]) -> None:

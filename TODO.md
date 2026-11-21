@@ -56,7 +56,18 @@ need the owner (scenario 8 at the desk, the Android look).
 
 ### Open items from the November round
 
-- [ ] **Scenario 8 (away round trip), owner at the desk.** Headless `cursor-agent -p` and `copilot -p` create no
+- [ ] **Scenario 8, VS Code (2026-11-21 20:14, owner at the desk): works.** A VS Code Copilot chat in `.scratch`
+      with away on reached the phone (`OK`), parked, took the phone's `BACK` and answered it, and `/back`
+      released it and handed 10 phone sessions to the desk. Two cosmetic findings: (1) the desk chat shows
+      the phone's reply glued to the previous answer (`OKBACK`) and never shows the phone message itself;
+      the continuation text now asks the agent to start on a new line (`core/parking.py::PHONE_PREFIX`),
+      not re-checked live; (2) the thread root says `copilot_cli` for this VS Code Agent Host chat, because
+      its first hook is `SessionStart` and the Copilot CLI sends the same PascalCase events (fixture
+      `tests/fixtures/hooks/copilot.json`), so the payload cannot tell them apart; the session's
+      `events.jsonl` says `clientName: vscode-agent-host` and could be read to label it.
+      Cursor and Copilot CLI desk chats are not checked for scenario 8.
+
+- [ ] **Scenario 8 for Cursor and Copilot CLI desk chats.** Headless `cursor-agent -p` and `copilot -p` create no
       phone thread, so run a real desk chat: 1) in the phone space send `/away`; 2) in a Cursor chat, a Copilot
       chat in VS Code or a Copilot CLI session in `.scratch`, ask `Reply with exactly: OK`; 3) the phone gets a
       thread with `OK` and the chat parks (🅿️); 4) reply in that thread and check the desk chat continues;
