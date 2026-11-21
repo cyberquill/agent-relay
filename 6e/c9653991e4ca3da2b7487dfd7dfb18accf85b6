@@ -1,0 +1,701 @@
+agent_relay/core/hooks.py
+  s_6532114fb9259a::t_7bf2ef1d595b67 288
+  s_6532114fb9259a::t_6b378994994216 200-202
+  s_6532114fb9259a::t_6933a6d271a38e 3-6,18,22,62,280-282
+  s_6e0c2c6dba0592::t_0044c0f83a2887 314
+agent_relay/adapters/cursor_cli/adapter.py
+  s_6532114fb9259a::t_b8ad4e4d252388 172-174
+  s_6532114fb9259a::t_d4ea7674c2f9e0 364,399,442,448,540
+tests/adapters/test_ahp.py
+  s_349af440bf7504::t_b46edf20ba9dfa 432
+  s_d55e146ebbc7b2::t_455d552d602c85 14,22,127,231-237,314-316,322,324-331,334,336-340,547
+  s_6532114fb9259a::t_a9cadd39d968fc 283,295-298,301,305,309-311,321
+tests/hook/test_transcript.py
+  s_6532114fb9259a::t_ddfbeba47595a8 80-113
+  s_6e0c2c6dba0592::t_accafbbd5aad06 5,7,128-151
+  s_6e0c2c6dba0592::t_6486dac8dbb921 48-60,62-66
+  s_6e0c2c6dba0592::t_4111ed29926b79 61
+agent_relay/hook/installers/__init__.py
+  s_6532114fb9259a::t_1547092433342a 32
+tests/core/test_approvals_delivery.py
+  s_6532114fb9259a::t_5a9be4fd55a0cf 1,27,49,53,64,72,79,81,83,85,89,91,94,100,102-103,107,110-111,115,124
+  s_6532114fb9259a::t_cce88bef912a0b 15,19-25
+agent_relay/adapters/ahp/adapter.py
+  s_6532114fb9259a::t_e526f599618fd5 39,73-74,435-436
+  s_6532114fb9259a::t_519002abf6c29d 506-509
+tests/adapters/test_cursor_cli.py
+  s_6532114fb9259a::t_ccb98106d841de 157,164,245,248-255,258,260,264-266,269-271,273,279-280,282-293,330,333-334,349-350,352,355,359,364,396,439,444
+  s_6532114fb9259a::t_f2b13054a32ee8 16
+tests/adapters/test_ahp_units.py
+  s_6532114fb9259a::t_4160422d0ccbbc 118-126,134-162
+  s_6532114fb9259a::t_b5f143cee96e4d 127-133
+tests/adapters/test_cursor_cli_units.py
+  s_265047b0913283::t_8768590684819f 114,121
+  s_6532114fb9259a::t_995beda23d31bf 174-175,201
+tests/core/test_hooks.py
+  s_6532114fb9259a::t_cce88bef912a0b 213,221,223
+  s_6532114fb9259a::t_b805392d2a8ec7 17,348-350,367
+  s_349af440bf7504::t_3f45f8cf355af8 1,16,18,29,114-116,129,131-135,138,147,150,153,169-171,187,190,192-193,238,247-248,500,529-532
+agent_relay/adapters/base.py
+  s_6532114fb9259a::t_e178866440fc01 49
+  s_6532114fb9259a::t_788df7f864e6e2 119-120
+agent_relay/hook/outputs.py
+  s_6532114fb9259a::t_7bf2ef1d595b67 12-13,15,17,19,22,26,30
+agent_relay/models/events.py
+  s_6532114fb9259a::t_6726fdfa37527f 74,80
+  s_6532114fb9259a::t_cf7378a1f54b8d 99-100
+tests/core/test_disconnect.py
+  s_6532114fb9259a::t_d9f531195abf26 1,17
+tests/core/test_lifecycle.py
+  s_6532114fb9259a::t_cce88bef912a0b 247,256
+  s_6532114fb9259a::t_d9f531195abf26 165,170,175,181-182,185,200
+agent_relay/adapters/ahp/mapping.py
+  s_6532114fb9259a::t_45a20532ec2ae9 89,355
+  s_6532114fb9259a::t_3c64c1e7a81196 275-276
+  s_6532114fb9259a::t_c801398415c196 321-322
+agent_relay/hook/transcript.py
+  s_6532114fb9259a::t_ddfbeba47595a8 16-21,23-24,28-35
+  s_6e0c2c6dba0592::t_0044c0f83a2887 5,7,125-144
+  s_6e0c2c6dba0592::t_4111ed29926b79 94-102,124
+  s_6e0c2c6dba0592::t_6486dac8dbb921 48-55,74-75
+tests/hook/test_installers.py
+  s_6532114fb9259a::t_a4692cb943f2ab 135
+agent_relay/hook/shims.py
+  s_6532114fb9259a::t_cf7588dbaff25b 284
+agent_relay/core/service/approvals.py
+  s_0ae3b763defb38::t_3ff50802647c7b 1,3-4,6,9,11,34-35,37,45,60,62,67-68,86
+agent_relay/core/lifecycle.py
+  s_6532114fb9259a::t_a4692cb943f2ab 144-148,152-161,163
+tests/adapters/test_opencode.py
+  s_6532114fb9259a::t_1699b5b6544b1d 15
+  s_6532114fb9259a::t_22edcc56d02081 151-212,261,264-276,279,281,287,291,293-296,298
+  s_6532114fb9259a::t_6f47b9679793da 18
+  s_6e0c2c6dba0592::t_73a47c30df1598 449
+  s_6e0c2c6dba0592::t_34de35f1ecc97a 17,446-448,450-461
+plugins/opencode/agent-relay.ts
+  s_6532114fb9259a::t_7f085b98aeac4d 1-3
+agent_relay/core/approvals.py
+  s_6532114fb9259a::t_23566e3c72acfe 1,3-5,16-18,20,23,30,44,53,111,115,120,122-129,131,144,146-151,154-155,158-159,161-163,166-168,170-173,175,179,181,187,190,194,196-197,199,205,207-209,216-221,223,233
+tests/fakes/acp_agent.py
+  s_6532114fb9259a::t_ccb98106d841de 138-141,158-167
+  s_d55e146ebbc7b2::t_3f0e12cecd464c 168-169
+tests/adapters/test_vscode.py
+  s_349af440bf7504::t_b46edf20ba9dfa 198
+  s_265047b0913283::t_8768590684819f 459
+tests/core/test_no_approvals.py
+  s_5a7905b4d03fed::t_081a2a16de68ab 112,114
+  s_6532114fb9259a::t_375d200606cdb4 111
+  s_6532114fb9259a::t_3c9900c4c619a9 1,5,7-8,10-18,21-23,25-26,28-29,32-33,35-43,46-49,51-60,63-110,113,115-118,120-188
+  s_6532114fb9259a::t_8fbf19a4430de7 24
+  s_6532114fb9259a::t_f966211c94058e 27
+  s_6532114fb9259a::t_ddedad70e97577 31
+  s_6532114fb9259a::t_309f953b04f6e7 119
+tests/core/test_approvals.py
+  s_6532114fb9259a::t_fd5628ff407bb7 1-2,12-13,16-18,21-35,44,49,52-54,60-66,68-110,130-132,136-140,144,146,153-154,177-179,181-183
+agent_relay/adapters/opencode/adapter.py
+  s_6532114fb9259a::t_a85c243e53be96 5-6,28,226-228,245
+agent_relay/adapters/opencode/client.py
+  s_6532114fb9259a::t_80a9cc2eed15b1 17-18
+  s_6e0c2c6dba0592::t_a169b9547574b1 89-93,222
+agent_relay/adapters/opencode/mapping.py
+  s_6532114fb9259a::t_ff860a735fb5e2 18,58,119-128,130-132,232,249,263-264
+tests/hook/test_shims.py
+  s_0ae3b763defb38::t_24c20a4d46cab3 78,80,83-87,89-90,92,94,96
+tests/fixtures/rich/table.body.html
+  s_265047b0913283::t_71bedaefeef532 1-29
+agent_relay/core/send_file.py
+  s_6e0c2c6dba0592::t_11f4dfc4a63781 81
+  s_6e0c2c6dba0592::t_ef9a89ac3fce3e 16
+  s_6532114fb9259a::t_7a7c0025d1b2c6 1-15,17-80,82-102,106-126,129
+  s_6532114fb9259a::t_2c58780cef0aa8 103-105
+  s_265047b0913283::t_ec81e2e5caa3ad 127-128
+agent_relay/frontends/text.py
+  s_1331dc15a5db54::t_2adcdda6e4af8d 1-46
+tests/fixtures/rich/code.body.html
+  s_265047b0913283::t_71bedaefeef532 1-15
+tests/fixtures/rich/long.md
+  s_265047b0913283::t_71bedaefeef532 1-70
+tests/core/test_send_file.py
+  s_265047b0913283::t_f48a300c790e6b 1-127,129-174
+  s_6e0c2c6dba0592::t_d527c455057d9a 128
+agent_relay/scrub.py
+  s_6e0c2c6dba0592::t_11f4dfc4a63781 48-53,55-69
+tests/mcp/test_relay_mcp.py
+  s_265047b0913283::t_666717871b76dd 106,109-110
+  s_6e0c2c6dba0592::t_061bc335a9541f 166
+  s_265047b0913283::t_24c3bcfbd64ddc 239
+  s_6e0c2c6dba0592::t_65f246dba8cbce 221-238,240-297
+agent_relay/frontends/webex/links.py
+  s_265047b0913283::t_42209b233f22e3 3-4,9,11
+agent_relay/core/inbox.py
+  s_d55e146ebbc7b2::t_aa6911ef41ff70 334-356
+  s_265047b0913283::t_23759a17c02c0d 242-244
+  s_265047b0913283::t_ca66d9da730590 123-127
+  s_6e0c2c6dba0592::t_f2b4c99dd8f459 245,357-361,363
+agent_relay/mcp/server.py
+  s_265047b0913283::t_cbc864e3853fa2 47-52
+  s_6532114fb9259a::t_d1b136a546f3a1 136-143
+  s_265047b0913283::t_13fe77f1c389e3 79-85,87-88
+  s_265047b0913283::t_ecd81a5b0922d7 3-4
+  s_265047b0913283::t_ed2d220b3027b7 86
+  s_265047b0913283::t_ee7ea6b1200477 28,30-32
+  s_265047b0913283::t_7113f4c6d4b3f2 89
+  s_6532114fb9259a::t_379e9361f31b39 135
+  s_6532114fb9259a::t_1e28030584f3d3 144
+tests/fixtures/rich/long.body.html
+  s_265047b0913283::t_71bedaefeef532 1-72
+tests/test_rich.py
+  s_265047b0913283::t_2abe41e6f62553 191-192
+  s_265047b0913283::t_121233b1cca76d 117-123,246-248
+  s_265047b0913283::t_f673ebd9ff711b 1-116,124-190,193-245,249-312
+agent_relay/frontends/rich.py
+  s_265047b0913283::t_c1cd2f067067bc 296-308,311-331,334,336-337
+  s_265047b0913283::t_a6fc7b13a4a29b 1-295,309-310,332-333,335,338-340
+tests/frontends/test_attachments_intake.py
+  s_6e0c2c6dba0592::t_cb534d77d95b01 471,482-483
+  s_265047b0913283::t_6ac895e05bef0e 10,25-28,418-421
+  s_0ae3b763defb38::t_f41a23347e9265 11,188-244,254,263,277,294,300,307,309,324,355-389,425-426,436-437,440
+  s_6e0c2c6dba0592::t_ba3ea067c642de 390-391,395,397-399,402-407,409-417,422-424,427-435,438-439,441-447,491
+agent_relay/frontends/webex/attachments.py
+  s_265047b0913283::t_09c76da912ff40 11,17,23,28-31,36,41-54,66,70-71,87,90,96-98,100-102,104-106,109,111,113,115,121,123-127,129-137
+tests/core/test_inbox.py
+  s_d55e146ebbc7b2::t_747130ac71c164 27,337-416
+tests/fixtures/rich/code.md
+  s_265047b0913283::t_276e21d2d5f048 1-19
+tests/fixtures/rich/table.md
+  s_265047b0913283::t_162825c87b2f4e 1-11
+skills/agent-relay-away/SKILL.md
+  s_1331dc15a5db54::t_93dd5bf2f447e9 4-8,13-18,22,25,33,54-65,79
+  s_1331dc15a5db54::t_a348b089f0440e 80
+tests/core/test_away_global.py
+  s_1331dc15a5db54::t_a9e0d090a26a1c 1-4,6-15,17-69,71-104,107-237,239-332
+  s_d55e146ebbc7b2::t_7f79c037aa5038 238
+  s_1331dc15a5db54::t_4a43a99dacc81d 5,16,70,105-106
+agent_relay/core/router.py
+  s_1331dc15a5db54::t_a0190672a6542f 5-10,17,42-43,54-55,57-62,90,92-93,100-107
+  s_1331dc15a5db54::t_93b45fea9bade5 108
+tests/core/test_queue_modes.py
+  s_6e0c2c6dba0592::t_d527c455057d9a 97
+  s_6e0c2c6dba0592::t_d673cc73db9859 24
+tests/ops/test_bundles.py
+  s_1331dc15a5db54::t_afd0828bd75900 153-154
+  s_d55e146ebbc7b2::t_9362ac36b67b68 198
+skills/agent-relay-away/commands/away.md
+  s_1331dc15a5db54::t_ad6b95006c8375 3,6-9
+skills/agent-relay-away/commands/back.md
+  s_1331dc15a5db54::t_766c700362db73 3,6-7
+agent_relay/core/away.py
+  s_1331dc15a5db54::t_7a65289176f7df 1,3-11,13,17,20,22,26,34-38,41-43,46-47,49-50,52-58
+agent_relay/core/service/away.py
+  s_1331dc15a5db54::t_d5c618437ba661 1,11,25-26,29-30,32-34,39-41,46,49,61,81,94,101-102,104,142
+agent_relay/core/parking.py
+  s_1331dc15a5db54::t_1ff78a6551a949 62
+  s_1331dc15a5db54::t_a4c0bbfd9739ac 104
+patches/stepping-away/SKILL.md
+  s_1331dc15a5db54::t_d46a17e2fe4a88 18-19,26,37,47
+tests/frontends/test_new_card.py
+  s_d55e146ebbc7b2::t_e7862ae0621ab3 7,24,66-68,102-104,150,229-231,262-268,271,297-302,344-346,379-381,433,496-498,513-515,531
+  s_0ae3b763defb38::t_2d2d753de5c952 1,5,15,19-20,26-28,35,56-65,69-73,75-85,88-93,98-100,105-118,121-133,136,143-145,148-149,153-154,156,159-164,167,188-192,200,214-217,221,226-228,232-244,254-261,269-270,272-282,288-289,291,293-295,303-311,319,323-328,338-343,348-349,352,355-371,373-378,382-392,396,399-402,406-414,417,420-427,430,436-444,447-461,464-466,469-472,475,478-479,482-484,487-488,490-494,499-506,510,512,516,518-530,532
+  s_6e0c2c6dba0592::t_cb534d77d95b01 74,86-87,507
+  s_6e0c2c6dba0592::t_215a61ac3a8e79 296,495,508
+agent_relay/frontends/webex/cards/new_session.py
+  s_0ae3b763defb38::t_c90d58b1e5c020 1-4,8,22,24,27-28,34-35,39-40,42-47,51-81
+  s_0ae3b763defb38::t_24c49bf8666002 48-50
+tests/core/test_discovery.py
+  s_6532114fb9259a::t_cce88bef912a0b 285-287
+  s_0ae3b763defb38::t_eddc8804c381e1 1-284,288-306
+tests/frontends/card_spec.py
+  s_0ae3b763defb38::t_dc8bb6c23009a6 1-141
+agent_relay/core/service/discovery.py
+  s_0ae3b763defb38::t_24c49bf8666002 215-217
+  s_0ae3b763defb38::t_a469bd7629b9cd 1-6,11-14,18,28,35-130,133,135-137,154-175,177-178,183-190,194-213,220,222-281,293,298-300
+  s_265047b0913283::t_ae31a74131b274 16,191-193
+  s_0ae3b763defb38::t_2c668a4086bda3 15,214,301
+tests/core/discovery_fakes.py
+  s_6532114fb9259a::t_cce88bef912a0b 23-28
+  s_0ae3b763defb38::t_58e949af2aee38 1-22,29-73
+agent_relay/frontends/webex/cards/model_switch.py
+  s_0ae3b763defb38::t_d5b374b67adbae 20
+scripts/card_check.py
+  s_5a7905b4d03fed::t_081a2a16de68ab 20,43-44,48,51
+  s_0ae3b763defb38::t_ce9f41b9ba3008 1-19,21-42,45-47,49-50,52-98
+tests/frontends/test_card_spec.py
+  s_0ae3b763defb38::t_c1de263c7c6a37 1-5,7-23,32-110
+  s_0ae3b763defb38::t_a6b0d017bb3142 6,24-31
+tests/frontends/test_model_switch.py
+  s_0ae3b763defb38::t_e241e0fd69d951 1,12,14,29,31-32,37,44,46-47,74,89,96-106,125-141,147,165-176,180,191-244
+  s_0ae3b763defb38::t_6e9757a3d24525 177-179,181-190
+tests/frontends/card_samples.py
+  s_0ae3b763defb38::t_a6b0d017bb3142 32-35,57-59,63-66,84-88,93-97,103-105,107-111
+  s_0ae3b763defb38::t_54869c410ead39 1-31,36-56,60-62,67-83,89-92,98-102,106,112-115
+scripts/e2e/model.py
+  s_5a7905b4d03fed::t_fcedc0a6f4f4c5 1-134
+scripts/e2e/scenarios.py
+  s_5a7905b4d03fed::t_8b1bcce1027b8f 1-8,11-20,24,28-42,44-85,87-93,95-105,107-120,122-138,140-147
+  s_5a7905b4d03fed::t_5935bfb4dcb7e7 86,94,106,121,139
+  s_265047b0913283::t_7735389bc90cf8 9-10,21-23,25-27,43
+scripts/e2e/scenarios_more.py
+  s_349af440bf7504::t_5e28dc2f3c9540 1-9,11-49,51-75,77-100,104-161
+  s_5a7905b4d03fed::t_19efb4f3a1f909 101-103
+  s_5a7905b4d03fed::t_33e52ea7ad035f 50,76
+  s_5a7905b4d03fed::t_ee73c90f1d7774 10
+tests/e2e_world.py
+  s_5a7905b4d03fed::t_be45ef33623718 1-32,34-125,128-130,132-192,194-245,247-284,287-411
+  s_d55e146ebbc7b2::t_b7482bca8ec5eb 127,131
+  s_5a7905b4d03fed::t_bbfb151c3770a7 33,126,193,246,285-286
+scripts/e2e/files.py
+  s_5a7905b4d03fed::t_14250d6aa838a3 1-7,9-75,77-84
+  s_6e0c2c6dba0592::t_413ef2530908b0 76
+  s_6e0c2c6dba0592::t_8188b5ffc66b6f 8
+scripts/e2e/cardkit.py
+  s_5a7905b4d03fed::t_62e90fbbf2e05e 1-133,135-199
+  s_5a7905b4d03fed::t_70b899844cc9b1 134
+  s_349af440bf7504::t_53ddfbcb015324 200-201
+  s_6e0c2c6dba0592::t_50eb978bd86a3c 202-206
+scripts/__init__.py
+  s_5a7905b4d03fed::t_61ca8346f00f93 1
+scripts/e2e/__init__.py
+  s_5a7905b4d03fed::t_456a599dc250dc 1-5
+scripts/e2e/env.py
+  s_5a7905b4d03fed::t_5f4d7d958dcb75 2-9,11-22,24-130,135-153,155-157
+  s_5a7905b4d03fed::t_b6c96318dfbc84 1
+  s_6e0c2c6dba0592::t_50eb978bd86a3c 10
+  s_6e0c2c6dba0592::t_ad79559df18a2e 23
+  s_6e0c2c6dba0592::t_f5376d5ed36700 131-134,154
+scripts/e2e/cli.py
+  s_5a7905b4d03fed::t_19efb4f3a1f909 7-8,28-42,60-62,69-74,91,93-95
+  s_5a7905b4d03fed::t_13dc9e2c5310a6 177
+  s_5a7905b4d03fed::t_0932a870e29651 16-17
+  s_5a7905b4d03fed::t_840ddaaa83e82b 159-162
+  s_5a7905b4d03fed::t_ee398e63c50a06 1-6,9-15,18-27,43-59,63-68,75-90,92,96-158,163-176,178-190
+scripts/e2e/report.py
+  s_5a7905b4d03fed::t_39716ff3382639 1-54,57-76
+  s_5a7905b4d03fed::t_8f0a80b75ede6a 55-56
+tests/test_e2e_driver.py
+  s_5a7905b4d03fed::t_66a0c713a5eefd 1-11,13-46,53-80,82-126,128-133,148-211,217-226,232-258,262-272
+  s_d55e146ebbc7b2::t_b7482bca8ec5eb 47-52,127
+  s_5a7905b4d03fed::t_87cd34992dde41 12,81,134-147,212-216,227-231,259-261
+scripts/e2e/runner.py
+  s_5a7905b4d03fed::t_5f1e1c95a3c052 1-71,75-128,132-150
+  s_5a7905b4d03fed::t_19efb4f3a1f909 72-74,129-131
+tests/live/test_phone_e2e.py
+  s_5a7905b4d03fed::t_92614473c0ee82 8,12,14,27-28,40,81-86,134,161-163,182,203-205,214,296-303,357-360,393-395,398-403,414-422,437-438,440,477-482,509-510
+  s_d55e146ebbc7b2::t_b7482bca8ec5eb 9,256,384
+  s_5a7905b4d03fed::t_f42f8f8cef5c66 3-7,10-11,13,15-26,29-39,41-47,49,51-80,87-127,129-133,135-160,164-181,183-190,192-202,206-213,215-241,245-247,249-255,257-263,265-266,269-270,272-295,304-356,361-383,385-392,396-397,404-413,423-436,441-476,483-508,511-524
+  s_5a7905b4d03fed::t_d6e77363e8e70a 1-2,48,50,128,242-244,248,264,267-268,271,439
+  s_6e0c2c6dba0592::t_f2dd0f2b0a997b 191
+scripts/e2e/webex_cli_user.py
+  s_5a7905b4d03fed::t_19efb4f3a1f909 186-188
+  s_5a7905b4d03fed::t_c29701e2942930 1-20,22-24,26-42,52-173,175-185,189-233,237,242-243,246-310
+  s_5a7905b4d03fed::t_49b326c969ca95 174
+  s_5a7905b4d03fed::t_2a91840d20a63f 21
+  s_5a7905b4d03fed::t_2180e9fe218c9c 25
+  s_5a7905b4d03fed::t_6c13d91629b5e1 43-50
+  s_d55e146ebbc7b2::t_b7482bca8ec5eb 51
+  s_6e0c2c6dba0592::t_d3e376292846e0 234-236,238-241,244-245
+scripts/e2e/watch.py
+  s_5a7905b4d03fed::t_b7ef43fdc88e16 1-85
+scripts/phone_e2e.py
+  s_5a7905b4d03fed::t_8d2b1cffd98210 3
+  s_5a7905b4d03fed::t_985b35c5a9f9a8 1-2,4-22
+agent_relay/cli/config.py
+  s_265047b0913283::t_90bcf54a3d7fa9 1,13,77,97-106
+  s_d55e146ebbc7b2::t_7479183ee64689 107-109
+agent_relay/settings.py
+  s_d55e146ebbc7b2::t_2d5435108542bb 14,19,23-24,37,43-44,47-49,114-116,119-124,128,132-161
+tests/frontends/test_cards.py
+  s_349af440bf7504::t_9d62f99fe358f0 96,105,117,131,133-135,140,142,144-146,148-149,172-173,210,212,215,218,220-221,225-228,231-232,237
+  s_349af440bf7504::t_b46edf20ba9dfa 18,98-100
+  s_0ae3b763defb38::t_5b6a595f2b35b1 68-74,152
+  s_349af440bf7504::t_b696b069eca5be 2
+tests/fakes/webex.py
+  s_349af440bf7504::t_f36c47e08cd267 115,195-201,400-401
+agent_relay/core/service/sessions.py
+  s_6e0c2c6dba0592::t_8564e0bdf6591c 135
+agent_relay/frontends/webex/renderer.py
+  s_349af440bf7504::t_87fe2a16681f75 255-257,333-337,368-375,453,455,463,468-469
+  s_349af440bf7504::t_38146fb7b04e3d 431-433,435-436
+  s_349af440bf7504::t_1505006a30b272 21,184,227,262,264,272-274,284-285,291,321,331-332,338-339,342-344,346-349,352,354,356,358-360,363,366-367,376,383,385,387-388,390-391,396-427,434,438,441-442,445,451-452,465
+  s_349af440bf7504::t_9c5918eef3b20c 3-10,19,24,26-27,29,31,34,40,50,59-60,66,85-96,132,134,142,148,180-183,185-188,198-206
+  s_349af440bf7504::t_c0c5290b117912 437
+tests/frontends/test_pwa.py
+  s_349af440bf7504::t_19e1a7ab46d98a 181-188
+  s_349af440bf7504::t_1d9a5e9f7260fe 193,200,209-212,225-228,230-233,238,242,254,260-262,265,276,279,282,284
+tests/core/test_registry.py
+  s_d55e146ebbc7b2::t_f9a2caf14c9f76 206,216,279-389
+agent_relay/daemon.py
+  s_0ae3b763defb38::t_091815f23b67c7 39,272-273,275-280,288-289,293-297,301,305-309,315-316,321,326-327,350-351,354-355,361,369-378,382,403-409
+  s_d55e146ebbc7b2::t_66ef044594e584 287,319
+  s_265047b0913283::t_90bcf54a3d7fa9 228-230
+  s_d55e146ebbc7b2::t_0038cd73159c96 58-60,67,108-111,118,141,147,168,171-172,217-227,231-243
+  s_d55e146ebbc7b2::t_a809ca36cc8299 12,26,31,35,38,40,43,49,65-66
+  s_6e0c2c6dba0592::t_cda3d636bc1978 120
+  s_d55e146ebbc7b2::t_7c53e99e403c13 244
+agent_relay/cli/setup.py
+  s_d55e146ebbc7b2::t_022a761454175a 1,12,17,20,22,31-33,35-36,38,40,43-44
+tests/test_daemon.py
+  s_6532114fb9259a::t_ccb98106d841de 307
+  s_d55e146ebbc7b2::t_31dffb57fc7189 15,21-23,25-27,134-158,167,169,171-173,176-177,184-185,188,190,193-194,197,200-201,203-206,208-212,214-217,220,222-223,225-227,230,233-239,243-252,255,258-271,276,279-284,287-306,308-379
+agent_relay/frontends/pwa/hub.py
+  s_349af440bf7504::t_d776429855885c 3-4,23,45,50,80,87,92
+agent_relay/core/phone.py
+  s_6e0c2c6dba0592::t_061bc335a9541f 16
+agent_relay/frontends/webex/commands/sessions.py
+  s_6532114fb9259a::t_08b6e005da60e5 12,22,89,96-97,103,108,113,115-118,124,135-138,140-141,168-170
+  s_0ae3b763defb38::t_e33250d3ae6979 76
+  s_349af440bf7504::t_deb9f94ecb99ab 10,20,27,163,165,199
+  s_349af440bf7504::t_927496f18018b9 80,153-156,164,166-167,171
+  s_0ae3b763defb38::t_07397f8450b0a5 114
+  s_349af440bf7504::t_44c4d75c889fb3 13
+agent_relay/core/registry.py
+  s_d55e146ebbc7b2::t_f9a2caf14c9f76 111-123,127-137,141-150,157-158
+  s_265047b0913283::t_90bcf54a3d7fa9 124-126,138-140
+  s_6e0c2c6dba0592::t_5c364676a315b4 15
+tests/test_setup_token.py
+  s_d55e146ebbc7b2::t_e55c5c447bca2d 1-48
+agent_relay/frontends/webex/cards/dashboard.py
+  s_349af440bf7504::t_8241b59bc483c7 14
+  s_349af440bf7504::t_0a3d3bc58f808d 1
+agent_relay/core/housekeeping.py
+  s_d55e146ebbc7b2::t_66ef044594e584 9-10,13,20-21,50-76,83,85,92,99,103,106-108,111
+tests/frontends/test_links.py
+  s_349af440bf7504::t_b46edf20ba9dfa 72-74,82,89-90
+agent_relay/cli/daemon.py
+  s_1331dc15a5db54::t_21ced916580cd5 139-140,143-144,147
+agent_relay/doctor/daemon.py
+  s_265047b0913283::t_ae31a74131b274 1,5-6,27-28,30-37,45,101,106-129,133-148,159,162-170,185
+  s_349af440bf7504::t_35cf8e0d5e94b1 102
+agent_relay/frontends/pwa/server.py
+  s_349af440bf7504::t_d776429855885c 85
+tests/test_settings.py
+  s_6532114fb9259a::t_ccb98106d841de 194-196
+  s_d55e146ebbc7b2::t_992a948057599f 3,17,26,34,83,131-193,197-234
+agent_relay/frontends/pwa/static/app.js
+  s_0ae3b763defb38::t_0399603e3a5130 6,84-85,89-90,93,95-98,100,106
+agent_relay/frontends/webex/cards/root.py
+  s_349af440bf7504::t_943f270ef3e518 1,8-9,18-21,25-26
+tests/frontends/test_dispatch.py
+  s_349af440bf7504::t_d248dfa9ce8866 9,19-20,161-184,212,230
+  s_349af440bf7504::t_b46edf20ba9dfa 21,185-186
+pyproject.toml
+  s_d55e146ebbc7b2::t_886eb4584a72bd 66
+  s_6532114fb9259a::t_a9cadd39d968fc 22
+agent_relay/core/updates.py
+  s_265047b0913283::t_ae31a74131b274 4-6,22,31-32,65-73,113,117-119,122-126
+  s_d55e146ebbc7b2::t_171ee99ea02e74 127
+agent_relay/frontends/request_cards.py
+  s_349af440bf7504::t_52e514b8aa4c53 1,3-4,15
+tests/core/test_updates.py
+  s_d55e146ebbc7b2::t_aa6911ef41ff70 1,41,58-59,64-68,73,76-78,84-86,89-90,93,98-99,104,106,110-111,117-118,126,129-130,133-135
+agent_relay/frontends/webex/commands/away.py
+  s_349af440bf7504::t_2b5a3a7be56396 23-25,29-31,80,87
+tests/core/test_housekeeping.py
+  s_d55e146ebbc7b2::t_a57a9dc3e48b39 1,7-18,21-22,92-100,106-134,136,141-144,152-160
+  s_d55e146ebbc7b2::t_9ddad98f71d59d 135,137-140,145-151
+  s_6532114fb9259a::t_ccb98106d841de 101-105
+tests/doctor/test_local.py
+  s_d55e146ebbc7b2::t_31eba03f67dd0e 11,16,24,113,168,204-276
+agent_relay/doctor/__init__.py
+  s_d55e146ebbc7b2::t_bd208bda495895 11-12,30,34-39,43,75,77
+agent_relay/models/config.py
+  s_349af440bf7504::t_a733f80a41b8e9 15-29,34,38,47-48
+  s_d55e146ebbc7b2::t_a59068c9791e92 5-6,8,30-33,35-37,99-100,129,143-149
+  s_d55e146ebbc7b2::t_ef2765823070dd 50-51
+agent_relay/doctor/local.py
+  s_d55e146ebbc7b2::t_bd208bda495895 15-16,33,228-230,233,236,238-239,267-286,288-315,317-318,320-321
+tests/frontends/test_pwa_cards.py
+  s_0ae3b763defb38::t_d3ae734c465277 86-90,93-95,97-99,106-107,113-128
+  s_0ae3b763defb38::t_8a0d9e6aa115a7 144-148,151-158,278
+tests/frontends/test_renderer.py
+  s_349af440bf7504::t_f36c47e08cd267 9,32,60-63,68-69,71-85,181,207-209,216,270-272,280-282,301,336,360,364-366,375,377-380
+  s_349af440bf7504::t_a136d9494ccd74 70,86
+  s_6e0c2c6dba0592::t_eda6017058757e 362-363
+  s_349af440bf7504::t_ca462debe905fe 2-3,8,10,12-15,21-23,25,38-43,46-59,64-67,91-94,112-115,117,119,121-128,131,133-150,152-180,182-206,210-215,217-233,236-269,273-279,283-294,297-299,303-307,310,312-335,337-359,361,367-374,376,381-384,391,393,397,418
+tests/doctor/test_daemon.py
+  s_d55e146ebbc7b2::t_31eba03f67dd0e 25,37-39,92,94,96-98,100,103-107,110-112,114-115,119-132,138,143
+  s_d55e146ebbc7b2::t_5d10a8929c4bd9 1
+agent_relay/core/service/__init__.py
+  s_0ae3b763defb38::t_a3e39ecf62489d 26
+  s_1331dc15a5db54::t_d5c618437ba661 136
+  s_0ae3b763defb38::t_8516d3851ca69e 44-45
+  s_0ae3b763defb38::t_5c7b3afd975ed2 88-93
+  s_6532114fb9259a::t_98cbf83d00ab30 148
+  s_6532114fb9259a::t_a3f89f6b0186ae 8
+agent_relay/frontends/actions.py
+  s_349af440bf7504::t_feecdca6bd4944 51-55
+  s_0ae3b763defb38::t_e05b957fcbb057 93,98-99
+agent_relay/frontends/webex/bot.py
+  s_349af440bf7504::t_ed850a5b76fe30 23,81,97,238-240,245-246,248-249,273,328-332,336-337,339
+  s_6e0c2c6dba0592::t_0e754eaad61d50 200,202,204
+  s_349af440bf7504::t_7763dd462c4fba 247
+  s_6e0c2c6dba0592::t_eb3ccb2a8de1e1 8,30,38-48,290,296-300,303-304
+tests/frontends/test_flows.py
+  s_d55e146ebbc7b2::t_b7482bca8ec5eb 23
+  s_349af440bf7504::t_b46edf20ba9dfa 125
+  s_349af440bf7504::t_855dbe2320f218 155,222-224
+  s_349af440bf7504::t_b038e0f9b801fd 112-114,121,124,126-127,152-154,159,162-175,208-221
+  s_d55e146ebbc7b2::t_5d899e21d2e7c1 225-226
+agent_relay/frontends/webex/host.py
+  s_d55e146ebbc7b2::t_f91bd5af139a41 208
+  s_265047b0913283::t_90bcf54a3d7fa9 16
+  s_d55e146ebbc7b2::t_d5f84d4b605b06 1-15,17-207,209-255
+agent_relay/models/sessions.py
+  s_d55e146ebbc7b2::t_e6e6f14f1b9578 33
+agent_relay/frontends/webex/cards/common.py
+  s_0ae3b763defb38::t_6ae6fa9e4da617 40-49,57-61
+  s_0ae3b763defb38::t_f4c5f35870249b 10
+  s_0ae3b763defb38::t_e29f3f6cf0db07 79-86,88,90,92,97,99-103
+  s_349af440bf7504::t_5f3f1e0e2f7c59 134-154
+  s_349af440bf7504::t_44c6cb9edb97c0 155-156
+tests/frontends/test_card_delete.py
+  s_265047b0913283::t_90bcf54a3d7fa9 28-62
+  s_349af440bf7504::t_4a6fac5e35ecbd 1,7-27,63-65
+tests/frontends/test_host.py
+  s_d55e146ebbc7b2::t_21d548a2b0dcd5 1-318
+agent_relay/frontends/webex/commands/digest.py
+  s_349af440bf7504::t_ac71746b099bdd 49,51-52,55-58,69
+agent_relay/frontends/webex/cards/panic_confirm.py
+  s_349af440bf7504::t_99a25b6ddb966d 16
+agent_relay/frontends/webex/handlers.py
+  s_6e0c2c6dba0592::t_7d8cc6880e5321 216
+  s_0ae3b763defb38::t_24c49bf8666002 12-19,38,130,135-136,153-171,173-174,183,201-205,218-225,228-231,239-242,244-248,257-272,279-280,286-295,297,299-306,308-331
+  s_6532114fb9259a::t_b30372f7a40ffb 60,76,82
+tests/frontends/test_dashboard.py
+  s_349af440bf7504::t_d999647196dd64 1,51,118-119,121-123
+  s_265047b0913283::t_2ba84ccf8a6de6 40
+agent_relay/frontends/webex/cards/__init__.py
+  s_349af440bf7504::t_39b614c5f9e1fb 27,31
+  s_0ae3b763defb38::t_ea1a18fadbcb7d 24
+  s_349af440bf7504::t_60376690a35bef 44,46
+  s_349af440bf7504::t_c563e76b6479e9 14,16
+  s_0ae3b763defb38::t_512e6cab8b16cd 30
+  s_0ae3b763defb38::t_8dc827cc967251 41
+agent_relay/frontends/webex/commands/queue.py
+  s_0ae3b763defb38::t_073042228fecaa 1
+tests/frontends/test_renderer_status.py
+  s_265047b0913283::t_ae31a74131b274 1,7,9-10,19-26,55,63,143,162,175,178,181-188,191-192,194-196
+agent_relay/frontends/webex/commands/info.py
+  s_349af440bf7504::t_9438c33cfc02ca 20
+tests/frontends/conftest.py
+  s_349af440bf7504::t_fb52d1b9e8620c 83-86,104
+tests/frontends/test_no_approval_card.py
+  s_349af440bf7504::t_7167eb5e758474 1,5-7,9-44
+tests/test_cli_ops.py
+  s_d55e146ebbc7b2::t_d3ab33ef86283a 1,16,67-68,78-92,136-138,148-150
+tests/test_security.py
+  s_d55e146ebbc7b2::t_1ad0c689a0cf70 18-19,21,43-51,54,56-59
+uv.lock
+  s_d55e146ebbc7b2::t_5cec31305f6942 14,50
+docs/deviations.md
+  s_a3daf7d61d6404::t_b386d2f2f9bc36 61
+  s_a3daf7d61d6404::t_2cd2a7ccb07997 20
+  s_a3daf7d61d6404::t_4a640957e85cbd 111
+  s_a3daf7d61d6404::t_f265e95ce7b24f 96
+  s_a3daf7d61d6404::t_1182045bf95676 118
+  s_a3daf7d61d6404::t_a92f8bed5c212a 110
+  s_a3daf7d61d6404::t_3e33dd9ef76288 83
+  s_a3daf7d61d6404::t_ba2b03b20209ce 77
+  s_a3daf7d61d6404::t_1e89d70b2ed150 15
+  s_a3daf7d61d6404::t_af60852b48e4ac 120
+  s_a3daf7d61d6404::t_d55245fefaddc2 112
+  s_a3daf7d61d6404::t_ca241fe33250c7 106
+  s_a3daf7d61d6404::t_4d8ad7ba5c2537 131
+  s_a3daf7d61d6404::t_ca0fe47d81cad0 108
+  s_a3daf7d61d6404::t_e334058be33d33 123-124
+  s_a3daf7d61d6404::t_b3762b864a67ef 62
+  s_a3daf7d61d6404::t_0daea9b8cca459 125-126
+  s_a3daf7d61d6404::t_ec416fa4ec53ff 91
+  s_a3daf7d61d6404::t_1ca6b8050ac7fe 109
+  s_a3daf7d61d6404::t_f514e6ab459b74 75
+  s_a3daf7d61d6404::t_6a29521c507b61 117
+  s_a3daf7d61d6404::t_123cde83bab288 82
+  s_a3daf7d61d6404::t_e9e3faa2d47016 114
+  s_a3daf7d61d6404::t_51d917ea8ddb96 115
+  s_a3daf7d61d6404::t_db8a64a4244ad7 64
+  s_a3daf7d61d6404::t_ec01ca12379745 119
+  s_a3daf7d61d6404::t_4ffdacba3805e3 127-130
+  s_a3daf7d61d6404::t_b388d1728ee09d 76
+  s_a3daf7d61d6404::t_cbeef0194f30b9 100
+  s_a3daf7d61d6404::t_28259d1898ddf4 132-134
+  s_a3daf7d61d6404::t_2dc34e25f3b5e2 116
+  s_6e0c2c6dba0592::t_61a1f27c3cb070 135
+  s_6e0c2c6dba0592::t_d57f951f718e44 137-138
+  s_6e0c2c6dba0592::t_781334f7cd25da 136
+  s_6e0c2c6dba0592::t_984850642740d1 139
+docs/user-guide.md
+  s_a3daf7d61d6404::t_b3cf179dfa9f07 158-168
+  s_a3daf7d61d6404::t_87b9ae5a1bc12a 295-296
+  s_a3daf7d61d6404::t_40b159ee0133be 299
+  s_a3daf7d61d6404::t_ebe9ff32501ccd 330-331,333-338,340-344
+  s_a3daf7d61d6404::t_67f35239097b78 290-291
+  s_a3daf7d61d6404::t_a277c54c09a86a 127-128
+  s_a3daf7d61d6404::t_c54da1839e1f5b 27-34
+  s_a3daf7d61d6404::t_856e2c3fec6ac6 302-304
+  s_a3daf7d61d6404::t_e9b39c6a7f87b6 87-88,91-93
+  s_a3daf7d61d6404::t_24c12149b31724 176-194
+  s_a3daf7d61d6404::t_a429c622e50513 400-403,405-409
+  s_a3daf7d61d6404::t_02f467fd2dcf1e 217-224,227-246
+  s_a3daf7d61d6404::t_6c55865e976137 253-256
+  s_a3daf7d61d6404::t_cbecc0c2a7f08b 444-450
+  s_a3daf7d61d6404::t_13ed12ca968a3e 142-145
+  s_a3daf7d61d6404::t_d8517bbdc512e7 4-6,12-15
+  s_a3daf7d61d6404::t_b6e13329504df1 271-272,274-275,279-281
+  s_a3daf7d61d6404::t_403d5ad9565f4b 225-226
+  s_a3daf7d61d6404::t_b9ae09d5392194 282
+docs/acceptance.md
+  s_a3daf7d61d6404::t_ae5b9439e4af44 72
+  s_a3daf7d61d6404::t_e320829a3d45ce 84
+  s_a3daf7d61d6404::t_d71416b37db8e8 74,76
+  s_a3daf7d61d6404::t_0820a90ebbee47 143-174
+  s_a3daf7d61d6404::t_6540b538295c1e 90-119
+  s_a3daf7d61d6404::t_70a9763d99a450 120-142
+  s_a3daf7d61d6404::t_ec779c3140b521 79
+  s_a3daf7d61d6404::t_bcd89c753fc698 81
+  s_a3daf7d61d6404::t_8a370eda387072 23
+  s_a3daf7d61d6404::t_8a2c360205cbb5 89
+  s_a3daf7d61d6404::t_72d5d899ee0cc3 85
+  s_a3daf7d61d6404::t_013c3e1da448cb 47
+docs/security.md
+  s_a3daf7d61d6404::t_d7a5bf37078758 227
+  s_a3daf7d61d6404::t_48a726e7c331fc 206-209
+  s_a3daf7d61d6404::t_b5b26dd16934a3 79-114
+  s_a3daf7d61d6404::t_5b1ff081def04f 28-34
+  s_a3daf7d61d6404::t_8e3be560e252b6 217-224
+  s_a3daf7d61d6404::t_e569df9d5b3995 43-46,48-66
+  s_a3daf7d61d6404::t_36cbca11d82dc0 215
+  s_a3daf7d61d6404::t_753f88f9ac1c22 126-171,176-179
+  s_a3daf7d61d6404::t_43c67fc8b4e8d1 47
+  s_a3daf7d61d6404::t_c953fe68166772 233-237
+  s_a3daf7d61d6404::t_7d379403fb0f28 119-121
+docs/operations.md
+  s_a3daf7d61d6404::t_9da246996ce6a9 100,105-107,109-110
+  s_a3daf7d61d6404::t_e79cd993568b3f 160-161
+  s_a3daf7d61d6404::t_de5d98fa2a3eab 121,123,125-139
+  s_a3daf7d61d6404::t_260adfd8e3c5ea 40-41,44-72
+  s_a3daf7d61d6404::t_930ef5281ffa0d 140-141
+  s_a3daf7d61d6404::t_ef40ac09be8dd4 202-205
+  s_a3daf7d61d6404::t_4de973a97779ab 378,380-383,386-388,392-394,396-418,422-423,459-460
+  s_a3daf7d61d6404::t_38a382834e767e 92-93,95-98
+  s_a3daf7d61d6404::t_6f43d1738dade7 280-282
+  s_a3daf7d61d6404::t_6613db46fe39c0 83-84
+  s_a3daf7d61d6404::t_3b4e2afc2f75c8 261-265
+  s_a3daf7d61d6404::t_b6b7753735c6e7 389
+  s_a3daf7d61d6404::t_7e3034bcf2d96c 347
+  s_a3daf7d61d6404::t_c100c8976b58c0 209,219-222,224,230-234
+  s_a3daf7d61d6404::t_0478a517e1553e 339-342
+  s_a3daf7d61d6404::t_10e0563d602367 178-181
+  s_a3daf7d61d6404::t_f0a826072f4590 357-359,363-364
+  s_a3daf7d61d6404::t_df4c68d9c670ce 99
+  s_6e0c2c6dba0592::t_250a8f23cec7e2 419-421,425-444,450-458
+  s_6e0c2c6dba0592::t_d3d45279912e56 445-449
+README.md
+  s_a3daf7d61d6404::t_0fec4175886639 18-19
+  s_a3daf7d61d6404::t_7e6028ded79ed1 52-54
+  s_a3daf7d61d6404::t_b56ecb7b117f38 4-7
+  s_a3daf7d61d6404::t_9cdf95c8f4eb06 31-37
+TODO.md
+  s_a3daf7d61d6404::t_51efa8fd8c4887 159
+  s_a3daf7d61d6404::t_b37f4dee265c93 160-161
+  s_a3daf7d61d6404::t_8646162248b54e 69-72
+  s_a3daf7d61d6404::t_c4a747a7d3a792 114
+  s_a3daf7d61d6404::t_eee7e825a9d884 213-217
+  s_a3daf7d61d6404::t_a5179657546d67 197-199
+  s_a3daf7d61d6404::t_c37eec29f4efe2 129-130,132-133
+  s_a3daf7d61d6404::t_aec14721ba1cc1 3-68,73-87,91-92,98-99,102,104,107-110
+  s_a3daf7d61d6404::t_97b52427615dc2 115
+  s_6e0c2c6dba0592::t_a8c2ff2f9976be 192-196
+tests/frontends/test_ws_client.py
+  s_6e0c2c6dba0592::t_7194d574cf0b55 15
+  s_6e0c2c6dba0592::t_e92721097a0745 296-312
+tests/adapters/test_attachments.py
+  s_6e0c2c6dba0592::t_668fdce0b51668 272-282
+agent_relay/adapters/cursor_cli/blocks.py
+  s_6e0c2c6dba0592::t_38f849b159c3d0 43-46,49-55
+tests/live/test_bundle_loaders_live.py
+  s_6e0c2c6dba0592::t_ab45f7a7400096 50-51
+extensions/relay-bridge/src/bridge.ts
+  s_6e0c2c6dba0592::t_8b86d70ec9e74b 182-187,191-199
+  s_6e0c2c6dba0592::t_80ba59b4974a14 200-201
+extensions/relay-bridge/test/bridge.test.ts
+  s_6e0c2c6dba0592::t_09745da4b9c181 82-98
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6ec9653991e4ca3da2b7487dfd7dfb18accf85b6",
+  "prompts": {},
+  "sessions": {
+    "s_0ae3b763defb38": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "d0b2a672-ed0c-4eb8-afff-11d7f7dc11d2",
+        "model": "claude-sonnet-5-5-high"
+      },
+      "human_author": "Brijgopal Bharadwaj <brijgopalbharadwaj1999@gmail.com>"
+    },
+    "s_1331dc15a5db54": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "bc683e87-9fe8-445a-b602-e3198e0212bf",
+        "model": "claude-sonnet-5-5-high"
+      },
+      "human_author": "Brijgopal Bharadwaj <brijgopalbharadwaj1999@gmail.com>"
+    },
+    "s_265047b0913283": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "27811d49-0391-4ede-818b-9fc5f1cb4895",
+        "model": "claude-sonnet-5-5-high"
+      },
+      "human_author": "Brijgopal Bharadwaj <brijgopalbharadwaj1999@gmail.com>"
+    },
+    "s_349af440bf7504": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "7fa18868-3f5c-4088-99c0-d111a863217b",
+        "model": "claude-sonnet-5-5-high"
+      },
+      "human_author": "Brijgopal Bharadwaj <brijgopalbharadwaj1999@gmail.com>"
+    },
+    "s_5a7905b4d03fed": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "f1b090c3-584a-4a4b-ba57-3dad1a5d1994",
+        "model": "claude-sonnet-5-5-high"
+      },
+      "human_author": "Brijgopal Bharadwaj <brijgopalbharadwaj1999@gmail.com>"
+    },
+    "s_6532114fb9259a": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "d756fb38-74b9-4655-8894-5b825b165389",
+        "model": "claude-sonnet-5-5-high"
+      },
+      "human_author": "Brijgopal Bharadwaj <brijgopalbharadwaj1999@gmail.com>"
+    },
+    "s_6e0c2c6dba0592": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "24c9909b-1d33-42f1-9ddc-cce97bd5d739",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "Brijgopal Bharadwaj <brijgopalbharadwaj1999@gmail.com>"
+    },
+    "s_a3daf7d61d6404": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "dfef3cd4-fb6d-47dc-8c08-8cf3db4ea8df",
+        "model": "claude-sonnet-5-5-high"
+      },
+      "human_author": "Brijgopal Bharadwaj <brijgopalbharadwaj1999@gmail.com>"
+    },
+    "s_d55e146ebbc7b2": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "be38d2bf-f046-481d-8145-58820be8e710",
+        "model": "claude-sonnet-5-5-high"
+      },
+      "human_author": "Brijgopal Bharadwaj <brijgopalbharadwaj1999@gmail.com>"
+    }
+  }
+}
