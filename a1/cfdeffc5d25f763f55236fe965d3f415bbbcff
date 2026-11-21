@@ -1,0 +1,22 @@
+tests/frontends/test_ws_client.py
+  s_6e0c2c6dba0592::t_7194d574cf0b55 15
+  s_6e0c2c6dba0592::t_e92721097a0745 296-312
+agent_relay/frontends/webex/bot.py
+  s_6e0c2c6dba0592::t_eb3ccb2a8de1e1 8,30,38-48,290,296-300,303-304
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a1cfdeffc5d25f763f55236fe965d3f415bbbcff",
+  "prompts": {},
+  "sessions": {
+    "s_6e0c2c6dba0592": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "24c9909b-1d33-42f1-9ddc-cce97bd5d739",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "Brijgopal Bharadwaj <brijgopalbharadwaj1999@gmail.com>"
+    }
+  }
+}
