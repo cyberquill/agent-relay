@@ -1,0 +1,150 @@
+agent_relay/core/hooks.py
+  s_6532114fb9259a::t_7bf2ef1d595b67 288
+  s_6532114fb9259a::t_6b378994994216 200-202
+  s_6532114fb9259a::t_6933a6d271a38e 3-6,18,22,62,280-282
+agent_relay/adapters/cursor_cli/adapter.py
+  s_6532114fb9259a::t_b8ad4e4d252388 172-174
+  s_6532114fb9259a::t_d4ea7674c2f9e0 364,399,442,448,540
+tests/adapters/test_ahp.py
+  s_349af440bf7504::t_b46edf20ba9dfa 432
+  s_d55e146ebbc7b2::t_455d552d602c85 14,22,127,231-237,314-316,322,324-331,334,336-340,547
+  s_6532114fb9259a::t_a9cadd39d968fc 283,295-298,301,305,309-311,321
+tests/hook/test_transcript.py
+  s_6532114fb9259a::t_ddfbeba47595a8 59-92
+agent_relay/hook/installers/__init__.py
+  s_6532114fb9259a::t_1547092433342a 32
+tests/core/test_approvals_delivery.py
+  s_6532114fb9259a::t_5a9be4fd55a0cf 1,27,49,53,64,72,79,81,83,85,89,91,94,100,102-103,107,110-111,115,124
+  s_6532114fb9259a::t_cce88bef912a0b 15,19-25
+agent_relay/adapters/ahp/adapter.py
+  s_6532114fb9259a::t_e526f599618fd5 39,73-74,435-436
+  s_6532114fb9259a::t_519002abf6c29d 506-509
+tests/adapters/test_cursor_cli.py
+  s_6532114fb9259a::t_ccb98106d841de 157,164,245,248-255,258,260,264-266,269-271,273,279-280,282-293,330,333-334,349-350,352,355,359,364,396,439,444
+  s_6532114fb9259a::t_f2b13054a32ee8 16
+tests/adapters/test_ahp_units.py
+  s_6532114fb9259a::t_4160422d0ccbbc 118-126,134-162
+  s_6532114fb9259a::t_b5f143cee96e4d 127-133
+tests/adapters/test_cursor_cli_units.py
+  s_265047b0913283::t_8768590684819f 114,121
+  s_6532114fb9259a::t_995beda23d31bf 174-175,201
+tests/core/test_hooks.py
+  s_6532114fb9259a::t_cce88bef912a0b 213,221,223
+  s_6532114fb9259a::t_b805392d2a8ec7 17,348-350,367
+  s_349af440bf7504::t_3f45f8cf355af8 1,16,18,29,114-116,129,131-135,138,147,150,153,169-171,187,190,192-193,238,247-248,500,529-532
+agent_relay/adapters/base.py
+  s_6532114fb9259a::t_e178866440fc01 49
+  s_6532114fb9259a::t_788df7f864e6e2 119-120
+agent_relay/hook/outputs.py
+  s_6532114fb9259a::t_7bf2ef1d595b67 12-13,15,17,19,22,26,30
+agent_relay/models/events.py
+  s_6532114fb9259a::t_6726fdfa37527f 74,80
+  s_6532114fb9259a::t_cf7378a1f54b8d 99-100
+tests/core/test_disconnect.py
+  s_6532114fb9259a::t_d9f531195abf26 1,17
+tests/core/test_lifecycle.py
+  s_6532114fb9259a::t_cce88bef912a0b 247,256
+  s_6532114fb9259a::t_d9f531195abf26 165,170,175,181-182,185,200
+agent_relay/adapters/ahp/mapping.py
+  s_6532114fb9259a::t_45a20532ec2ae9 89,355
+  s_6532114fb9259a::t_3c64c1e7a81196 275-276
+  s_6532114fb9259a::t_c801398415c196 321-322
+agent_relay/hook/transcript.py
+  s_6532114fb9259a::t_ddfbeba47595a8 14-19,21-22,26-33
+tests/hook/test_installers.py
+  s_6532114fb9259a::t_a4692cb943f2ab 135
+agent_relay/hook/shims.py
+  s_6532114fb9259a::t_cf7588dbaff25b 284
+agent_relay/core/service/approvals.py
+  s_0ae3b763defb38::t_3ff50802647c7b 1,3-4,6,9,11,34-35,37,45,60,62,67-68,86
+agent_relay/core/lifecycle.py
+  s_6532114fb9259a::t_a4692cb943f2ab 144-148,152-161,163
+tests/adapters/test_opencode.py
+  s_6532114fb9259a::t_1699b5b6544b1d 15
+  s_6532114fb9259a::t_22edcc56d02081 151-212,261,264-276,279,281,287,291,293-296,298
+  s_6532114fb9259a::t_6f47b9679793da 18
+plugins/opencode/agent-relay.ts
+  s_6532114fb9259a::t_7f085b98aeac4d 1-3
+agent_relay/core/approvals.py
+  s_6532114fb9259a::t_23566e3c72acfe 1,3-5,16-18,20,23,30,44,53,111,115,120,122-129,131,144,146-151,154-155,158-159,161-163,166-168,170-173,175,179,181,187,190,194,196-197,199,205,207-209,216-221,223,233
+tests/fakes/acp_agent.py
+  s_6532114fb9259a::t_ccb98106d841de 138-141,158-167
+  s_d55e146ebbc7b2::t_3f0e12cecd464c 168-169
+tests/adapters/test_vscode.py
+  s_349af440bf7504::t_b46edf20ba9dfa 198
+  s_265047b0913283::t_8768590684819f 459
+tests/core/test_no_approvals.py
+  s_5a7905b4d03fed::t_081a2a16de68ab 112,114
+  s_6532114fb9259a::t_375d200606cdb4 111
+  s_6532114fb9259a::t_3c9900c4c619a9 1,5,7-8,10-18,21-23,25-26,28-29,32-33,35-43,46-49,51-60,63-110,113,115-118,120-188
+  s_6532114fb9259a::t_8fbf19a4430de7 24
+  s_6532114fb9259a::t_f966211c94058e 27
+  s_6532114fb9259a::t_ddedad70e97577 31
+  s_6532114fb9259a::t_309f953b04f6e7 119
+tests/core/test_approvals.py
+  s_6532114fb9259a::t_fd5628ff407bb7 1-2,12-13,16-18,21-35,44,49,52-54,60-66,68-110,130-132,136-140,144,146,153-154,177-179,181-183
+agent_relay/adapters/opencode/adapter.py
+  s_6532114fb9259a::t_a85c243e53be96 5-6,28,226-228,245
+agent_relay/adapters/opencode/client.py
+  s_6532114fb9259a::t_80a9cc2eed15b1 17-18
+agent_relay/adapters/opencode/mapping.py
+  s_6532114fb9259a::t_ff860a735fb5e2 18,58,119-128,130-132,232,249,263-264
+tests/hook/test_shims.py
+  s_0ae3b763defb38::t_24c20a4d46cab3 78,80,83-87,89-90,92,94,96
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4c81073d86d1ef8dc2556e230acb8033190243c4",
+  "prompts": {},
+  "sessions": {
+    "s_0ae3b763defb38": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "d0b2a672-ed0c-4eb8-afff-11d7f7dc11d2",
+        "model": "claude-sonnet-5-5-high"
+      },
+      "human_author": "Brijgopal Bharadwaj <brijgopalbharadwaj1999@gmail.com>"
+    },
+    "s_265047b0913283": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "27811d49-0391-4ede-818b-9fc5f1cb4895",
+        "model": "claude-sonnet-5-5-high"
+      },
+      "human_author": "Brijgopal Bharadwaj <brijgopalbharadwaj1999@gmail.com>"
+    },
+    "s_349af440bf7504": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "7fa18868-3f5c-4088-99c0-d111a863217b",
+        "model": "claude-sonnet-5-5-high"
+      },
+      "human_author": "Brijgopal Bharadwaj <brijgopalbharadwaj1999@gmail.com>"
+    },
+    "s_5a7905b4d03fed": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "f1b090c3-584a-4a4b-ba57-3dad1a5d1994",
+        "model": "claude-sonnet-5-5-high"
+      },
+      "human_author": "Brijgopal Bharadwaj <brijgopalbharadwaj1999@gmail.com>"
+    },
+    "s_6532114fb9259a": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "d756fb38-74b9-4655-8894-5b825b165389",
+        "model": "claude-sonnet-5-5-high"
+      },
+      "human_author": "Brijgopal Bharadwaj <brijgopalbharadwaj1999@gmail.com>"
+    },
+    "s_d55e146ebbc7b2": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "be38d2bf-f046-481d-8145-58820be8e710",
+        "model": "claude-sonnet-5-5-high"
+      },
+      "human_author": "Brijgopal Bharadwaj <brijgopalbharadwaj1999@gmail.com>"
+    }
+  }
+}
