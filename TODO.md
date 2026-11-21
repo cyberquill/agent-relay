@@ -1,6 +1,6 @@
 # agent-relay: status and what's left
 
-Last updated 2026-11-21, after the code of the November round (branch `feat/november-round`, P0–P8).
+Last updated 2026-11-21 20:15, after the November round's code and its live runs (squash-merged to local `main`, never pushed).
 The plan is [`docs/PLAN.md`](docs/PLAN.md); the November round's plan is
 [`sandbox/08-usability-round.md`](sandbox/08-usability-round.md) (decisions U1–U14, phases P0–P8).
 Departures are in [`docs/deviations.md`](docs/deviations.md) (D1–D134), and each acceptance criterion maps
@@ -9,22 +9,22 @@ UR-1–UR-8 for the November round). For users, start with [`docs/user-guide.md`
 
 ## November round (2026-11-21)
 
-Code is written and tested offline; **nothing has been run live yet except P0**. The merged tree has not
-had a full `uv run tox`: each agent ran only targeted tests on its own files. Commits are made by the
-orchestrator.
+Code is done, merged to `main` and green under `uv run tox`. Live results per app and scenario are in
+[`docs/operations.md`](docs/operations.md#live-results-november-round). What is left is mostly checks that
+need the owner (scenario 8 at the desk, the Android look).
 
 | Phase | State |
 |---|---|
-| P0 unblock (drop `webex.bots`, truncate the error log, restart relayd) | ✅ done live 2026-11-21 16:07: relayd up, `/help` answered, VS Code self-test passed on 1.147.0 |
-| P1 one space (D116) and daemon robustness (D121) | code done and tested; live: a deliberately bad token on a running relayd not tried |
-| P2 no approvals (D117, D124, D125) | code done and tested; the app auto-approve flags are unverified live |
-| P3 final result only (D118, D127) | code done and tested; live: E2E scenarios 2 and 3 |
-| P3b files in, HTML out, `send_phone_file` (D122) | code done and tested; live: image and PDF per app, `answer.html` on Android |
-| P4 cards (D119) | code done and tested (Playwright PWA card tests not run); live: `scripts/card_check.py`, E2E scenarios 2 and 6, the Android look |
-| P5 away, manual and global (D120) | code done and tested; live: E2E scenario 8 per desk app |
-| P6 every app working | **open** (live): `relay install --apply`, `relay start`, per-app checks below |
-| P7 docs and bookkeeping | ✅ docs updated with the code (this file, README, user guide, operations, security, deviations D116–D127, acceptance UR-1–UR-8) |
-| P8 E2E driver (D123) | code done and tested against a fake relay; not yet run against Webex |
+| P0 unblock (drop `webex.bots`, truncate the error log, restart relayd) | ✅ done live 2026-11-21 16:07 |
+| P1 one space (D116) and daemon robustness (D121) | ✅ live: one space works; a deliberately bad token on a running relayd not tried |
+| P2 no approvals (D117, D124, D125) | ✅ live: scenario 7 ran a shell command with no card on all five phone apps; the desk-session flags (Cursor desktop, VS Code hooks) are unverified |
+| P3 final result only (D118, D127) | ✅ live: scenarios 2 and 3 on all five phone apps |
+| P3b files in, HTML out, `send_phone_file` (D122) | ✅ live: image and PDF (scenario 4) and `answer.html` (scenario 5) on all five phone apps; `answer.html` on Android not checked |
+| P4 cards (D119) | ✅ live: `scripts/card_check.py` 14 of 14, scenarios 2 and 6; the Android look is the owner's |
+| P5 away, manual and global (D120) | partly live: `/away`, `/back` and `/panic` (scenario 9) ✅; **scenario 8 (a desk chat reaching the phone) needs the owner** |
+| P6 every app working | ✅ VS Code, Copilot (AHP), Cursor IDE (CDP), Cursor CLI, OpenCode: scenarios 2 to 7 pass. Not checked live: Cursor desktop hooks and Copilot CLI hooks as desk sessions (scenario 8) |
+| P7 docs and bookkeeping | ✅ docs updated with the code (D116–D134, acceptance UR-1–UR-8) |
+| P8 E2E driver (D123) | ✅ run against Webex as the owner (webex-cli token), 6 live fixes along the way |
 
 ### Open live checks (plan §6 and the phase checks)
 
@@ -46,13 +46,11 @@ orchestrator.
       the driver falls back to typed commands and card taps stay a phone check. (D123)
 - [ ] Does a Webex client honour `label`, `isRequired` and `errorMessage` on the `/new` card's inputs?
       (`scripts/card_check.py` only proves Webex accepts them.)
-- [ ] `RELAY_LIVE=1 .venv/bin/python scripts/card_check.py`: every card accepted (HTTP 200) and deleted.
-- [ ] `RELAY_LIVE=1 .venv/bin/python scripts/phone_e2e.py --apps copilot,cursor,opencode,vscode`: scenarios
-      1 to 9, results into [`docs/operations.md`](docs/operations.md#live-results-november-round).
-- [ ] P6 per app: VS Code (`vscode`), VS Code Copilot (`copilot`, AHP: clear `adapter.degraded.vscode_copilot`
-      after `relay selftest`), Cursor CLI, OpenCode (`relay config set adapters.opencode true`, password in
-      the Keychain), Cursor desktop hooks (restart Cursor), Cursor CDP (self-test on Cursor 3.30.8; selectors
-      v4 if it fails), Copilot CLI hooks.
+- [x] `scripts/card_check.py`: every card accepted (HTTP 200), 14 of 14.
+- [x] `scripts/phone_e2e.py`: scenarios 1 to 7 and 9 pass on every phone app; results in
+      [`docs/operations.md`](docs/operations.md#live-results-november-round). Scenario 8 is open (below).
+- [x] P6 per phone app (VS Code, Copilot AHP, Cursor CLI, OpenCode, Cursor CDP on 3.31.15 with selectors v4).
+- [ ] P6 desk side: Cursor desktop hooks and Copilot CLI hooks (restart Cursor first) with away on: scenario 8.
 - [ ] The owner opens the `/new` and `/model` cards on Android and checks the layout.
 - [ ] The owner deletes the three retired app bots at developer.webex.com.
 
