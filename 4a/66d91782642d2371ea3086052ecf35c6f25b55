@@ -1,0 +1,25 @@
+agent_relay/core/parking.py
+  s_6e0c2c6dba0592::t_0d16b0e126d067 33-36
+TODO.md
+  s_6e0c2c6dba0592::t_438ed7c892353e 59-70
+tests/core/test_hooks.py
+  s_6e0c2c6dba0592::t_82ae83c05899fc 17,312,392,418
+docs/operations.md
+  s_6e0c2c6dba0592::t_225599bbd422a7 433
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4a66d91782642d2371ea3086052ecf35c6f25b55",
+  "prompts": {},
+  "sessions": {
+    "s_6e0c2c6dba0592": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "24c9909b-1d33-42f1-9ddc-cce97bd5d739",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "Brijgopal Bharadwaj <brijgopalbharadwaj1999@gmail.com>"
+    }
+  }
+}
