@@ -1,0 +1,19 @@
+TODO.md
+  s_6e0c2c6dba0592::t_6b0788953359c2 3,12-14,18-27,49-53
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c60969994a5776ba5c82a07e21b94978ac6fe72b",
+  "prompts": {},
+  "sessions": {
+    "s_6e0c2c6dba0592": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "24c9909b-1d33-42f1-9ddc-cce97bd5d739",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "Brijgopal Bharadwaj <brijgopalbharadwaj1999@gmail.com>"
+    }
+  }
+}
