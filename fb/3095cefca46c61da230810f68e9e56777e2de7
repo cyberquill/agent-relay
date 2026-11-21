@@ -1,0 +1,62 @@
+skills/agent-relay-away/SKILL.md
+  s_1331dc15a5db54::t_93dd5bf2f447e9 4-8,13-18,22,25,33,54-65,79
+  s_1331dc15a5db54::t_a348b089f0440e 80
+tests/core/test_away_global.py
+  s_1331dc15a5db54::t_a9e0d090a26a1c 1-4,6-15,17-69,71-104,107-237,239-332
+  s_d55e146ebbc7b2::t_7f79c037aa5038 238
+  s_1331dc15a5db54::t_4a43a99dacc81d 5,16,70,105-106
+agent_relay/core/router.py
+  s_1331dc15a5db54::t_a0190672a6542f 5-10,17,42-43,54-55,57-62,90,92-93,100-107
+  s_1331dc15a5db54::t_93b45fea9bade5 108
+tests/core/test_queue_modes.py
+  s_6e0c2c6dba0592::t_d527c455057d9a 97
+  s_6e0c2c6dba0592::t_d673cc73db9859 24
+tests/ops/test_bundles.py
+  s_1331dc15a5db54::t_afd0828bd75900 153-154
+  s_d55e146ebbc7b2::t_9362ac36b67b68 198
+skills/agent-relay-away/commands/away.md
+  s_1331dc15a5db54::t_ad6b95006c8375 3,6-9
+skills/agent-relay-away/commands/back.md
+  s_1331dc15a5db54::t_766c700362db73 3,6-7
+agent_relay/core/away.py
+  s_1331dc15a5db54::t_7a65289176f7df 1,3-11,13,17,20,22,26,34-38,41-43,46-47,49-50,52-58
+agent_relay/core/service/away.py
+  s_1331dc15a5db54::t_d5c618437ba661 1,11,25-26,29-30,32-34,39-41,46,49,61,81,94,101-102,104,142
+agent_relay/core/parking.py
+  s_1331dc15a5db54::t_1ff78a6551a949 62
+  s_1331dc15a5db54::t_a4c0bbfd9739ac 104
+patches/stepping-away/SKILL.md
+  s_1331dc15a5db54::t_d46a17e2fe4a88 18-19,26,37,47
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "fb3095cefca46c61da230810f68e9e56777e2de7",
+  "prompts": {},
+  "sessions": {
+    "s_1331dc15a5db54": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "bc683e87-9fe8-445a-b602-e3198e0212bf",
+        "model": "claude-sonnet-5-5-high"
+      },
+      "human_author": "Brijgopal Bharadwaj <brijgopalbharadwaj1999@gmail.com>"
+    },
+    "s_6e0c2c6dba0592": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "24c9909b-1d33-42f1-9ddc-cce97bd5d739",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "Brijgopal Bharadwaj <brijgopalbharadwaj1999@gmail.com>"
+    },
+    "s_d55e146ebbc7b2": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "be38d2bf-f046-481d-8145-58820be8e710",
+        "model": "claude-sonnet-5-5-high"
+      },
+      "human_author": "Brijgopal Bharadwaj <brijgopalbharadwaj1999@gmail.com>"
+    }
+  }
+}
