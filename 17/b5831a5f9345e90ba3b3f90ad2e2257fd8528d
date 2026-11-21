@@ -1,0 +1,120 @@
+tests/fixtures/rich/table.body.html
+  s_265047b0913283::t_71bedaefeef532 1-29
+agent_relay/core/send_file.py
+  s_6e0c2c6dba0592::t_11f4dfc4a63781 81
+  s_6e0c2c6dba0592::t_ef9a89ac3fce3e 16
+  s_6532114fb9259a::t_7a7c0025d1b2c6 1-15,17-80,82-102,106-126,129
+  s_6532114fb9259a::t_2c58780cef0aa8 103-105
+  s_265047b0913283::t_ec81e2e5caa3ad 127-128
+agent_relay/frontends/text.py
+  s_1331dc15a5db54::t_2adcdda6e4af8d 1-46
+tests/fixtures/rich/code.body.html
+  s_265047b0913283::t_71bedaefeef532 1-15
+tests/fixtures/rich/long.md
+  s_265047b0913283::t_71bedaefeef532 1-70
+tests/core/test_send_file.py
+  s_265047b0913283::t_f48a300c790e6b 1-127,129-174
+  s_6e0c2c6dba0592::t_d527c455057d9a 128
+agent_relay/scrub.py
+  s_6e0c2c6dba0592::t_11f4dfc4a63781 48-53,55-69
+tests/mcp/test_relay_mcp.py
+  s_265047b0913283::t_666717871b76dd 106,109-110
+  s_6e0c2c6dba0592::t_061bc335a9541f 166
+  s_265047b0913283::t_24c3bcfbd64ddc 239
+  s_6e0c2c6dba0592::t_65f246dba8cbce 221-238,240-297
+agent_relay/frontends/webex/links.py
+  s_265047b0913283::t_42209b233f22e3 3-4,9,11
+agent_relay/core/inbox.py
+  s_d55e146ebbc7b2::t_aa6911ef41ff70 334-356
+  s_265047b0913283::t_23759a17c02c0d 242-244
+  s_265047b0913283::t_ca66d9da730590 123-127
+  s_6e0c2c6dba0592::t_f2b4c99dd8f459 245,357-361,363
+agent_relay/mcp/server.py
+  s_265047b0913283::t_cbc864e3853fa2 47-52
+  s_6532114fb9259a::t_d1b136a546f3a1 136-143
+  s_265047b0913283::t_13fe77f1c389e3 79-85,87-88
+  s_265047b0913283::t_ecd81a5b0922d7 3-4
+  s_265047b0913283::t_ed2d220b3027b7 86
+  s_265047b0913283::t_ee7ea6b1200477 28,30-32
+  s_265047b0913283::t_7113f4c6d4b3f2 89
+  s_6532114fb9259a::t_379e9361f31b39 135
+  s_6532114fb9259a::t_1e28030584f3d3 144
+tests/fixtures/rich/long.body.html
+  s_265047b0913283::t_71bedaefeef532 1-72
+tests/test_rich.py
+  s_265047b0913283::t_2abe41e6f62553 191-192
+  s_265047b0913283::t_121233b1cca76d 117-123,246-248
+  s_265047b0913283::t_f673ebd9ff711b 1-116,124-190,193-245,249-312
+agent_relay/frontends/rich.py
+  s_265047b0913283::t_c1cd2f067067bc 296-308,311-331,334,336-337
+  s_265047b0913283::t_a6fc7b13a4a29b 1-295,309-310,332-333,335,338-340
+tests/frontends/test_attachments_intake.py
+  s_6e0c2c6dba0592::t_cb534d77d95b01 471,482-483
+  s_265047b0913283::t_6ac895e05bef0e 10,25-28,418-421
+  s_0ae3b763defb38::t_f41a23347e9265 11,188-244,254,263,277,294,300,307,309,324,355-389,425-426,436-437,440
+  s_6e0c2c6dba0592::t_ba3ea067c642de 390-391,395,397-399,402-407,409-417,422-424,427-435,438-439,441-447,491
+agent_relay/frontends/webex/attachments.py
+  s_265047b0913283::t_09c76da912ff40 11,17,23,28-31,36,41-54,66,70-71,87,90,96-98,100-102,104-106,109,111,113,115,121,123-127,129-137
+tests/core/test_inbox.py
+  s_d55e146ebbc7b2::t_747130ac71c164 27,337-416
+tests/fixtures/rich/code.md
+  s_265047b0913283::t_276e21d2d5f048 1-19
+tests/fixtures/rich/table.md
+  s_265047b0913283::t_162825c87b2f4e 1-11
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "17b5831a5f9345e90ba3b3f90ad2e2257fd8528d",
+  "prompts": {},
+  "sessions": {
+    "s_0ae3b763defb38": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "d0b2a672-ed0c-4eb8-afff-11d7f7dc11d2",
+        "model": "claude-sonnet-5-5-high"
+      },
+      "human_author": "Brijgopal Bharadwaj <brijgopalbharadwaj1999@gmail.com>"
+    },
+    "s_1331dc15a5db54": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "bc683e87-9fe8-445a-b602-e3198e0212bf",
+        "model": "claude-sonnet-5-5-high"
+      },
+      "human_author": "Brijgopal Bharadwaj <brijgopalbharadwaj1999@gmail.com>"
+    },
+    "s_265047b0913283": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "27811d49-0391-4ede-818b-9fc5f1cb4895",
+        "model": "claude-sonnet-5-5-high"
+      },
+      "human_author": "Brijgopal Bharadwaj <brijgopalbharadwaj1999@gmail.com>"
+    },
+    "s_6532114fb9259a": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "d756fb38-74b9-4655-8894-5b825b165389",
+        "model": "claude-sonnet-5-5-high"
+      },
+      "human_author": "Brijgopal Bharadwaj <brijgopalbharadwaj1999@gmail.com>"
+    },
+    "s_6e0c2c6dba0592": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "24c9909b-1d33-42f1-9ddc-cce97bd5d739",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "Brijgopal Bharadwaj <brijgopalbharadwaj1999@gmail.com>"
+    },
+    "s_d55e146ebbc7b2": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "be38d2bf-f046-481d-8145-58820be8e710",
+        "model": "claude-sonnet-5-5-high"
+      },
+      "human_author": "Brijgopal Bharadwaj <brijgopalbharadwaj1999@gmail.com>"
+    }
+  }
+}
