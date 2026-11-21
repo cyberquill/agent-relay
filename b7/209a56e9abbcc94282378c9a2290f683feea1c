@@ -1,0 +1,28 @@
+scripts/e2e/cardkit.py
+  s_6e0c2c6dba0592::t_0d0e3b0a7fd9eb 205-207
+docs/operations.md
+  s_6e0c2c6dba0592::t_4612a5966c3f16 429,431,438-455,458-461,463
+scripts/e2e/scenarios.py
+  s_6e0c2c6dba0592::t_0fcbb35a3e1735 6-7,108-109,112,114-115,117-119
+scripts/e2e/scenarios_more.py
+  s_6e0c2c6dba0592::t_97d2bf0130bb09 27-34,36-38,40-41,48-49
+  s_6e0c2c6dba0592::t_0fcbb35a3e1735 35
+TODO.md
+  s_6e0c2c6dba0592::t_82124ed2476004 61-68
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b7209a56e9abbcc94282378c9a2290f683feea1c",
+  "prompts": {},
+  "sessions": {
+    "s_6e0c2c6dba0592": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "24c9909b-1d33-42f1-9ddc-cce97bd5d739",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "Brijgopal Bharadwaj <brijgopalbharadwaj1999@gmail.com>"
+    }
+  }
+}
