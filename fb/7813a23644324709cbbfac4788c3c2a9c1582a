@@ -1,0 +1,26 @@
+extensions/relay-bridge/src/bridge.ts
+  s_6e0c2c6dba0592::t_8b86d70ec9e74b 182-187,191-199
+  s_6e0c2c6dba0592::t_80ba59b4974a14 200-201
+extensions/relay-bridge/test/bridge.test.ts
+  s_6e0c2c6dba0592::t_09745da4b9c181 82-98
+docs/deviations.md
+  s_6e0c2c6dba0592::t_984850642740d1 139
+docs/operations.md
+  s_6e0c2c6dba0592::t_d3d45279912e56 445-449
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "fb7813a23644324709cbbfac4788c3c2a9c1582a",
+  "prompts": {},
+  "sessions": {
+    "s_6e0c2c6dba0592": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "24c9909b-1d33-42f1-9ddc-cce97bd5d739",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "Brijgopal Bharadwaj <brijgopalbharadwaj1999@gmail.com>"
+    }
+  }
+}
