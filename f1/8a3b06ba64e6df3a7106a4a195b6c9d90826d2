@@ -1,0 +1,55 @@
+tests/test_scrub.py
+  s_6e0c2c6dba0592::t_87ff80ff2e1050 96-105
+agent_relay/frontends/webex/ws_client.py
+  s_6e0c2c6dba0592::t_192813ee72e9ec 130-132
+tests/frontends/test_host.py
+  s_6e0c2c6dba0592::t_192813ee72e9ec 192-197
+tests/core/test_housekeeping.py
+  s_6e0c2c6dba0592::t_192813ee72e9ec 10-11,21,64,165-179
+docs/PLAN.md
+  s_6e0c2c6dba0592::t_d31a10dd125aee 13-27
+scripts/e2e/runner.py
+  s_6e0c2c6dba0592::t_0f479e0ff51a84 18-19,49,65,123,139
+  s_6e0c2c6dba0592::t_1d454d59d04ee2 63
+scripts/e2e/scenarios_more.py
+  s_6e0c2c6dba0592::t_0f479e0ff51a84 175-200
+  s_6e0c2c6dba0592::t_1d454d59d04ee2 1
+tests/e2e_world.py
+  s_6e0c2c6dba0592::t_21932940b5309a 124
+  s_6e0c2c6dba0592::t_40b8a951f8c49a 51,388-391,411-428
+  s_6e0c2c6dba0592::t_8f59035f5a543d 429
+TODO.md
+  s_6e0c2c6dba0592::t_324649e2bab1d8 3
+  s_6e0c2c6dba0592::t_db5159668ef9e6 34-37,47,49,87-89,93-97,99-100,102-103,105-106,109-111,114,116-118,213,216,224-225,239-240,251,253
+plugins/opencode/package.json
+  s_6e0c2c6dba0592::t_6ba59a5fbef2ed 6
+agent_relay/core/parking.py
+  s_6e0c2c6dba0592::t_f830b7dd7cd043 10
+tests/test_e2e_driver.py
+  s_6e0c2c6dba0592::t_21932940b5309a 66-69,102-103,123
+  s_6e0c2c6dba0592::t_f63eb3b39f0547 213
+docs/operations.md
+  s_6e0c2c6dba0592::t_324649e2bab1d8 399-400,435
+agent_relay/core/housekeeping.py
+  s_6e0c2c6dba0592::t_b480290eda1065 26-28,53-79,121,129,135
+agent_relay/daemon.py
+  s_6e0c2c6dba0592::t_f830b7dd7cd043 121-122
+docs/deviations.md
+  s_6e0c2c6dba0592::t_25aedab6a1cded 143
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f18a3b06ba64e6df3a7106a4a195b6c9d90826d2",
+  "prompts": {},
+  "sessions": {
+    "s_6e0c2c6dba0592": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "24c9909b-1d33-42f1-9ddc-cce97bd5d739",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "Brijgopal Bharadwaj <brijgopalbharadwaj1999@gmail.com>"
+    }
+  }
+}
