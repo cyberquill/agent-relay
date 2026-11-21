@@ -1,0 +1,22 @@
+agent_relay/adapters/opencode/client.py
+  s_6e0c2c6dba0592::t_a169b9547574b1 89-93,222
+tests/adapters/test_opencode.py
+  s_6e0c2c6dba0592::t_73a47c30df1598 449
+  s_6e0c2c6dba0592::t_34de35f1ecc97a 17,446-448,450-461
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "fc7e05a93e3d6b06491a3c1c4d9e376433d76fee",
+  "prompts": {},
+  "sessions": {
+    "s_6e0c2c6dba0592": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "24c9909b-1d33-42f1-9ddc-cce97bd5d739",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "Brijgopal Bharadwaj <brijgopalbharadwaj1999@gmail.com>"
+    }
+  }
+}
