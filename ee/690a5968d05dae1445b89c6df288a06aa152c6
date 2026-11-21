@@ -1,0 +1,103 @@
+scripts/e2e/model.py
+  s_5a7905b4d03fed::t_fcedc0a6f4f4c5 1-134
+scripts/e2e/scenarios.py
+  s_5a7905b4d03fed::t_8b1bcce1027b8f 1-8,11-20,24,28-42,44-85,87-93,95-105,107-120,122-138,140-147
+  s_5a7905b4d03fed::t_5935bfb4dcb7e7 86,94,106,121,139
+  s_265047b0913283::t_7735389bc90cf8 9-10,21-23,25-27,43
+scripts/e2e/scenarios_more.py
+  s_349af440bf7504::t_5e28dc2f3c9540 1-9,11-49,51-75,77-100,104-161
+  s_5a7905b4d03fed::t_19efb4f3a1f909 101-103
+  s_5a7905b4d03fed::t_33e52ea7ad035f 50,76
+  s_5a7905b4d03fed::t_ee73c90f1d7774 10
+tests/e2e_world.py
+  s_5a7905b4d03fed::t_be45ef33623718 1-32,34-125,128-130,132-192,194-245,247-284,287-411
+  s_d55e146ebbc7b2::t_b7482bca8ec5eb 127,131
+  s_5a7905b4d03fed::t_bbfb151c3770a7 33,126,193,246,285-286
+scripts/e2e/files.py
+  s_5a7905b4d03fed::t_14250d6aa838a3 1-83
+scripts/e2e/cardkit.py
+  s_5a7905b4d03fed::t_62e90fbbf2e05e 1-133,135-199
+  s_5a7905b4d03fed::t_70b899844cc9b1 134
+  s_349af440bf7504::t_53ddfbcb015324 200-201
+scripts/__init__.py
+  s_5a7905b4d03fed::t_61ca8346f00f93 1
+scripts/e2e/__init__.py
+  s_5a7905b4d03fed::t_456a599dc250dc 1-5
+scripts/e2e/env.py
+  s_5a7905b4d03fed::t_5f4d7d958dcb75 2-154
+  s_5a7905b4d03fed::t_b6c96318dfbc84 1
+scripts/e2e/cli.py
+  s_5a7905b4d03fed::t_19efb4f3a1f909 7-8,28-42,60-62,69-74,91,93-95
+  s_5a7905b4d03fed::t_13dc9e2c5310a6 177
+  s_5a7905b4d03fed::t_0932a870e29651 16-17
+  s_5a7905b4d03fed::t_840ddaaa83e82b 159-162
+  s_5a7905b4d03fed::t_ee398e63c50a06 1-6,9-15,18-27,43-59,63-68,75-90,92,96-158,163-176,178-190
+scripts/e2e/report.py
+  s_5a7905b4d03fed::t_39716ff3382639 1-54,57-76
+  s_5a7905b4d03fed::t_8f0a80b75ede6a 55-56
+tests/test_e2e_driver.py
+  s_5a7905b4d03fed::t_66a0c713a5eefd 1-11,13-46,53-80,82-126,128-133,148-211,217-226,232-258,262-272
+  s_d55e146ebbc7b2::t_b7482bca8ec5eb 47-52,127
+  s_5a7905b4d03fed::t_87cd34992dde41 12,81,134-147,212-216,227-231,259-261
+scripts/e2e/runner.py
+  s_5a7905b4d03fed::t_5f1e1c95a3c052 1-71,75-128,132-150
+  s_5a7905b4d03fed::t_19efb4f3a1f909 72-74,129-131
+tests/live/test_phone_e2e.py
+  s_5a7905b4d03fed::t_92614473c0ee82 8,12,14,27-28,40,81-86,134,161-163,182,202-204,213,295-302,356-359,392-394,397-402,413-421,436-437,439,476-481,508-509
+  s_d55e146ebbc7b2::t_b7482bca8ec5eb 9,255,383
+  s_5a7905b4d03fed::t_f42f8f8cef5c66 3-7,10-11,13,15-26,29-39,41-47,49,51-80,87-127,129-133,135-160,164-181,183-201,205-212,214-240,244-246,248-254,256-262,264-265,268-269,271-294,303-355,360-382,384-391,395-396,403-412,422-435,440-475,482-507,510-523
+  s_5a7905b4d03fed::t_d6e77363e8e70a 1-2,48,50,128,241-243,247,263,266-267,270,438
+scripts/e2e/webex_cli_user.py
+  s_5a7905b4d03fed::t_19efb4f3a1f909 186-188
+  s_5a7905b4d03fed::t_c29701e2942930 1-20,22-24,26-42,52-173,175-185,189-303
+  s_5a7905b4d03fed::t_49b326c969ca95 174
+  s_5a7905b4d03fed::t_2a91840d20a63f 21
+  s_5a7905b4d03fed::t_2180e9fe218c9c 25
+  s_5a7905b4d03fed::t_6c13d91629b5e1 43-50
+  s_d55e146ebbc7b2::t_b7482bca8ec5eb 51
+scripts/e2e/watch.py
+  s_5a7905b4d03fed::t_b7ef43fdc88e16 1-85
+scripts/phone_e2e.py
+  s_5a7905b4d03fed::t_8d2b1cffd98210 3
+  s_5a7905b4d03fed::t_985b35c5a9f9a8 1-2,4-22
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ee690a5968d05dae1445b89c6df288a06aa152c6",
+  "prompts": {},
+  "sessions": {
+    "s_265047b0913283": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "27811d49-0391-4ede-818b-9fc5f1cb4895",
+        "model": "claude-sonnet-5-5-high"
+      },
+      "human_author": "Brijgopal Bharadwaj <brijgopalbharadwaj1999@gmail.com>"
+    },
+    "s_349af440bf7504": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "7fa18868-3f5c-4088-99c0-d111a863217b",
+        "model": "claude-sonnet-5-5-high"
+      },
+      "human_author": "Brijgopal Bharadwaj <brijgopalbharadwaj1999@gmail.com>"
+    },
+    "s_5a7905b4d03fed": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "f1b090c3-584a-4a4b-ba57-3dad1a5d1994",
+        "model": "claude-sonnet-5-5-high"
+      },
+      "human_author": "Brijgopal Bharadwaj <brijgopalbharadwaj1999@gmail.com>"
+    },
+    "s_d55e146ebbc7b2": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "be38d2bf-f046-481d-8145-58820be8e710",
+        "model": "claude-sonnet-5-5-high"
+      },
+      "human_author": "Brijgopal Bharadwaj <brijgopalbharadwaj1999@gmail.com>"
+    }
+  }
+}
