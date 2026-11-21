@@ -51,7 +51,7 @@ def continue_with(hook: HookInput, text: str, shown: str | None = None) -> HookS
         )
     if hook.format is PayloadFormat.OPENCODE:
         return {"prompt": text}
-    return {"decision": "block", "reason": text}
+    return _shown({"decision": "block", "reason": text}, shown)
 
 
 def add_context(hook: HookInput, text: str, shown: str | None = None) -> HookStdout:
@@ -62,4 +62,4 @@ def add_context(hook: HookInput, text: str, shown: str | None = None) -> HookStd
         return {"context": text}
     if hook.format is PayloadFormat.SNAKE:
         return _shown({"hookSpecificOutput": {"hookEventName": hook.event, "additionalContext": text}}, shown)
-    return {"additionalContext": text}
+    return _shown({"additionalContext": text}, shown)

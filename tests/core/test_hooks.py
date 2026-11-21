@@ -416,7 +416,7 @@ async def test_agent_idle_notification_wakes_with_queued_text(core: tuple[Core, 
         "notification",
         {"session_id": "C3", "cwd": "/w/proj", "notification_type": "agent_idle", "message": "idle"},
     )
-    assert reply["stdout"] == {"additionalContext": f"{PHONE_PREFIX}wake up"}
+    assert reply["stdout"] == {"additionalContext": f"{PHONE_PREFIX}wake up", "systemMessage": "📱 wake up"}
 
 
 async def test_opencode_register_records_server(core: tuple[Core, Recorder, list[str]]) -> None:
