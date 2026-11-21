@@ -1,0 +1,32 @@
+scripts/e2e/cardkit.py
+  s_6e0c2c6dba0592::t_50eb978bd86a3c 202-206
+scripts/e2e/files.py
+  s_6e0c2c6dba0592::t_413ef2530908b0 76
+  s_6e0c2c6dba0592::t_8188b5ffc66b6f 8
+tests/live/test_phone_e2e.py
+  s_6e0c2c6dba0592::t_f2dd0f2b0a997b 191
+scripts/e2e/env.py
+  s_6e0c2c6dba0592::t_50eb978bd86a3c 10
+  s_6e0c2c6dba0592::t_ad79559df18a2e 23
+  s_6e0c2c6dba0592::t_f5376d5ed36700 131-134,154
+scripts/e2e/webex_cli_user.py
+  s_6e0c2c6dba0592::t_d3e376292846e0 234-236,238-241,244-245
+tests/live/test_bundle_loaders_live.py
+  s_6e0c2c6dba0592::t_ab45f7a7400096 50-51
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c316dc4eac8eaa8d5d1dd77aca8706c095009fc5",
+  "prompts": {},
+  "sessions": {
+    "s_6e0c2c6dba0592": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "24c9909b-1d33-42f1-9ddc-cce97bd5d739",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "Brijgopal Bharadwaj <brijgopalbharadwaj1999@gmail.com>"
+    }
+  }
+}
