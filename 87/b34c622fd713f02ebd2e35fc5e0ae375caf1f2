@@ -1,0 +1,33 @@
+agent_relay/core/parking.py
+  s_6e0c2c6dba0592::t_eb66ebfa5dc821 37,59-64
+  s_6e0c2c6dba0592::t_9cc16179fd18f2 65-66
+agent_relay/hook/outputs.py
+  s_6e0c2c6dba0592::t_eb66ebfa5dc821 33-40,44-51,57-58,64
+agent_relay/core/hooks.py
+  s_6e0c2c6dba0592::t_eb66ebfa5dc821 23,322-323,332-333,358,372-373
+TODO.md
+  s_6e0c2c6dba0592::t_213661bc521eea 6,59-61
+  s_6e0c2c6dba0592::t_45591b5a1c954b 62
+tests/core/test_hooks.py
+  s_6e0c2c6dba0592::t_dc4c30f3e766d4 393-394
+tests/core/test_phone_notice.py
+  s_6e0c2c6dba0592::t_45fe3a5e997e96 1-26
+docs/deviations.md
+  s_6e0c2c6dba0592::t_213661bc521eea 142
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "87b34c622fd713f02ebd2e35fc5e0ae375caf1f2",
+  "prompts": {},
+  "sessions": {
+    "s_6e0c2c6dba0592": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "24c9909b-1d33-42f1-9ddc-cce97bd5d739",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "Brijgopal Bharadwaj <brijgopalbharadwaj1999@gmail.com>"
+    }
+  }
+}
