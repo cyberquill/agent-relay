@@ -1,0 +1,41 @@
+tests/core/test_hooks.py
+  s_913fc04f31a7a6::t_a29f3e0dbb1dfa 571
+  s_913fc04f31a7a6::t_d40ae179353985 568-570,572-604
+agent_relay/hook/outputs.py
+  s_913fc04f31a7a6::t_0534351c2a4fd3 41-45,50,52,55-57,62-63,67,70-71,76,78-79
+  s_913fc04f31a7a6::t_3f65bd9a67cc96 80-81
+agent_relay/core/hooks.py
+  s_913fc04f31a7a6::t_bf89ef6b7ff700 57
+  s_913fc04f31a7a6::t_c6a229063485fe 332
+  s_913fc04f31a7a6::t_e39b9e23e5e1fd 369-370
+  s_913fc04f31a7a6::t_68b62c575b5948 322
+  s_913fc04f31a7a6::t_c44561841d1387 385
+  s_913fc04f31a7a6::t_537d02b83cd408 56
+tests/core/test_phone_notice.py
+  s_913fc04f31a7a6::t_7069b92764fc4a 30,32-43,45-49
+docs/testing.md
+  s_913fc04f31a7a6::t_445dd7f60db18d 84
+docs/acceptance.md
+  s_913fc04f31a7a6::t_30c259f7d01423 178-179
+docs/deviations.md
+  s_913fc04f31a7a6::t_010f0a1c8404d6 1657-1658
+  s_913fc04f31a7a6::t_bfca7c8c47106f 1718-1730
+  s_913fc04f31a7a6::t_534c8de5c55872 1624-1625
+  s_913fc04f31a7a6::t_bfff0c09ab2ba2 39
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f0358d2616c1cb493eeddf441069dd654632fe5e",
+  "prompts": {},
+  "sessions": {
+    "s_913fc04f31a7a6": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "7bbb3f77-6111-41b5-a7ff-d16b0024efd3",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Brijgopal Bharadwaj <brijgopalbharadwaj1999@gmail.com>"
+    }
+  }
+}
