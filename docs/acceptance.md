@@ -27,7 +27,7 @@ it waits for. Live tests run only with `RELAY_LIVE=1`.
 ## Adapters (C6–C10)
 
 - [x] **AC-15** The AHP adapter turns replayed traces into the expected events — `tests/adapters/test_ahp.py`
-  - `tests/adapters/test_ahp.py` → `::test_a_phone_session_shows_up_in_the_session_list_after_its_first_turn`, `::test_a_session_whose_default_chat_has_no_turn_is_left_out_of_the_list`, `::test_a_workspace_file_sends_its_uri_and_every_folder`, `::test_a_workspace_without_a_file_sends_no_workspace_file`, `::test_an_unreadable_workspace_file_refuses_the_session` (D138)
+  - `tests/adapters/test_ahp.py` → `::test_a_phone_session_shows_up_in_the_session_list_after_its_first_turn`, `::test_a_session_whose_default_chat_has_no_turn_is_left_out_of_the_list`, `::test_a_workspace_file_sends_its_uri_and_every_folder`, `::test_a_workspace_without_a_file_sends_no_workspace_file`, `::test_an_unreadable_workspace_file_refuses_the_session`, `::test_the_default_chat_is_the_one_the_host_names_not_a_guessed_uri`, `::test_an_adopted_desk_session_with_a_uuid_default_chat_streams`, `::test_a_session_the_host_cannot_open_is_disposed_and_never_recorded` (D138)
 - [x] **AC-16** Live: list sessions on the real editor host — `tests/live/test_ahp_live.py` (passed at C15, 2026-10-04; the C15 smoke run of the Copilot harness is in docs/operations.md)
 - [x] **AC-17** relay-bridge protocol unit tests with a mocked `vscode` — `extensions/relay-bridge/test/bridge.test.ts`
 - [x] **AC-18** The vscode adapter against a fake bridge — `tests/adapters/test_vscode.py`

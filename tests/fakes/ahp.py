@@ -6,6 +6,7 @@ import asyncio
 import base64
 import contextlib
 import json
+import uuid
 from dataclasses import dataclass, field
 from http import HTTPStatus
 from pathlib import Path
@@ -45,6 +46,10 @@ def _turn_replay() -> list[dict[str, JsonValue]]:
     return [msg for msg in TRACE_MESSAGES[start + 1 :] if msg.get("method") == "action"]
 
 
+class ResourceNotFoundError(Exception):
+    """`subscribe` to a chat the host does not have (-32001), as the real host answers."""
+
+
 class UnsupportedVersionError(Exception):
     """`initialize` offered no version the fake accepts; args[0] is what it does accept."""
 
@@ -63,6 +68,8 @@ class FakeAgentHost:
     notified: list[tuple[str, dict[str, JsonValue]]] = field(default_factory=list)
     dispatched: list[dict[str, JsonValue]] = field(default_factory=list)
     provisional: set[str] = field(default_factory=set)
+    chats: dict[str, str] = field(default_factory=dict)
+    chats_unavailable: bool = False
     rejected: int = 0
     clients: set[ServerConnection] = field(default_factory=set)
     _server: Server | None = None
@@ -104,9 +111,19 @@ class FakeAgentHost:
                 found.append(action)
         return found
 
-    def add_session(self, session_id: str, workspace: str, status: int = 8, title: str = "desk") -> str:
+    def add_session(
+        self,
+        session_id: str,
+        workspace: str,
+        status: int = 8,
+        title: str = "desk",
+        default_chat: str | None = None,
+    ) -> str:
         resource = f"ahp-session:/{session_id}"
+        chat = default_chat or _default_chat(resource)
+        self.chats[chat] = resource
         self.sessions[resource] = {
+            "defaultChat": chat,
             "provider": "copilotcli",
             "title": title,
             "status": status,
@@ -153,6 +170,8 @@ class FakeAgentHost:
                         "message": "unsupported protocol version",
                         "data": {"supportedVersions": list(exc.args[0])},
                     }
+                except ResourceNotFoundError as exc:
+                    reply["error"] = {"code": -32001, "message": f"Resource not found: {exc}"}
                 except KeyError as exc:
                     reply["error"] = {"code": -32601, "message": str(exc)}
                 await connection.send(json.dumps(reply))
@@ -192,7 +211,10 @@ class FakeAgentHost:
                 assert isinstance(channel, str)
                 dirs = params.get("workingDirectories")
                 self.provisional.add(channel)
+                default_chat = f"ahp-chat:/{uuid.uuid4()}"
+                self.chats[default_chat] = channel
                 self.sessions[channel] = {
+                    "defaultChat": default_chat,
                     "provider": params.get("provider"),
                     "title": "",
                     "status": 1,
@@ -204,15 +226,30 @@ class FakeAgentHost:
                 }
                 return None
             case "subscribe":
-                return {"snapshot": {"resource": channel, "state": {}, "fromSeq": 0}}
-            case "createChat" | "disposeSession":
+                assert isinstance(channel, str)
+                if channel.startswith("ahp-chat:") and (self.chats_unavailable or channel not in self.chats):
+                    raise ResourceNotFoundError(channel)
+                known = self.sessions.get(channel)
+                state: dict[str, JsonValue] = {}
+                if known is not None:
+                    state = {"defaultChat": known.get("defaultChat"), "lifecycle": "creating"}
+                return {"snapshot": {"resource": channel, "state": state, "fromSeq": 0}}
+            case "createChat":
+                chat, session = params.get("chat"), channel
+                assert isinstance(chat, str) and isinstance(session, str)
+                self.chats[chat] = session
+                return None
+            case "disposeSession":
+                assert isinstance(channel, str)
+                self.sessions.pop(channel, None)
+                self.provisional.discard(channel)
                 return None
         raise KeyError(method)
 
     def start_turn_in(self, chat: str) -> None:
         """A turn starts in `chat`; only a turn in a session's default chat makes it listable."""
         for resource in list(self.provisional):
-            if chat == _default_chat(resource):
+            if chat == self.sessions.get(resource, {}).get("defaultChat"):
                 self.provisional.discard(resource)
 
     async def _on_dispatch(self, params: dict[str, JsonValue]) -> None:
@@ -225,7 +262,7 @@ class FakeAgentHost:
         if action.get("type") != "chat/turnStarted":
             return
         turn_id = action.get("turnId")
-        session = next((s for s in self.sessions if chat.endswith(_b64(s))), None)
+        session = self.chats.get(chat) or next((s for s in self.sessions if chat.endswith(_b64(s))), None)
         if isinstance(turn_id, str) and session is not None:
             task = asyncio.get_running_loop().create_task(self.replay_turn(session, chat, turn_id))
             self._tasks.add(task)

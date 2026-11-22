@@ -456,6 +456,19 @@ Open items for the owner:
 3. Android, as in the table. The AHP `autoApprove` flag is only indirectly confirmed (scenario 7 ran a tool
    with no card); a desk-session check of the three apps is still open.
 
+### Live check 2026-11-22: phone sessions in the Agent Host list (D138)
+
+Driven by sending `/new copilot <workspace> "Reply with exactly: OK"` to the bot as the owner (`webex-cli dm`).
+
+| Step | Result |
+|---|---|
+| First attempt, the `default` chat URI of the plan | Failed: `subscribe failed (-32001): Resource not found: ahp-chat://default/…`. VS Code 1.147 names a session's default chat `ahp-chat:/<uuid>` in the session snapshot (`defaultChat`); the `default` form does not exist for it |
+| After the fix, `.scratch` | `OK` came back on the phone; `listSessions` lists the session with `defaultChat` `ahp-chat:/5252f07f…`; while parked its default chat had `activeTurn`, after `/back` it held 1 turn with the prompt and reply |
+| `rms-oncall` (approved) | `OK` came back; the listing carries `_meta.multiRoot.workspaceFile` = `…/VSCode_WS/rms-oncall.code-workspace` and the workspace's 11 folders as `workingDirectories` |
+| Not checked | The session in the Chat view of the open window: no display access from this run. Look for the two `reply with OK` sessions in the `.scratch` and `rms-oncall` windows |
+
+Live sessions used this round: 3 `copilotcli` sessions in the Agent Host (one failed before any turn ran, one probe with no prompt, two relay runs).
+
 ### Live smoke 2026-10-04 06:55 UTC (October round, `scripts/smoke_live.py`, since deleted; it checked approval cards that no longer exist)
 
 | App | Step | Result | Evidence |

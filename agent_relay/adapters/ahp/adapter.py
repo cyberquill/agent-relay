@@ -108,6 +108,12 @@ async def _message_attachment(
     )
 
 
+def _default_chat_of(state: JsonValue, session: str) -> str:
+    """The chat a session's state names as its default, else the `default` chat URI of an older host."""
+    chat = state.get("defaultChat") if isinstance(state, dict) else None
+    return chat if isinstance(chat, str) and chat else uris.chat_uri(uris.DEFAULT_CHAT, session)
+
+
 class AhpAdapter(Adapter):
     harness = Harness.VSCODE_COPILOT
     capabilities = Capabilities(
@@ -141,6 +147,7 @@ class AhpAdapter(Adapter):
         self._version: str | None = None
         self._seq = itertools.count(1)
         self._subscribed: set[str] = set()
+        self._chat_owner: dict[str, str] = {}
         self._mapper = mp.ActionMapper()
         self._asks: dict[str, mp.ToolAsk] = {}
         self._inputs: dict[str, mp.InputAsk] = {}
@@ -224,11 +231,18 @@ class AhpAdapter(Adapter):
             raise AdapterUnavailableError("VS Code's Agent Host connection dropped; retrying")
         return self._conn
 
-    async def _subscribe(self, conn: Connection, channel: str) -> None:
+    async def _subscribe(self, conn: Connection, channel: str) -> JsonValue:
+        """Subscribe and return the snapshot's state (None when already subscribed)."""
         if channel in self._subscribed:
-            return
-        await conn.request("subscribe", m.SubscribeParams(channel=channel))
+            return None
+        raw = await conn.request("subscribe", m.SubscribeParams(channel=channel))
         self._subscribed.add(channel)
+        snapshot = raw.get("snapshot") if isinstance(raw, dict) else None
+        return snapshot.get("state") if isinstance(snapshot, dict) else None
+
+    def _track_chat(self, chat: str, session: str) -> None:
+        """Remember which session a chat belongs to: `ahp-chat:/<uuid>` names no session by itself."""
+        self._chat_owner[chat] = session
 
     async def _unsubscribe(self, conn: Connection, channel: str) -> None:
         if channel == uris.ROOT or channel not in self._subscribed:
@@ -248,6 +262,7 @@ class AhpAdapter(Adapter):
             if conn is not None:
                 await self._unsubscribe(conn, channel)
             self._mapper.forget(channel)
+            self._chat_owner.pop(channel, None)
             for asks in (self._asks, self._inputs):
                 for call_id in [k for k, ask in asks.items() if ask.chat == channel]:
                     del asks[call_id]
@@ -258,7 +273,10 @@ class AhpAdapter(Adapter):
         await self._release(self._conn, session)
 
     async def _ensure_subscribed(self, conn: Connection, record: SessionRecord) -> None:
-        for channel in (record.extra.get(SESSION_EXTRA), record.extra.get(CHAT_EXTRA)):
+        session, chat = record.extra.get(SESSION_EXTRA), record.extra.get(CHAT_EXTRA)
+        if isinstance(session, str) and isinstance(chat, str):
+            self._track_chat(chat, session)
+        for channel in (session, chat):
             if isinstance(channel, str):
                 await self._subscribe(conn, channel)
 
@@ -370,6 +388,7 @@ class AhpAdapter(Adapter):
             await self._registry.set_session_extra(record.session_key, SESSION_EXTRA, summary.resource)
         if record.status is SessionStatus.ENDED:
             return
+        self._track_chat(chat, summary.resource)
         await self._subscribe(conn, summary.resource)
         await self._subscribe(conn, chat)
 
@@ -392,7 +411,7 @@ class AhpAdapter(Adapter):
                 if session is not None and isinstance(record, mp.TitleChanged):
                     await self._registry.update_session_fields(session.session_key, title=record.title[:80])
             return
-        owner = uris.chat_session(channel)
+        owner = self._chat_owner.get(channel) or uris.chat_session(channel)
         sid = uris.session_id(owner) if owner else None
         session = await self._known(sid) if sid else None
         if session is None:
@@ -495,9 +514,6 @@ class AhpAdapter(Adapter):
         conn = await self._live()
         sid = str(uuid.uuid4())
         session = uris.session_uri(sid)
-        # The session's own default chat is the one VS Code shows; a second chat would leave it empty,
-        # and VS Code leaves a session with an empty default chat out of its list.
-        chat = uris.chat_uri(uris.DEFAULT_CHAT, session)
         title = request.prompt.strip().splitlines()[0][:80] if request.prompt.strip() else "phone session"
         directories, meta = self._workspace_of(request)
         try:
@@ -514,26 +530,39 @@ class AhpAdapter(Adapter):
                     },
                 ),
             )
-            await self._subscribe(conn, session)
-            record = await self._registry.create_session(
-                SessionRecord(
-                    session_key=f"{self.harness.value}:{sid}",
-                    harness=self.harness,
-                    harness_id=sid,
-                    workspace=request.workspace,
-                    model=request.model,
-                    title=title,
-                    status=SessionStatus.RUNNING,
-                    origin=Origin.PHONE,
-                    extra={SESSION_EXTRA: session, CHAT_EXTRA: chat, PROVIDER_EXTRA: PROVIDER},
-                )
-            )
-            await make_claim(self._registry, request.workspace, record.session_key)
+            # The session's own default chat is the one VS Code shows: a turn run in a second chat
+            # leaves it empty, and VS Code keeps a session with an empty default chat out of its list.
+            # The host names that chat in the session's state; it exists as soon as the session does.
+            chat = _default_chat_of(await self._subscribe(conn, session), session)
             await self._subscribe(conn, chat)
         except AhpRpcError as exc:
+            await self._dispose(conn, session)
             raise RelayError(f"VS Code refused the new session: {exc}") from exc
+        self._track_chat(chat, session)
+        record = await self._registry.create_session(
+            SessionRecord(
+                session_key=f"{self.harness.value}:{sid}",
+                harness=self.harness,
+                harness_id=sid,
+                workspace=request.workspace,
+                model=request.model,
+                title=title,
+                status=SessionStatus.RUNNING,
+                origin=Origin.PHONE,
+                extra={SESSION_EXTRA: session, CHAT_EXTRA: chat, PROVIDER_EXTRA: PROVIDER},
+            )
+        )
+        await make_claim(self._registry, request.workspace, record.session_key)
         await self._start_turn(conn, record, chat, request.prompt, request.model, attachments)
         return await self._registry.get_session(record.session_key) or record
+
+    async def _dispose(self, conn: Connection, session: str) -> None:
+        """Best effort: drop a host session the relay could not finish setting up."""
+        self._subscribed.discard(session)
+        try:
+            await conn.request("disposeSession", m.DisposeSessionParams(channel=session))
+        except (AhpRpcError, AhpUnavailableError) as exc:
+            log.debug(f"could not dispose {session}: {exc}")
 
     @staticmethod
     def _workspace_of(request: StartRequest) -> tuple[list[str], dict[str, JsonValue] | None]:

@@ -128,9 +128,10 @@ async def test_phone_session_replays_the_recorded_turn(rig: Rig) -> None:
     assert created["config"] == {"isolation": "folder", "autoApprove": "autoApprove"}
     assert created["workingDirectories"] == [Path(WORKSPACE).resolve().as_uri()]
     chat = rig.chat_of(record)
-    assert uris.chat_session(chat) == uris.session_uri(record.harness_id)
-    assert chat == uris.chat_uri(uris.DEFAULT_CHAT, uris.session_uri(record.harness_id))
-    assert rig.host.methods()[:4] == ["initialize", "listSessions", "createSession", "subscribe"]
+    session = uris.session_uri(record.harness_id)
+    assert chat == rig.host.sessions[session]["defaultChat"]
+    assert rig.host.methods()[:5] == ["initialize", "listSessions", "createSession", "subscribe", "subscribe"]
+    assert [p["channel"] for m_, p in rig.host.requests if m_ == "subscribe"] == [session, chat]
     assert "createChat" not in rig.host.methods()
     assert rig.host.dispatched[0]["channel"] == chat
     (turn,) = rig.host.actions("chat/turnStarted")
@@ -192,13 +193,31 @@ async def test_a_session_whose_default_chat_has_no_turn_is_left_out_of_the_list(
     session = uris.session_uri("33333333-2222-3333-4444-555555555555")
     conn = await rig.adapter._live()
     await conn.request("createSession", m.CreateSessionParams(channel=session, provider="copilotcli"))
+    default = rig.host.sessions[session]["defaultChat"]
+    assert isinstance(default, str)
     assert session not in await listed(rig)
     peer = uris.chat_uri("peer", session)
     await conn.request("createChat", m.CreateChatParams(channel=session, chat=peer))
     rig.host.start_turn_in(peer)
     assert session not in await listed(rig)
-    rig.host.start_turn_in(uris.chat_uri(uris.DEFAULT_CHAT, session))
+    rig.host.start_turn_in(default)
     assert session in await listed(rig)
+
+
+async def test_the_default_chat_is_the_one_the_host_names_not_a_guessed_uri(rig: Rig) -> None:
+    record = await rig.start()
+    chat = rig.chat_of(record)
+    assert chat.startswith("ahp-chat:/") and not chat.startswith(uris.CHAT_PREFIX)
+    assert uris.chat_session(chat) is None
+    await until(lambda: rig.rec.of(TurnCompleted))
+
+
+async def test_a_session_the_host_cannot_open_is_disposed_and_never_recorded(rig: Rig) -> None:
+    rig.host.chats_unavailable = True
+    with pytest.raises(RelayError, match="refused the new session"):
+        await rig.start()
+    assert "disposeSession" in rig.host.methods()
+    assert await rig.registry.list_sessions() == []
 
 
 async def test_wrong_token_never_connects(registry: Registry, relay_home: Path) -> None:
@@ -492,6 +511,17 @@ async def test_hooked_desk_session_is_refined_and_streams_text_only(rig: Rig) ->
     assert rig.rec.of(TurnCompleted) == [] and rig.rec.of(ToolStarted) == []
     assert (await rig.session(record.session_key)).status is SessionStatus.PARKED
     assert rig.rec.of(SessionStarted) == []
+
+
+async def test_an_adopted_desk_session_with_a_uuid_default_chat_streams(rig: Rig) -> None:
+    await away.set_away(rig.registry, True)
+    sid = "44444444-2222-3333-4444-555555555555"
+    chat = "ahp-chat:/5f7c3a52-6a1c-4d1e-9a52-0c1f2d3e4b5a"
+    session = rig.host.add_session(sid, WORKSPACE, default_chat=chat)
+    await rig.adapter.refresh_sessions()
+    await until(lambda: ("subscribe", {"channel": chat}) in rig.host.requests)
+    await rig.host.replay_turn(session, chat, "turn-8")
+    await until(lambda: [e for e in rig.rec.of(TextDelta) if e.text == "OK"])
 
 
 async def test_wake_reaches_a_parked_hook_session_through_its_chat(rig: Rig) -> None:
