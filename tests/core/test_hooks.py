@@ -565,6 +565,43 @@ async def test_an_agent_host_desk_chat_takes_its_label_from_its_transcript_at_it
     assert done.harness is Harness.VSCODE_COPILOT and done.text == "OK"
 
 
+async def test_a_parked_agent_host_desk_chat_is_asked_to_echo_the_phone_line(
+    core: tuple[Core, Recorder, list[str]], tmp_path: Path
+) -> None:
+    """Live 2026-11-21 22:50: the Agent Host's `Stop` was snake case, so no echo was asked for (D141)."""
+    built, _, _ = core
+    await away.set_away(built.registry, True)
+    await hook(built, "copilot", "SessionStart", {"session_id": "H8", "cwd": "/w/proj", "source": "new"})
+    stop: dict[str, JsonValue] = {
+        **STOP_LOCAL,
+        "session_id": "H8",
+        "stop_reason": "end_turn",
+        "transcript_path": _copilot_events(tmp_path, "H8", "vscode-agent-host"),
+    }
+    task = asyncio.create_task(hook(built, "copilot", "Stop", stop))
+    await _wait_status(built, "copilot_cli:H8", SessionStatus.PARKED)
+    await built.service.prompt("copilot_cli:H8", "Reply with exactly: BACK")
+    stdout = (await asyncio.wait_for(task, 2))["stdout"]
+    assert isinstance(stdout, dict)
+    assert stdout["reason"] == (
+        f"{PHONE_PREFIX}Reply with exactly: BACK\n\n{ECHO_INSTRUCTION}\n📱 Reply with exactly: BACK"
+    )
+
+
+async def test_a_parked_vscode_chat_shows_the_phone_line_itself_and_is_not_asked_to_echo(
+    core: tuple[Core, Recorder, list[str]],
+) -> None:
+    built, _, _ = core
+    await away.set_away(built.registry, True)
+    await hook(built, "copilot", "PreToolUse", LOCAL_PRE)
+    task = asyncio.create_task(hook(built, "copilot", "Stop", STOP_LOCAL))
+    await _wait_status(built, "vscode:L1", SessionStatus.PARKED)
+    await built.service.prompt("vscode:L1", "ship it")
+    stdout = (await asyncio.wait_for(task, 2))["stdout"]
+    assert isinstance(stdout, dict)
+    assert stdout["reason"] == f"{PHONE_PREFIX}ship it" and stdout["systemMessage"] == "📱 ship it"
+
+
 async def test_a_copilot_cli_session_keeps_its_label_at_a_stop(
     core: tuple[Core, Recorder, list[str]], tmp_path: Path
 ) -> None:

@@ -81,7 +81,7 @@ failure fixed, app rerun); last result per cell.
 | 5 Table answer as `answer.html` (CSP, no script, no href) | ✅ VS Code, Copilot, Cursor IDE (CDP), Cursor CLI, OpenCode |
 | 6 `/model` card, next turn uses it | ✅ VS Code (claude-haiku-4.5), Copilot (claude-sonnet-5.5), Cursor IDE (Grok 4.7 High), Cursor CLI, OpenCode |
 | 7 Shell command, no approval card | ✅ VS Code, Copilot, Cursor IDE (CDP), Cursor CLI (`--force`), OpenCode (`always`) |
-| 8 Away round trip | ✅ VS Code Copilot chat (owner, 20:14): `OK` reached the phone and parked, reply `BACK` delivered and answered, `/back` released it. Cosmetic: desk shows `OKBACK` in one bubble and not the phone message (D135, D137); root said `copilot_cli` (fixed offline by D140, not re-run). Not checked: Cursor, Copilot CLI |
+| 8 Away round trip | ✅ VS Code Copilot chat (owner, 20:14): `OK` reached the phone and parked, reply `BACK` delivered and answered, `/back` released it. Cosmetic: desk shows `OKBACK` in one bubble and not the phone message (D135, D137; a rerun after D137 still showed no `📱` line, fixed offline by D141); root said `copilot_cli` (fixed offline by D140). Neither re-run live. Not checked: Cursor, Copilot CLI |
 | 9 `/panic` | ✅ Everything stopped, `/away` resumed, away left off |
 | 10 `/stop`, chat still answers | ✅ VS Code, Copilot, Cursor IDE (CDP), Cursor CLI, OpenCode |
 | Cursor CDP on Cursor 3.31.15 (selectors v4, D133, D134) | ✅ Self-test passes; 2–7 pass (`/new cursor-ide`, reply, image + PDF, `answer.html`, `/model` Grok 4.7 High, shell). Not run: 8 on a Cursor desk chat |

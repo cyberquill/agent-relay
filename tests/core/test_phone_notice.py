@@ -27,10 +27,23 @@ def test_vs_code_gets_the_system_message_and_cursor_does_not() -> None:
 
 
 def test_the_agent_host_and_copilot_cli_get_the_line_as_a_request_to_say_it() -> None:
+    echoed = f"text\n\n{ECHO_INSTRUCTION}\n📱 hi"
     stop = normalize("copilot", "agentStop", {"sessionId": "H1", "cwd": "/w"})
-    out = continue_with(stop, "text", "📱 hi")
-    assert out["decision"] == "block" and out["reason"] == f"text\n\n{ECHO_INSTRUCTION}\n📱 hi"
-    assert continue_with(stop, "text")["reason"] == "text"
-    assert add_context(stop, "text", "📱 hi")["additionalContext"] == f"text\n\n{ECHO_INSTRUCTION}\n📱 hi"
-    snake = normalize("copilot", "Stop", {"session_id": "H1", "cwd": "/w"})
+    out = continue_with(stop, "text", "📱 hi", echo=True)
+    assert out["decision"] == "block" and out["reason"] == echoed
+    assert continue_with(stop, "text", echo=True)["reason"] == "text"
+    assert add_context(stop, "text", "📱 hi", echo=True)["additionalContext"] == echoed
+
+
+def test_the_echo_follows_the_app_not_the_hook_casing() -> None:
+    """The installed `Stop` and `PostToolUse` are PascalCase, so the Agent Host's arrive snake case (D141)."""
+    echoed = f"text\n\n{ECHO_INSTRUCTION}\n📱 hi"
+    snake = normalize("copilot", "Stop", {"session_id": "H1", "cwd": "/w", "stop_reason": "end_turn"})
+    out = continue_with(snake, "text", "📱 hi", echo=True)
+    assert out["reason"] == echoed and out["hookSpecificOutput"]["reason"] == echoed  # type: ignore[index,call-overload]
     assert continue_with(snake, "text", "📱 hi")["reason"] == "text"
+    tool = normalize("copilot", "PostToolUse", {"session_id": "H1", "cwd": "/w", "tool_name": "x"})
+    context = add_context(tool, "text", "📱 hi", echo=True)["hookSpecificOutput"]
+    assert context["additionalContext"] == echoed  # type: ignore[index,call-overload]
+    camel = normalize("copilot", "agentStop", {"sessionId": "H1", "cwd": "/w"})
+    assert continue_with(camel, "text", "📱 hi")["reason"] == "text"

@@ -53,6 +53,8 @@ APPROVAL_KINDS = frozenset(
 )
 AFTER_KINDS = frozenset({HookKind.POST_TOOL, HookKind.SHELL_AFTER, HookKind.MCP_AFTER, HookKind.TOOL_FAILURE})
 COPILOT_FAMILY = (Harness.VSCODE_COPILOT, Harness.VSCODE, Harness.COPILOT_CLI)
+# The Copilot runtime reads only a hook's text, never `systemMessage`, so the agent is asked to echo.
+ECHOING = frozenset({Harness.COPILOT_CLI, Harness.VSCODE_COPILOT})
 CURSOR_FAMILY = (Harness.CURSOR, Harness.CURSOR_CLI)
 # Sessions whose adapter reports everything itself: Cursor's hooks for these chats are ignored.
 ACP_OWNED = frozenset({Harness.CURSOR_CLI, Harness.CURSOR_CDP})
@@ -317,7 +319,7 @@ class HookService:
         if not queued:
             return {}
         text = phone_text([q.text for q in queued])
-        return _reply(outputs.add_context(hook, text, phone_notice(text)))
+        return _reply(outputs.add_context(hook, text, phone_notice(text), echo=session.harness in ECHOING))
 
     async def _notification(self, session: SessionRecord, hook: HookInput) -> Reply:
         if hook.notification_type != "agent_idle":
@@ -327,7 +329,7 @@ class HookService:
             return {}
         await self._lifecycle.observe(session.session_key, SessionStatus.RUNNING, f"{hook.kind.value} hook")
         text = phone_text([q.text for q in queued])
-        return _reply(outputs.add_context(hook, text, phone_notice(text)))
+        return _reply(outputs.add_context(hook, text, phone_notice(text), echo=session.harness in ECHOING))
 
     async def _final_text(self, session: SessionRecord, hook: HookInput) -> str | None:
         if hook.family is HookFamily.CURSOR:
@@ -364,7 +366,8 @@ class HookService:
         result = await self._parking.park(current, hook.stop_hook_active)
         await self._registry.set_session_extra(session.session_key, RENEWING, result.kind == "renewed")
         if result.blocks:
-            return _reply(outputs.continue_with(hook, result.text, phone_notice(result.text)))
+            echo = current.harness in ECHOING
+            return _reply(outputs.continue_with(hook, result.text, phone_notice(result.text), echo=echo))
         if result.kind == "skipped" or (result.kind == "released" and result.text == AWAY_OFF_REASON):
             return await self._deliver_waiting(session, hook)
         return {}
@@ -379,4 +382,4 @@ class HookService:
             return {}
         await self._lifecycle.observe(session.session_key, SessionStatus.RUNNING, "queued message delivered")
         text = phone_text([q.text for q in queued])
-        return _reply(outputs.continue_with(hook, text, phone_notice(text)))
+        return _reply(outputs.continue_with(hook, text, phone_notice(text), echo=session.harness in ECHOING))

@@ -36,7 +36,7 @@ flowchart LR
 | OpenCode | D11, D12, D69, D81, D130 |
 | Cursor CLI | D25, D26, D27, D28, D29, D68, D82, D131 |
 | Cursor CDP | D7, D31, D32, D33, D34, D35, D83, D133, D134 |
-| Hooks and parking | D4, D13, D61, D63, D64, D77, D124, D129, D135, D137, D139, D140 |
+| Hooks and parking | D4, D13, D61, D63, D64, D77, D124, D129, D135, D137, D139, D140, D141 |
 | Skills and bundles | D37, D38, D39, D40, D41, D97 |
 | MCP and config sync | D42, D43, D44, D45, D46, D47 |
 | Doctor and updates | D48, D49, D50 |
@@ -1621,6 +1621,8 @@ flowchart LR
 
 ### D135 · Parked desk chat shows the phone message
 
+> Superseded in part by D141: the Agent Host's `Stop` and `PostToolUse` arrive snake case, not camelCase.
+
 - **Plan:** D120 / PLAN §5.3: a phone message reaches a parked desk chat only as the Stop hook's continuation text.
 - **Built:** The desk chat also shows it.
 
@@ -1651,6 +1653,8 @@ flowchart LR
 - **Where:** `tests/test_e2e_driver.py` (the fake relay stops on `/stop`; `stop_ignored` fails scenario 10), `tests/core/test_housekeeping.py`, live report in `docs/testing.md`
 
 ### D137 · camelCase hooks ask the agent to echo
+
+> Superseded in part by D141: the echo follows the session's app, not the hook's casing.
 
 - **Plan:** D135: the camelCase hook formats carry `systemMessage`.
 - **Built:**
@@ -1711,3 +1715,16 @@ flowchart LR
   - Every recorded `agentStop` (1,518 of 1,518, both runtimes) carries `transcriptPath`, which answers the D118 question for Copilot.
   - Evidence: `tests/core/test_hooks.py::test_an_agent_host_desk_chat_takes_its_label_from_its_transcript_at_its_first_stop`, `::test_a_copilot_cli_session_keeps_its_label_at_a_stop`, `tests/hook/test_transcript.py::test_an_agent_host_transcript_names_its_client_and_a_copilot_cli_one_does_not`
 - **Where:** `agent_relay/core/hooks.py`, `agent_relay/hook/transcript.py`
+
+### D141 · The phone-line echo follows the app
+
+- **Plan:** D137: camelCase hooks (taken to be the Agent Host and the Copilot CLI) ask the agent to start its reply with the `📱 …` line; the snake format (taken to be VS Code's own agent) gets `systemMessage` only.
+- **Built:**
+  - `outputs.continue_with` and `outputs.add_context` take `echo`; `core/hooks.py` sets it for a session whose app is the Copilot runtime (`copilot_cli`, `vscode_copilot`) in every hook casing, and never for VS Code's own agent, Cursor or OpenCode.
+  - A snake-case `Stop` carries the echoed text in both `reason` and `hookSpecificOutput.reason`; a snake-case `PostToolUse` in `additionalContext`. `systemMessage` is still sent.
+- **Why:**
+  - `relay install` writes `Stop`, `PostToolUse`, `PreToolUse`, `SessionStart` and `SubagentStop` in PascalCase (`hook/installers/copilot.py`), so the Copilot runtime calls them with snake-case payloads; only its own events (`permissionRequest`, `notification`, `sessionEnd`, `errorOccurred`) are camelCase. D137 therefore never reached a park continuation.
+  - Live evidence: relayd restarted on the D137 code at 21:38:51 on 2026-11-21. An Agent Host desk chat registered at 22:49:52 from a PascalCase `SessionStart`, parked, and took the phone's `Reply with exactly: BACK`. Its `events.jsonl` records the hook output `{"decision": "block", "reason": "Message from the user, sent from their phone:\n\nReply with exactly: BACK"}`, with no echo line, and the reply `BACK`.
+  - The Copilot runtime keeps only `decision` and `reason` from that output (the same record), so `systemMessage` never reaches its chat.
+  - Evidence: `tests/core/test_phone_notice.py::test_the_echo_follows_the_app_not_the_hook_casing`, `tests/core/test_hooks.py::test_a_parked_agent_host_desk_chat_is_asked_to_echo_the_phone_line`, `::test_a_parked_vscode_chat_shows_the_phone_line_itself_and_is_not_asked_to_echo`
+- **Where:** `agent_relay/hook/outputs.py`, `agent_relay/core/hooks.py`; confirm live by a desk round trip in an Agent Host chat
