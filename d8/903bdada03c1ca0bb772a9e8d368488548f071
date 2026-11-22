@@ -1,0 +1,24 @@
+TODO.md
+  s_913fc04f31a7a6::t_062529c211f221 3,9
+  s_913fc04f31a7a6::t_0d44352338fd6b 26,30,32-33
+  s_913fc04f31a7a6::t_e775846a105cbd 70-73,75,77-83
+  s_913fc04f31a7a6::t_fbbf237ef899da 20
+  s_913fc04f31a7a6::t_559053dcb5de98 87-97
+  s_913fc04f31a7a6::t_5d7e536f372fff 197,199
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d8903bdada03c1ca0bb772a9e8d368488548f071",
+  "prompts": {},
+  "sessions": {
+    "s_913fc04f31a7a6": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "7bbb3f77-6111-41b5-a7ff-d16b0024efd3",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Brijgopal Bharadwaj <brijgopalbharadwaj1999@gmail.com>"
+    }
+  }
+}
