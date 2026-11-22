@@ -1,0 +1,23 @@
+tests/hook/test_transcript.py
+  s_3744513f660902::t_3a38c4ebf4e30f 67-105
+agent_relay/hook/transcript.py
+  s_3744513f660902::t_3a38c4ebf4e30f 103-112,134-135,138,146-148
+docs/deviations.md
+  s_3744513f660902::t_c7169c69fb38bd 146
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a2eada8eb989069c99119f2048bd3fb516f381d2",
+  "prompts": {},
+  "sessions": {
+    "s_3744513f660902": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "d675a8aa-8e1b-4c7d-9a85-f7943c345e3a",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "Brijgopal Bharadwaj <brijgopalbharadwaj1999@gmail.com>"
+    }
+  }
+}
