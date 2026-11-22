@@ -1,0 +1,26 @@
+docs/spikes.md
+  s_913fc04f31a7a6::t_66a99518ed5019 117
+  s_913fc04f31a7a6::t_b438355ea4ed46 172,176-179
+  s_913fc04f31a7a6::t_54c946d0fee023 201-202,206-210
+  s_913fc04f31a7a6::t_ca5c1e300ae1e9 33
+  s_913fc04f31a7a6::t_78322fbf3e4e0f 297-299
+  s_913fc04f31a7a6::t_a1193042657ce9 109-116,118-122
+  s_913fc04f31a7a6::t_eaf11c1e75e777 15
+  s_913fc04f31a7a6::t_5f30298c18c0f8 25,27,29
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e5f45de70d9705e3de3fae380793c809aa10f504",
+  "prompts": {},
+  "sessions": {
+    "s_913fc04f31a7a6": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "7bbb3f77-6111-41b5-a7ff-d16b0024efd3",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Brijgopal Bharadwaj <brijgopalbharadwaj1999@gmail.com>"
+    }
+  }
+}
