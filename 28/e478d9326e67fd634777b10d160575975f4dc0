@@ -1,0 +1,38 @@
+docs/testing.md
+  s_913fc04f31a7a6::t_04821a4b1b7f17 84
+agent_relay/hook/transcript.py
+  s_913fc04f31a7a6::t_8f5c08d0a315df 15
+  s_913fc04f31a7a6::t_10ae7db0323b41 7
+  s_913fc04f31a7a6::t_b539fcdae0f358 141-148,150-153
+  s_913fc04f31a7a6::t_ea1fbe1bcd236f 149
+  s_913fc04f31a7a6::t_1da826fdfd3411 16
+tests/hook/test_transcript.py
+  s_913fc04f31a7a6::t_0d2251d7d00003 48-67
+agent_relay/core/hooks.py
+  s_913fc04f31a7a6::t_41e208983fe614 339-349,351
+docs/deviations.md
+  s_913fc04f31a7a6::t_e27d799351442b 39
+  s_913fc04f31a7a6::t_37c05162bb6a24 1701-1713
+docs/acceptance.md
+  s_913fc04f31a7a6::t_2749cef7cee464 178-180
+  s_913fc04f31a7a6::t_d3e79b10cd21f3 168
+tests/core/test_hooks.py
+  s_913fc04f31a7a6::t_1032b680eb2d87 533-578
+  s_913fc04f31a7a6::t_8963d4eee4b42b 7
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "28e478d9326e67fd634777b10d160575975f4dc0",
+  "prompts": {},
+  "sessions": {
+    "s_913fc04f31a7a6": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "7bbb3f77-6111-41b5-a7ff-d16b0024efd3",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Brijgopal Bharadwaj <brijgopalbharadwaj1999@gmail.com>"
+    }
+  }
+}
