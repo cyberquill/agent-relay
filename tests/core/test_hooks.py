@@ -4,6 +4,7 @@ plus steering, wake-up and the no-noise-at-the-desk rule."""
 from __future__ import annotations
 
 import asyncio
+import json
 from collections.abc import AsyncIterator
 from pathlib import Path
 
@@ -527,6 +528,52 @@ async def test_an_agent_host_claim_is_not_taken_by_a_copilot_cli_hook(
     await hook(built, "copilot", "sessionStart", {"sessionId": "C9", "cwd": "/w/proj"})
     keys = sorted(s.session_key for s in await built.registry.list_sessions())
     assert keys == ["copilot_cli:C9", "vscode_copilot:A1"]
+
+
+def _copilot_events(folder: Path, sid: str, client: str | None) -> str:
+    """A Copilot `events.jsonl` as both runtimes write it; only the Agent Host's names a client."""
+    metadata = {"variables": {"gitCommitTrailer": {"clientName": client}}} if client else None
+    rows = [
+        {"type": "session.start", "data": {"sessionId": sid, "producer": "copilot-agent"}},
+        {"type": "user.message", "data": {"content": "Reply with exactly: OK"}},
+        {"type": "system.message", "data": {"content": "You are Copilot.", "metadata": metadata}},
+        {"type": "assistant.message", "data": {"content": "OK", "toolRequests": []}},
+    ]
+    file = folder / f"{sid}.jsonl"
+    file.write_text("\n".join(json.dumps(r, separators=(",", ":")) for r in rows))
+    return str(file)
+
+
+async def test_an_agent_host_desk_chat_takes_its_label_from_its_transcript_at_its_first_stop(
+    core: tuple[Core, Recorder, list[str]], tmp_path: Path
+) -> None:
+    """Scenario 8 on VS Code: its hooks match the Copilot CLI's, and the thread root said `copilot_cli`."""
+    built, rec, _ = core
+    await away.set_away(built.registry, True)
+    await hook(built, "copilot", "SessionStart", {"session_id": "H7", "cwd": "/w/proj", "source": "new"})
+    key = "copilot_cli:H7"
+    assert (await _session(built, key)).harness is Harness.COPILOT_CLI
+    events = _copilot_events(tmp_path, "H7", "vscode-agent-host")
+    task = asyncio.create_task(
+        hook(built, "copilot", "Stop", {**STOP_LOCAL, "session_id": "H7", "transcript_path": events})
+    )
+    await _wait_status(built, key, SessionStatus.PARKED)
+    await built.service.back(key)
+    assert await asyncio.wait_for(task, 2) == {}
+    assert (await _session(built, key)).harness is Harness.VSCODE_COPILOT
+    (done,) = rec.of(TurnCompleted)
+    assert done.harness is Harness.VSCODE_COPILOT and done.text == "OK"
+
+
+async def test_a_copilot_cli_session_keeps_its_label_at_a_stop(
+    core: tuple[Core, Recorder, list[str]], tmp_path: Path
+) -> None:
+    built, rec, _ = core
+    key = await _running(built, Harness.COPILOT_CLI, "C2", Origin.PHONE, hooked=True)
+    stop = {**STOP_CLI, "transcriptPath": _copilot_events(tmp_path, "C2", None)}
+    assert await asyncio.wait_for(hook(built, "copilot", "agentStop", stop), 2) == {}
+    assert (await _session(built, key)).harness is Harness.COPILOT_CLI
+    assert [e.harness for e in rec.of(TurnCompleted)] == [Harness.COPILOT_CLI]
 
 
 async def _cdp_chat(built: Core) -> None:

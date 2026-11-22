@@ -36,7 +36,7 @@ flowchart LR
 | OpenCode | D11, D12, D69, D81, D130 |
 | Cursor CLI | D25, D26, D27, D28, D29, D68, D82, D131 |
 | Cursor CDP | D7, D31, D32, D33, D34, D35, D83, D133, D134 |
-| Hooks and parking | D4, D13, D61, D63, D64, D77, D124, D129, D135, D137, D139 |
+| Hooks and parking | D4, D13, D61, D63, D64, D77, D124, D129, D135, D137, D139, D140 |
 | Skills and bundles | D37, D38, D39, D40, D41, D97 |
 | MCP and config sync | D42, D43, D44, D45, D46, D47 |
 | Doctor and updates | D48, D49, D50 |
@@ -1698,3 +1698,16 @@ flowchart LR
   - Replaying the real `events.jsonl` cut one line before the closing message returns the narration under D129 and nothing under D139; with the closing line it returns the triage.
   - Evidence: `tests/hook/test_transcript.py::test_narration_before_a_tool_call_is_not_the_reply_when_the_closing_message_is_not_on_disk`, `::test_wait_for_reply_waits_for_the_closing_message_behind_narration`
 - **Where:** `agent_relay/hook/transcript.py`
+
+### D140 · Agent Host desk chat labelled from its transcript
+
+- **Plan:** (addition, not in the plan) A desk session's app comes from its hook payload; the Agent Host adapter renames a `copilot_cli` session to `vscode_copilot` only when it lists that session (D67).
+- **Built:**
+  - At a Copilot stop hook, a `copilot_cli` session whose `events.jsonl` (the hook's `transcript_path`) contains `"clientName":"vscode-agent-host"` in its first 512 KB becomes `vscode_copilot`: the same change the adapter makes, made before the stop publishes the turn.
+  - A desk session's thread opens at that first final result, so the root names the right app; the session key (`copilot_cli:<id>`) stays.
+- **Why:**
+  - Live, scenario 8 on VS Code (2026-11-21): the thread root of a VS Code Agent Host desk chat said `copilot_cli`. Its hooks are the Copilot CLI's (same events and fields), so the payload cannot tell them apart.
+  - The transcripts on this Mac (137 sessions): all 103 Agent Host ones name the client in their first `system.message`, 57–170 KB in; no Copilot CLI one names a client. It is written after the first `user.message`, so `SessionStart` is too early and the stop is the first hook that can see it.
+  - Every recorded `agentStop` (1,518 of 1,518, both runtimes) carries `transcriptPath`, which answers the D118 question for Copilot.
+  - Evidence: `tests/core/test_hooks.py::test_an_agent_host_desk_chat_takes_its_label_from_its_transcript_at_its_first_stop`, `::test_a_copilot_cli_session_keeps_its_label_at_a_stop`, `tests/hook/test_transcript.py::test_an_agent_host_transcript_names_its_client_and_a_copilot_cli_one_does_not`
+- **Where:** `agent_relay/core/hooks.py`, `agent_relay/hook/transcript.py`

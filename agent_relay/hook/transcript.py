@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 import time
 from pathlib import Path
 
@@ -11,6 +12,8 @@ from pydantic import JsonValue
 
 MAX_READ_BYTES = 2_000_000
 _TEXT_KEYS = ("content", "text", "message", "value")
+AGENT_HOST_MARK = re.compile(rb'"clientName"\s*:\s*"vscode-agent-host"')
+AGENT_HOST_HEAD_BYTES = 524_288
 
 
 def _is_tool_part(value: JsonValue) -> bool:
@@ -133,6 +136,19 @@ def last_reply(transcript: str | None) -> str | None:
                 continue
         turn = _this_turn(entries)
         return None if _ends_on_tool_request(turn) else _last_assistant(turn)
+
+
+def from_agent_host(transcript: str | None) -> bool:
+    """Whether a Copilot `events.jsonl` belongs to a VS Code Agent Host chat, whose hooks look like the
+    Copilot CLI's. Its first `system.message` names the client (within the first 170 KB on every
+    session seen); the CLI names none. Quotes inside message text are escaped, so only a real key matches."""
+    if not transcript:
+        return False
+    try:
+        with Path(transcript).open("rb") as handle:
+            return AGENT_HOST_MARK.search(handle.read(AGENT_HOST_HEAD_BYTES)) is not None
+    except OSError:
+        return False
 
 
 REPLY_WAIT_S = 6.0

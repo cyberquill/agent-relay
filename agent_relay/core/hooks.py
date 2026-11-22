@@ -336,7 +336,19 @@ class HookService:
             return text if isinstance(text, str) else None
         return await transcript.wait_for_reply(hook.transcript_path)
 
+    async def _from_agent_host(self, session: SessionRecord, hook: HookInput) -> SessionRecord:
+        """A VS Code Agent Host chat sends the Copilot CLI's hooks, so it registers as `copilot_cli`. Its
+        transcript names the client by the first stop, which is when a desk session's phone thread opens."""
+        if session.harness is not Harness.COPILOT_CLI:
+            return session
+        if not await asyncio.to_thread(transcript.from_agent_host, hook.transcript_path):
+            return session
+        await self._registry.update_session_fields(session.session_key, harness=Harness.VSCODE_COPILOT.value)
+        log.info(f"{session.session_key} is a VS Code Agent Host chat")
+        return await self._registry.get_session(session.session_key) or session
+
     async def _stop(self, session: SessionRecord, hook: HookInput) -> Reply:
+        session = await self._from_agent_host(session, hook)
         text = await self._final_text(session, hook)
         if session.extra.get(RENEWING) is not True:
             await self._router.publish(

@@ -45,6 +45,26 @@ def test_copilot_events_shape(tmp_path: Path) -> None:
     assert transcript.last_reply(str(file)) == "Latest answer"
 
 
+def test_an_agent_host_transcript_names_its_client_and_a_copilot_cli_one_does_not(tmp_path: Path) -> None:
+    def events(name: str, metadata: object, content: str = "You are Copilot.") -> str:
+        file = tmp_path / f"{name}.jsonl"
+        rows = [
+            {"type": "session.start", "data": {"sessionId": name, "producer": "copilot-agent"}},
+            {"type": "user.message", "data": {"content": "hi"}},
+            {"type": "system.message", "data": {"content": content, "metadata": metadata}},
+        ]
+        file.write_text("\n".join(json.dumps(r, separators=(",", ":")) for r in rows))
+        return str(file)
+
+    trailer = {"variables": {"gitCommitTrailer": {"clientName": "vscode-agent-host"}}}
+    assert transcript.from_agent_host(events("host", trailer))
+    assert not transcript.from_agent_host(events("cli", None))
+    quoted = events("quoted", None, content='say "clientName":"vscode-agent-host"')
+    assert not transcript.from_agent_host(quoted), "text in a message is escaped, never a key"
+    assert not transcript.from_agent_host(str(tmp_path / "nope.jsonl"))
+    assert not transcript.from_agent_host(None)
+
+
 def test_copilot_model_call_telemetry_is_never_the_reply(tmp_path: Path) -> None:
     """The stop hook can run before the final `assistant.message` is on disk; the frustration classifier's
     `model.response` (role assistant) is then the newest assistant-looking entry and must be ignored."""
