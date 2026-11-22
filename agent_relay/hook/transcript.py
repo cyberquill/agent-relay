@@ -100,6 +100,16 @@ def _this_turn(entries: list[JsonValue]) -> list[JsonValue]:
     return entries
 
 
+def _ends_on_tool_request(entries: list[JsonValue]) -> bool:
+    """True when the newest Copilot CLI `assistant.message` asks for a tool: it is narration ("Checking X"),
+    and the turn's closing message, which has no tool request, is not on disk yet."""
+    for entry in reversed(entries):
+        if isinstance(entry, dict) and entry.get("type") == "assistant.message":
+            data = entry.get("data")
+            return isinstance(data, dict) and bool(data.get("toolRequests"))
+    return False
+
+
 def last_reply(transcript: str | None) -> str | None:
     if not transcript:
         return None
@@ -121,10 +131,11 @@ def last_reply(transcript: str | None) -> str | None:
                 entries.append(json.loads(line))
             except json.JSONDecodeError:
                 continue
-        return _last_assistant(_this_turn(entries))
+        turn = _this_turn(entries)
+        return None if _ends_on_tool_request(turn) else _last_assistant(turn)
 
 
-REPLY_WAIT_S = 3.0
+REPLY_WAIT_S = 6.0
 REPLY_POLL_S = 0.2
 
 
@@ -132,8 +143,9 @@ async def wait_for_reply(
     transcript: str | None, wait_s: float = REPLY_WAIT_S, poll_s: float = REPLY_POLL_S
 ) -> str | None:
     """The reply of the turn that just stopped. The Copilot CLI writes its events a moment after it runs
-    the stop hook, so the final `assistant.message` may not be on disk yet: look again for up to `wait_s`
-    while the file exists and shows no reply. A transcript that is not there is not waited for."""
+    the stop hook, so the final `assistant.message` may not be on disk yet (the newest one on disk can be
+    the narration before the last tool call, which `last_reply` does not return): look again for up to
+    `wait_s` while the file exists and shows no reply. A transcript that is not there is not waited for."""
     if not transcript:
         return None
     deadline = time.monotonic() + wait_s
