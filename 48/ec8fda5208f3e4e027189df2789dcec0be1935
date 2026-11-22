@@ -1,0 +1,50 @@
+agent_relay/frontends/webex/handlers.py
+  s_913fc04f31a7a6::t_0daaccdf5f28bf 195-199
+agent_relay/adapters/base.py
+  s_913fc04f31a7a6::t_0daaccdf5f28bf 83-86
+docs/deviations.md
+  s_913fc04f31a7a6::t_11727dde6bdd15 1741-1756
+  s_913fc04f31a7a6::t_e08590aae57c85 32,36
+agent_relay/frontends/webex/api.py
+  s_913fc04f31a7a6::t_a885924d0bd493 108-123
+  s_913fc04f31a7a6::t_84ef39bf8378ae 256
+docs/user-guide.md
+  s_913fc04f31a7a6::t_11727dde6bdd15 114-115,121-122
+agent_relay/adapters/opencode/client.py
+  s_913fc04f31a7a6::t_c1fdead48a09ad 166-168,176
+  s_913fc04f31a7a6::t_0daaccdf5f28bf 14-15
+docs/testing.md
+  s_913fc04f31a7a6::t_11727dde6bdd15 111-114
+agent_relay/models/attachments.py
+  s_913fc04f31a7a6::t_c1fdead48a09ad 7-20,24,26
+  s_913fc04f31a7a6::t_cca7447063b37f 21-23,25
+tests/frontends/test_upload_scrub.py
+  s_913fc04f31a7a6::t_43c96a9aa61b76 1-37
+tests/adapters/test_attachments.py
+  s_913fc04f31a7a6::t_4593152b67bc87 326-328,344-346,356-358
+  s_913fc04f31a7a6::t_a8e1773828981b 331
+  s_913fc04f31a7a6::t_7bc3370852ce33 359-370,374-379
+  s_913fc04f31a7a6::t_cca7447063b37f 371-373
+agent_relay/adapters/opencode/adapter.py
+  s_913fc04f31a7a6::t_0daaccdf5f28bf 32,293-294
+  s_913fc04f31a7a6::t_653614acee37e2 295
+docs/security.md
+  s_913fc04f31a7a6::t_11727dde6bdd15 109
+  s_913fc04f31a7a6::t_e3206190b12f9c 175
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "48ec8fda5208f3e4e027189df2789dcec0be1935",
+  "prompts": {},
+  "sessions": {
+    "s_913fc04f31a7a6": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "7bbb3f77-6111-41b5-a7ff-d16b0024efd3",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "Brijgopal Bharadwaj <brijgopalbharadwaj1999@gmail.com>"
+    }
+  }
+}
