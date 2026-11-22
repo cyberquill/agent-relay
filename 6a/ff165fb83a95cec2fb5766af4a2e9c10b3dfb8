@@ -1,0 +1,123 @@
+docs/deviations.md
+  s_913fc04f31a7a6::t_5d026524d07a1e 41,44,1757-1770
+agent_relay/gateway/signin.py
+  s_913fc04f31a7a6::t_16e65a183c01cf 136-138,225-229
+  s_913fc04f31a7a6::t_b0fc308e263ed2 1-107,111-135,139-158,162-173,181-190,193-224,230-259
+  s_913fc04f31a7a6::t_04ad85c48f3b2a 108-110,159-161
+  s_913fc04f31a7a6::t_fde5ce44702419 174-180,191-192
+agent_relay/gateway/store.py
+  s_913fc04f31a7a6::t_efde4fde97e0c3 1-78
+tests/frontends/test_commands.py
+  s_913fc04f31a7a6::t_14f21c359de0f9 39,118-122
+agent_relay/gateway/__init__.py
+  s_913fc04f31a7a6::t_697f3d400ea2c8 1
+docs/testing.md
+  s_913fc04f31a7a6::t_fcb7a7d7e7e42f 20
+TODO.md
+  s_913fc04f31a7a6::t_dcc2d25db3abf6 9,41-42
+tests/fakes/oauth_server.py
+  s_913fc04f31a7a6::t_f9762e01368686 1-52,55-57,63-122
+  s_913fc04f31a7a6::t_162b61e2c22d95 53-54
+  s_913fc04f31a7a6::t_e94ac0442ffde7 58-62
+docs/operations.md
+  s_913fc04f31a7a6::t_0d3644e11a9291 25,157-160,299-331
+  s_913fc04f31a7a6::t_0046c8c03f7e4d 332
+agent_relay/daemon.py
+  s_913fc04f31a7a6::t_d1d43c6fb40e23 298-301
+  s_913fc04f31a7a6::t_cd34789acb5799 302-303
+  s_913fc04f31a7a6::t_16e65a183c01cf 41,293-297,314,337-338,352-353,359-362,369-370
+  s_913fc04f31a7a6::t_3be79057683316 371-372
+agent_relay/sync/model.py
+  s_913fc04f31a7a6::t_326298d407e844 102-103,108-114
+  s_913fc04f31a7a6::t_21e79d13bbc828 115
+tests/gateway/conftest.py
+  s_913fc04f31a7a6::t_2427abda4ab763 10,20
+  s_913fc04f31a7a6::t_0ca13f33c15a8b 1-9,11-19,21-32
+tests/sync/test_gateway_sync.py
+  s_913fc04f31a7a6::t_98d3847d184fb6 1-6,8-12,14-63,75-129,140-147
+  s_913fc04f31a7a6::t_1365049e9f332c 7,13,64-74
+  s_913fc04f31a7a6::t_6e41bbb5ad3b86 130-139
+docs/user-guide.md
+  s_913fc04f31a7a6::t_5d026524d07a1e 42,258-263,281
+tests/gateway/test_oauth.py
+  s_913fc04f31a7a6::t_0ca13f33c15a8b 1-120
+agent_relay/gateway/service.py
+  s_913fc04f31a7a6::t_16e65a183c01cf 65-67
+  s_913fc04f31a7a6::t_d32459b174e5ff 1-64,68-70,73-74,76
+  s_913fc04f31a7a6::t_4af9d47f64845a 71-72,75
+agent_relay/sync/plan.py
+  s_913fc04f31a7a6::t_ab5fd455d41ad5 5,11,93-102,118-119
+  s_913fc04f31a7a6::t_fea66b8525158c 9,88-92,115-117
+  s_913fc04f31a7a6::t_326298d407e844 13,56,108,110
+tests/gateway/rig.py
+  s_913fc04f31a7a6::t_2427abda4ab763 1-60
+agent_relay/frontends/pwa/server.py
+  s_913fc04f31a7a6::t_d32459b174e5ff 33-34,48
+agent_relay/frontends/webex/bot.py
+  s_913fc04f31a7a6::t_16e65a183c01cf 22
+  s_913fc04f31a7a6::t_8520c78122e144 328,341
+tests/gateway/test_app.py
+  s_913fc04f31a7a6::t_7c3c69fff2b6c7 1-9,11-85,87-130
+  s_913fc04f31a7a6::t_2427abda4ab763 10
+  s_913fc04f31a7a6::t_0709761dfe8b70 86
+agent_relay/frontends/webex/handlers.py
+  s_913fc04f31a7a6::t_8520c78122e144 26
+  s_913fc04f31a7a6::t_8e9da00e493f69 69,75,90-92
+agent_relay/models/config.py
+  s_913fc04f31a7a6::t_c5a869b60d98df 73-79,81-83
+  s_913fc04f31a7a6::t_ad631c23385e17 80
+  s_913fc04f31a7a6::t_4f831863c1dd23 143
+agent_relay/gateway/app.py
+  s_913fc04f31a7a6::t_fde5ce44702419 100,145-149
+  s_913fc04f31a7a6::t_16e65a183c01cf 83-85,101-103,125-127,173-176
+  s_913fc04f31a7a6::t_45192282fab815 1-82,86-99,104-124,128-144,150-172,177
+agent_relay/cli/gateway.py
+  s_913fc04f31a7a6::t_924476296b9c54 1-26,29-48,51-107,111-125
+  s_913fc04f31a7a6::t_cd34789acb5799 27-28
+  s_913fc04f31a7a6::t_8708cc64a665dc 49-50,108-110
+tests/test_scrub.py
+  s_913fc04f31a7a6::t_9b0a8129a4496d 116-117
+  s_913fc04f31a7a6::t_112e0e6a820a2f 106-115,118-120
+docs/architecture.md
+  s_913fc04f31a7a6::t_5d026524d07a1e 15,32,199
+docs/security.md
+  s_913fc04f31a7a6::t_5d026524d07a1e 34,83-84,180-181
+agent_relay/gateway/oauth.py
+  s_913fc04f31a7a6::t_1318777adbef3f 1-175,179-196,198-205,209-232,239-246,248-249,257-259
+  s_913fc04f31a7a6::t_04ad85c48f3b2a 197,206-208,233-238,247,250-256,260
+  s_913fc04f31a7a6::t_16e65a183c01cf 176-178
+agent_relay/cli/__init__.py
+  s_913fc04f31a7a6::t_8708cc64a665dc 7,14
+tests/frontends/test_mcp_command.py
+  s_913fc04f31a7a6::t_2427abda4ab763 7-8,11-16
+  s_913fc04f31a7a6::t_1365049e9f332c 1-6,9-10,17-54
+agent_relay/frontends/webex/commands/mcp.py
+  s_913fc04f31a7a6::t_8e9da00e493f69 1-54
+tests/gateway/test_signin.py
+  s_913fc04f31a7a6::t_2427abda4ab763 13
+  s_913fc04f31a7a6::t_e94ac0442ffde7 133
+  s_913fc04f31a7a6::t_e6bdc573f3f5b8 1-12,14-132,134-159
+agent_relay/scrub.py
+  s_913fc04f31a7a6::t_ad98a49ea0a6cb 38,40
+  s_913fc04f31a7a6::t_9b0a8129a4496d 39
+  s_913fc04f31a7a6::t_44466759d2c8c5 77
+  s_913fc04f31a7a6::t_39be91170ca1fa 37
+agent_relay/sync/gateway.py
+  s_913fc04f31a7a6::t_326298d407e844 1-54
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6aff165fb83a95cec2fb5766af4a2e9c10b3dfb8",
+  "prompts": {},
+  "sessions": {
+    "s_913fc04f31a7a6": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "7bbb3f77-6111-41b5-a7ff-d16b0024efd3",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "Brijgopal Bharadwaj <brijgopalbharadwaj1999@gmail.com>"
+    }
+  }
+}
