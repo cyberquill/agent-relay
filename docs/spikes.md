@@ -12,6 +12,7 @@ Questions tested against the real apps before building, with results and the pat
   | OpenCode | 1.18.15 |
   | Python | 3.13.5 |
 
+- Live results gathered after gate G1 (C15 and later rounds) are added to the spike they answer, dated.
 - Tokens are redacted in every command below.
 - Fixtures live under `tests/fixtures/`.
 - Deviations from the plan are recorded in [deviations.md](deviations.md).
@@ -21,15 +22,15 @@ Questions tested against the real apps before building, with results and the pat
 | Spike | Question | Result | Fallback / deviation |
 |---|---|---|---|
 | S1 | Can the relay drive Copilot over AHP on the editor socket? | **Yes**, with three corrections to the plan | Primary `ahp` path on the editor socket; correction 3 is D138 |
-| S2 | Can a stop hook block for a long time? | Not measured live (needs hooks in the real home, so it waits for G1) | Sliced parking, always (the S2 fallback) |
+| S2 | Can a stop hook block for a long time? | **Copilot: yes for a 25-minute slice** (measured after G1); Cursor and Local not timed | Sliced parking, always (the S2 fallback) |
 | S3 | Does `agent_idle` wake an idle main Copilot agent? | **No**, per vendor docs | AHP `chat/turnStarted` on the same chat |
-| S4 | Does a Local `Stop` reason continue the chat, and is it capped? | Not measured live | Park via `Stop` and also continue through `relay-bridge` (both built) |
+| S4 | Does a Local `Stop` reason continue the chat, and is it capped? | **The reason continues it** (C15 smoke); the cap was not measured | Park via `Stop` and also continue through `relay-bridge` (both built) |
 | S5 | Does `code chat -r` target the right window? | Not measured live | Fallback as specified, plus "open the workspace first" |
-| S6 | Can the relay drive Cursor over remote debugging (CDP)? | Fuses allow it; live connect not attempted | CDP adapter ships disabled; `relay selftest cursor-cdp` gates it |
+| S6 | Can the relay drive Cursor over remote debugging (CDP)? | **Yes** (C15, D35); the self-test gates each Cursor version | CDP adapter ships disabled; `relay selftest cursor-cdp` gates it |
 | S7 | Does anything stop working with the screen locked? | **No**: all four phone-driven apps work with the screen locked | No lock-screen warning is needed |
 | S8 | Does `webex_bot` work on Python 3.13? | **Imports, but unusable in an asyncio daemon** | Vendored async port of its websocket client |
 | S9 | Which OpenCode permission and question endpoints exist? | **Both variants exist** | Implement both; choose at runtime from `/doc` |
-| S10 | Is the Cursor CLI logged in? | **No**: `cursor-agent status` prints `Not logged in` | `doctor` prints `cursor-agent login`; the adapter reports "auth needed" |
+| S10 | Is the Cursor CLI logged in? | **No** at C1: `cursor-agent status` printed `Not logged in`; after `cursor-agent login`, AC-22 passed live (C15) | `doctor` prints `cursor-agent login`; the adapter reports "auth needed" |
 
 ## S1 — AHP on the editor socket
 
@@ -105,6 +106,20 @@ sequenceDiagram
   | Cursor | per-script `timeout` | `stop` supports `followup_message`, `loop_limit: null` |
 
 - **Result:** sliced parking everywhere.
+- **Live, after G1 (measured 2026-11-22):** the Copilot runtime writes a `hook.start` and a `hook.end` for every
+  hook into `~/.copilot/session-state/<id>/events.jsonl`, so the block length of each `agentStop` can be read
+  back. Over the 1,518 recorded `agentStop` runs:
+
+  | Measure | Value |
+  |---|---|
+  | Longest single block | 1,501.5 s (one full 25-minute slice; the installed `timeoutSec` is 1,620 s) |
+  | Slices that ran to the end and renewed | 4, each `success: true` with `decision: block` and "Parking renewed" |
+  | Longest park of one session | about 96 minutes: three renewed slices, then a 21-minute block that ended in a release |
+  | Hook runs that failed | 0 |
+
+  - Cursor `stop` and Local `Stop` parks ran live (C15 smoke, scenario 8) but relayd logs no park start, so
+    their block lengths were not timed.
+  - A 30-minute single block was never tried: the slice is 25 minutes by design.
 
 ```mermaid
 sequenceDiagram
@@ -154,11 +169,14 @@ sequenceDiagram
 - **Question:** does a Local `Stop` block with a reason continue the agent, and does
   `chat.agent.maxRequests` cap parked continuations?
 - **Method:** VS Code Local hooks reference.
-- **Result:** documented that the reason continues the agent; the cap was not measured live.
+- **Result:** the reason continues the agent (documented, then seen live at C15); the cap was not measured live.
 - **Evidence:**
   - `Stop` output `hookSpecificOutput {decision: "block", reason}` "explains why the agent should continue".
   - `stop_hook_active` guards loops.
-  - Whether `chat.agent.maxRequests` (default 25) caps parked continuations was not measured.
+  - Live, C15 smoke (2026-10-04 06:55 UTC): a VS Code Local session parked, the phone's reply went back as the
+    `Stop` reason, and the agent answered it ([testing.md](testing.md), October round smoke).
+  - Whether `chat.agent.maxRequests` (default 25) caps parked continuations was not measured: no live park
+    has needed 20 continuations.
 - **Consequence:** park Local via `Stop` **and** build the fallback.
   - When `stop_hook_active` is set and the session has continued `park.local_max_continuations` times
     (default 20, below the 25 cap), the relay continues the chat through `relay-bridge`
@@ -180,11 +198,16 @@ sequenceDiagram
 
 - **Question:** can Cursor be driven over its Chromium remote-debugging port?
 - **Method:** `npx @electron/fuses read --app /Applications/Cursor.app`.
-- **Result:** the fuses allow it; a live connect was not attempted (relaunching Cursor with the flag would
-  end the running Cursor session).
+- **Result:** yes. At C1 the fuses allowed it and a live connect was left for C15 (relaunching Cursor with
+  the flag would have ended the running Cursor session); at C15 it connected and drove the composer.
 - **Evidence:**
   - `RunAsNode Enabled`, `EnableNodeCliInspectArguments Enabled`.
   - No fuse exists for `--remote-debugging-port`, so the Chromium switch is not blocked.
+  - Live, C15 (2026-10-05, D35): Cursor 3.23.12 started with the debug port; the self-test (AC-24) passed
+    after three stale selectors were fixed (selectors v2), and a phone prompt and a follow-up got correct
+    replies (v3 fixed the model menu).
+  - Live, November round (2026-11-21, D133, D134): Cursor 3.31.15 needed selectors v4; the self-test passes
+    and E2E scenarios 2 to 7 and 10 pass.
 - **Consequence:**
   - The CDP adapter ships disabled.
   - `relay selftest cursor-cdp` checks every selector before it can be enabled.
@@ -271,3 +294,6 @@ flowchart LR
     `session/prompt`, the `cursor/*` extension requests) follows the published ACP spec and Cursor's ACP
     docs; `tests/fakes/acp_agent.py` speaks exactly that subset.
   - C15 runs AC-22 against the real CLI after `cursor-agent login`.
+- **Live, C15 (2026-10-04):** after `cursor-agent login`, AC-22 passed against the real CLI and the live smoke
+  test passed (register, stream, approve, idle, reply). The November round's E2E scenarios 2 to 7 and 10 pass
+  on it too ([testing.md](testing.md)).
