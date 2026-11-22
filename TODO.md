@@ -1,12 +1,12 @@
 # agent-relay: status and what's left
 
-Last updated 2026-11-21 21:50, after the November round's code and live runs (squash-merged to local `main`, never pushed).
+Last updated 2026-11-22 18:30, after the agent-only items (D140, D141, spikes, Definition of Done). Local `main`, never pushed.
 
 | Doc | What |
 |---|---|
 | [`docs/PLAN.md`](docs/PLAN.md) | The plan |
 | [`sandbox/08-usability-round.md`](sandbox/08-usability-round.md) | November round plan: decisions U1–U14, phases P0–P8 |
-| [`docs/deviations.md`](docs/deviations.md) | Departures D1–D135 |
+| [`docs/deviations.md`](docs/deviations.md) | Departures D1–D141 |
 | [`docs/acceptance.md`](docs/acceptance.md) | Criteria to tests: AC-1–AC-40, OR-1–OR-20 (October), UR-1–UR-8 (November) |
 | [`docs/testing.md`](docs/testing.md) | Live results per app and scenario |
 | [`docs/user-guide.md`](docs/user-guide.md) | Start here as a user |
@@ -17,22 +17,23 @@ timeline
     2026-10-04 : First build C0–C14 committed : C15 live smoke on all five apps
     2026-10-13 : October round P0–P4 : OR-1–OR-20
     2026-11-21 : November round P0–P8 : UR-1–UR-8 : merged to local main as 6ec9653
+    2026-11-22 : Agent Host default chat (D138) : narration (D139) : label (D140) : echo (D141)
 ```
 
 ## Open now
 
 Needs: **Desk** = owner at the Mac; **Phone** = owner on Webex Android; **Code** = an agent can do it alone.
+No **Code** items are left: everything below needs the owner.
 
 | Item | Needs | Refs |
 |---|---|---|
+| Restart relayd so it runs D140 and D141 (`relay stop && relay start`; it runs from this repo's `.venv`) | Desk | D140, D141 |
 | Scenario 8 for Cursor and Copilot CLI desk chats (restart Cursor first); steps below | Desk + Phone | P5, P6, D120 |
-| Confirm D135 / D137 live: an Agent Host chat's reply starts with `📱 <your message>` (details below) | Desk + Phone | D135, D137 |
-| Re-check live that a VS Code desk chat starts the phone's reply on a new line (`core/parking.py::PHONE_PREFIX`) | Desk + Phone | scenario 8 |
-| VS Code Agent Host desk chat: thread root says `copilot_cli` (details below) | Code | scenario 8 |
+| Confirm D141 live: an Agent Host desk chat's reply to the phone starts with `📱 <your message>`, and its thread root says `vscode_copilot` (D140); details below | Desk + Phone | D135, D137, D140, D141 |
+| Re-check live that a VS Code desk chat (its own agent) shows the phone's message as a `📱` hook line (`systemMessage`, D135) | Desk + Phone | scenario 8 |
 | Does Cursor desktop skip its own prompt when the hook answers `allow`? (Only matters while away.) | Desk | D117, D124 |
 | Does VS Code honour `permissionDecision: "allow"` from `PreToolUse`, given `chat.tools.global.autoApprove: true` in your settings? | Desk | D117, D124 |
 | Is Cursor's last `afterAgentResponse` always the final answer, or can it be pre-tool narration? (Cleared when a tool hook follows it, so a turn ending after a tool yields no text.) | Desk | D118 |
-| Do Copilot CLI hook payloads always carry `transcript_path`? It is the only source of the final text. | Desk | D118 |
 | A bad token on a running relayd (P1's daemon robustness) not tried live | Desk | P1, D121 |
 | Does a Webex Android card delete remove the card cleanly, with no "Unable to send your request" on a stale tap? (Every one-shot card.) | Phone | D119 |
 | Does Webex Android open `answer.html` in the app or hand it to the browser, and does the CSP survive either path? | Phone | D122 |
@@ -45,8 +46,6 @@ Needs: **Desk** = owner at the Mac; **Phone** = owner on Webex Android; **Code**
 | October: a photo reaches each app natively; an HTTPS clone works under launchd | Desk + Phone | October round |
 | October: window reload vs VS Code follow-ups | Desk | D85 |
 | Upstream: `cursor-agent` sometimes appends "Error: RetriableError: WritableIterable is closed" to a woken turn's reply (the reply is complete). Report to Cursor if it persists | Owner | |
-| Definition of Done: every checkpoint C0–C15 committed with `uv run tox` green, including `ts` | Code | PLAN §9 |
-| Definition of Done: `docs/spikes.md` complete; `docs/deviations.md` lists every departure | Code | PLAN §9 |
 
 ### Scenario 8 steps (Cursor and Copilot CLI desk chats)
 
@@ -68,22 +67,33 @@ desk chat until its closing `/back`.
 parked, took the phone's `BACK` and answered it; `/back` released it and handed 10 phone sessions to the desk.
 
 - **Glued reply:** the desk chat showed the phone's reply glued to the previous answer (`OKBACK`) and never the
-  phone message itself. The continuation text now asks the agent to start on a new line
-  (`core/parking.py::PHONE_PREFIX`); not re-checked live.
-- **Wrong label:** the thread root says `copilot_cli` for this VS Code Agent Host chat. Its first hook is
-  `SessionStart`, and the Copilot CLI sends the same PascalCase events (fixture `tests/fixtures/hooks/copilot.json`),
-  so the payload cannot tell them apart. The session's `events.jsonl` says `clientName: vscode-agent-host` and
-  could be read to label it.
+  phone message itself. Fixed offline by D135, D137 and D141 (details below); not re-checked live.
+- **Wrong label:** the thread root said `copilot_cli` for this VS Code Agent Host chat: its hooks are the Copilot
+  CLI's, so the payload cannot tell them apart. Fixed offline by D140: at the first stop the relay reads
+  `clientName: vscode-agent-host` from the session's `events.jsonl` and relabels it `vscode_copilot`.
 
-### D135 / D137 details
+### D135 / D137 / D141 details
 
-- The Agent Host chat showed only `OKBACK`: the SDK ignores `systemMessage`.
-- So camelCase hooks now ask the agent to start its reply with the `📱 …` line (D137).
-- Check: with away on, ask an Agent Host chat in `.scratch` `Reply with exactly: OK`, reply in the phone thread,
-  and check the reply starts with `📱 <your message>`.
-- A VS Code chat on its own agent should show the line through `systemMessage`.
+- The Agent Host chat showed only `OKBACK`: the Copilot runtime ignores `systemMessage`.
+- D137 asked the agent to start its reply with the `📱 …` line, but only for camelCase hooks. A rerun at 22:50
+  (after D137 was live) recorded a continuation with no such line: the installed `Stop` is PascalCase, so the
+  Agent Host's arrives snake case. D141 makes the echo follow the app (`copilot_cli`, `vscode_copilot`).
+- Check, after restarting relayd: with away on, ask an Agent Host chat in `.scratch` `Reply with exactly: OK`,
+  reply in the phone thread, and check the reply starts with `📱 <your message>` and the root says `vscode_copilot`.
+- A VS Code chat on its own agent should show the line through `systemMessage`, with no echo.
 
 ## History, newest first
+
+### Agent-only items (2026-11-22)
+
+| Item | Outcome |
+|---|---|
+| VS Code Agent Host desk chat labelled `copilot_cli` | D140: relabelled `vscode_copilot` from its `events.jsonl` at the first stop. All 103 Agent Host transcripts on this Mac name the client; no Copilot CLI one does |
+| Do Copilot hook payloads always carry `transcript_path`? | Yes for the stop: 1,518 of 1,518 recorded `agentStop` runs carry `transcriptPath` (D140) |
+| D137's echo never reached a park continuation | D141: found in the transcript of the 22:50 rerun; the echo now follows the app, in every hook casing |
+| Definition of Done: `docs/spikes.md` complete | S2 (Copilot held full 25-minute slices and renewed, measured from `events.jsonl`), S4, S6 and S10 carry their live results; every spike has an outcome and a path |
+| Definition of Done: `docs/deviations.md` lists every departure | D1–D141 in order, each in the area index; every `Dnn` cited in code, tests and docs exists |
+| Definition of Done: C0–C15 committed with `uv run tox` green | C0–C14 have their checkpoint commits; C15 closes with `chore: live install verified`; tox green (1,534 passed, 7 live tests skipped) |
 
 ### November round (2026-11-21)
 
@@ -184,9 +194,9 @@ History from the first build. Its approval, park-with-lock and smoke-script part
 
 | Criterion | State |
 |---|---|
-| Every checkpoint C0–C15 committed with `uv run tox` green, including `ts` | Open |
+| Every checkpoint C0–C15 committed with `uv run tox` green, including `ts` | ✅ 2026-11-22 (C15: `chore: live install verified`) |
 | AC-1 to AC-40 all ticked in `docs/acceptance.md` | ✅ |
-| `docs/spikes.md` complete; `docs/deviations.md` lists every departure | Open |
+| `docs/spikes.md` complete; `docs/deviations.md` lists every departure | ✅ 2026-11-22 |
 | No stubs or open-work markers (`test_no_stubs` passes) | ✅ |
 | `relay doctor` all green after G1 | ✅ |
 | Live smoke works for VS Code, VS Code Copilot, OpenCode, the Cursor IDE and the Cursor CLI | ✅ |
