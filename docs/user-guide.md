@@ -346,8 +346,14 @@ follow its "never do while away" list.
 ## Picking work up at the desk
 
 - **VS Code**: phone sessions are ordinary VS Code chats. `vscode` sessions open as a new chat in
-  the window for that workspace; VS Code Copilot sessions run in VS Code's Agent Host, so look for them
-  in VS Code's list of chat sessions.
+  the window for that workspace. VS Code Copilot sessions run in VS Code's Agent Host and appear in the
+  Chat view's session list once their first turn has started (a few seconds after `/new`):
+  - A workspace with a `file` (a `.code-workspace` file) in `workspaces.toml`, which is also what
+    adding a repo to a plain workspace from the phone creates, shows its sessions **only in the window opened from that file**, like a chat started there.
+  - A workspace that is a plain folder shows its sessions in **any window that contains the folder**.
+  - You can type in the session at the desk once the agent has finished its turn. Sessions started
+    before this change ran in a hidden second chat and do not appear; read them through the
+    `agent-relay-recall` skill (below).
 - **Cursor CLI**: the session card shows the session id. Continue in a terminal with
   `agent resume <id>`.
 - **OpenCode**: the session is in OpenCode's session list for that workspace (`opencode` in the folder,

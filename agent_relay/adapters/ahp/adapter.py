@@ -17,9 +17,9 @@ from collections.abc import Awaitable, Callable, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 
-from pydantic import ValidationError
+from pydantic import JsonValue, ValidationError
 
-from agent_relay import __version__
+from agent_relay import __version__, paths
 from agent_relay.adapters.ahp import mapping as mp
 from agent_relay.adapters.ahp import models as m
 from agent_relay.adapters.ahp import uris
@@ -57,6 +57,7 @@ from agent_relay.models.events import (
     TurnCompleted,
 )
 from agent_relay.models.sessions import SessionRecord, SessionStatus
+from agent_relay.settings import code_workspace_folders
 
 log = get_logger(__name__)
 
@@ -498,13 +499,15 @@ class AhpAdapter(Adapter):
         # and VS Code leaves a session with an empty default chat out of its list.
         chat = uris.chat_uri(uris.DEFAULT_CHAT, session)
         title = request.prompt.strip().splitlines()[0][:80] if request.prompt.strip() else "phone session"
+        directories, meta = self._workspace_of(request)
         try:
             await conn.request(
                 "createSession",
                 m.CreateSessionParams(
                     channel=session,
                     provider=PROVIDER,
-                    working_directories=[uris.file_uri(request.workspace)],
+                    meta=meta,
+                    working_directories=directories,
                     config={
                         "isolation": "worktree" if request.isolation else "folder",
                         "autoApprove": AUTO_APPROVE,
@@ -531,6 +534,24 @@ class AhpAdapter(Adapter):
             raise RelayError(f"VS Code refused the new session: {exc}") from exc
         await self._start_turn(conn, record, chat, request.prompt, request.model, attachments)
         return await self._registry.get_session(record.session_key) or record
+
+    @staticmethod
+    def _workspace_of(request: StartRequest) -> tuple[list[str], dict[str, JsonValue] | None]:
+        """What `createSession` carries for the workspace, as VS Code sends it for a desk session.
+
+        With a `.code-workspace` file: every folder as a working directory and the file's URI in
+        `_meta.multiRoot`, so the session belongs to that window only. Without one: the folder alone.
+        """
+        if request.workspace_file is None:
+            return [uris.file_uri(request.workspace)], None
+        try:
+            folders = code_workspace_folders(paths.expand_user(request.workspace_file))
+        except ValueError as exc:
+            raise AdapterUnavailableError(str(exc)) from exc
+        return (
+            [folder.as_uri() for folder in folders],
+            {"multiRoot": {"workspaceFile": uris.file_uri(request.workspace_file)}},
+        )
 
     async def _chat_of(self, session: SessionRecord) -> str:
         chat = session.extra.get(CHAT_EXTRA)

@@ -17,7 +17,7 @@ from agent_relay.adapters.ahp import uris
 from agent_relay.adapters.ahp.adapter import CHAT_EXTRA, TURN_EXTRA, AhpAdapter
 from agent_relay.adapters.ahp.endpoints import SUPPORTED_VERSIONS, Endpoint
 from agent_relay.adapters.ahp.rpc import AhpConnectionError, AhpRpcError, Connection
-from agent_relay.adapters.base import UnsupportedError
+from agent_relay.adapters.base import AdapterUnavailableError, UnsupportedError
 from agent_relay.core import away
 from agent_relay.core.claims import take_claim
 from agent_relay.core.hooks import HOOKED
@@ -147,6 +147,32 @@ async def test_phone_session_replays_the_recorded_turn(rig: Rig) -> None:
     assert [s.origin for s in started] == [Origin.PHONE]
     claim = await take_claim(rig.registry, WORKSPACE)
     assert claim is not None and claim.session_key == record.session_key
+
+
+async def test_a_workspace_file_sends_its_uri_and_every_folder(rig: Rig, tmp_path: Path) -> None:
+    first, second = tmp_path / "first", tmp_path / "second"
+    file = tmp_path / "both.code-workspace"
+    file.write_text('{"folders": [{"path": "first"}, {"path": "second"}]}')
+    save_workspaces(WorkspacesConfig(workspaces=[Workspace(name="both", path=str(first), file=str(file))]))
+    await rig.core.service.start("copilot", "both", "Reply with exactly: OK", None)
+    created = dict(rig.host.requests)["createSession"]
+    assert created["workingDirectories"] == [first.resolve().as_uri(), second.resolve().as_uri()]
+    assert created["_meta"] == {"multiRoot": {"workspaceFile": file.resolve().as_uri()}}
+
+
+async def test_a_workspace_without_a_file_sends_no_workspace_file(rig: Rig) -> None:
+    await rig.start()
+    created = dict(rig.host.requests)["createSession"]
+    assert created["workingDirectories"] == [Path(WORKSPACE).resolve().as_uri()]
+    assert "_meta" not in created
+
+
+async def test_an_unreadable_workspace_file_refuses_the_session(rig: Rig, tmp_path: Path) -> None:
+    file = tmp_path / "gone.code-workspace"
+    save_workspaces(WorkspacesConfig(workspaces=[Workspace(name="gone", path=str(tmp_path), file=str(file))]))
+    with pytest.raises(AdapterUnavailableError, match="cannot read"):
+        await rig.core.service.start("copilot", "gone", "Reply with exactly: OK", None)
+    assert "createSession" not in rig.host.methods()
 
 
 async def listed(rig: Rig) -> list[str]:
