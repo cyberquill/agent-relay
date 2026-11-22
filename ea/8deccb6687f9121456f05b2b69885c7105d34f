@@ -1,0 +1,32 @@
+tests/fakes/ahp.py
+  s_3744513f660902::t_3edc807cfdeaa5 212-216,222
+  s_3744513f660902::t_7c7d228c3cf987 65,180-181,194,203,221,235-236
+  s_3744513f660902::t_2fac8a42ccb7a8 217
+  s_3744513f660902::t_dfc88f47a4ba0a 237-238
+tests/adapters/test_ahp.py
+  s_3744513f660902::t_3edc807cfdeaa5 172,174
+  s_3744513f660902::t_e366d84bb6a7c9 132-135,157-161,163-164,166-167
+  s_3744513f660902::t_2fac8a42ccb7a8 15,152-156,162,165,168-171,173,175
+  s_3744513f660902::t_6e7c66ce2bcfaa 176-177
+agent_relay/adapters/ahp/adapter.py
+  s_3744513f660902::t_dffe6d593e6e71 497-499
+docs/spikes.md
+  s_3744513f660902::t_9044e7d6d0ed07 36-39
+  s_3744513f660902::t_c4ccaafb6e8ad1 8
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ea8deccb6687f9121456f05b2b69885c7105d34f",
+  "prompts": {},
+  "sessions": {
+    "s_3744513f660902": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "d675a8aa-8e1b-4c7d-9a85-f7943c345e3a",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "Brijgopal Bharadwaj <brijgopalbharadwaj1999@gmail.com>"
+    }
+  }
+}
