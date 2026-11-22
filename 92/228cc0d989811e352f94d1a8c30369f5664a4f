@@ -1,0 +1,37 @@
+docs/acceptance.md
+  s_3744513f660902::t_69aa58418d6406 30
+docs/operations.md
+  s_3744513f660902::t_69aa58418d6406 459-471
+docs/deviations.md
+  s_3744513f660902::t_69aa58418d6406 145
+docs/spikes.md
+  s_3744513f660902::t_69aa58418d6406 39-41
+tests/adapters/test_ahp.py
+  s_3744513f660902::t_89cbd8921ef440 131-134,196-197,203,207-220
+  s_3744513f660902::t_52ebaa0cc39875 516-526
+  s_3744513f660902::t_006cfe656267cb 221-222
+tests/fakes/ahp.py
+  s_3744513f660902::t_4a2fd4dfae7c82 9,49-52,71,173-174,214-215,217,229,231-245,252,265
+  s_3744513f660902::t_52ebaa0cc39875 114-121,123-124,126
+  s_3744513f660902::t_89cbd8921ef440 72,230
+agent_relay/adapters/ahp/adapter.py
+  s_3744513f660902::t_fcf24712840324 111-116
+  s_3744513f660902::t_4f86a2a1d15d69 150,234-235,237-238,240-245,265,276-279,391,414,533-536,539,541-555,559-565
+  s_3744513f660902::t_76a61b6f2ae0da 566
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "92228cc0d989811e352f94d1a8c30369f5664a4f",
+  "prompts": {},
+  "sessions": {
+    "s_3744513f660902": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "d675a8aa-8e1b-4c7d-9a85-f7943c345e3a",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "Brijgopal Bharadwaj <brijgopalbharadwaj1999@gmail.com>"
+    }
+  }
+}
