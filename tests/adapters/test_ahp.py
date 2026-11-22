@@ -12,6 +12,7 @@ import pytest
 from pydantic import JsonValue
 
 from agent_relay import paths
+from agent_relay.adapters.ahp import models as m
 from agent_relay.adapters.ahp import uris
 from agent_relay.adapters.ahp.adapter import CHAT_EXTRA, TURN_EXTRA, AhpAdapter
 from agent_relay.adapters.ahp.endpoints import SUPPORTED_VERSIONS, Endpoint
@@ -128,13 +129,10 @@ async def test_phone_session_replays_the_recorded_turn(rig: Rig) -> None:
     assert created["workingDirectories"] == [Path(WORKSPACE).resolve().as_uri()]
     chat = rig.chat_of(record)
     assert uris.chat_session(chat) == uris.session_uri(record.harness_id)
-    assert rig.host.methods()[:5] == [
-        "initialize",
-        "listSessions",
-        "createSession",
-        "subscribe",
-        "createChat",
-    ]
+    assert chat == uris.chat_uri(uris.DEFAULT_CHAT, uris.session_uri(record.harness_id))
+    assert rig.host.methods()[:4] == ["initialize", "listSessions", "createSession", "subscribe"]
+    assert "createChat" not in rig.host.methods()
+    assert rig.host.dispatched[0]["channel"] == chat
     (turn,) = rig.host.actions("chat/turnStarted")
     message = turn["message"]
     assert isinstance(message, dict)
@@ -149,6 +147,32 @@ async def test_phone_session_replays_the_recorded_turn(rig: Rig) -> None:
     assert [s.origin for s in started] == [Origin.PHONE]
     claim = await take_claim(rig.registry, WORKSPACE)
     assert claim is not None and claim.session_key == record.session_key
+
+
+async def listed(rig: Rig) -> list[str]:
+    summaries, _ = await rig.adapter._list_pages(await rig.adapter._live())
+    return [summary.resource for summary in summaries]
+
+
+async def test_a_phone_session_shows_up_in_the_session_list_after_its_first_turn(rig: Rig) -> None:
+    rig.host.auto_reply = False
+    record = await rig.start()
+    resource = uris.session_uri(record.harness_id)
+    await until(lambda: rig.host.actions("chat/turnStarted"))
+    assert resource in await listed(rig)
+
+
+async def test_a_session_whose_default_chat_has_no_turn_is_left_out_of_the_list(rig: Rig) -> None:
+    session = uris.session_uri("33333333-2222-3333-4444-555555555555")
+    conn = await rig.adapter._live()
+    await conn.request("createSession", m.CreateSessionParams(channel=session, provider="copilotcli"))
+    assert session not in await listed(rig)
+    peer = uris.chat_uri("peer", session)
+    await conn.request("createChat", m.CreateChatParams(channel=session, chat=peer))
+    rig.host.start_turn_in(peer)
+    assert session not in await listed(rig)
+    rig.host.start_turn_in(uris.chat_uri(uris.DEFAULT_CHAT, session))
+    assert session in await listed(rig)
 
 
 async def test_wrong_token_never_connects(registry: Registry, relay_home: Path) -> None:

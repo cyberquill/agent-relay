@@ -494,7 +494,9 @@ class AhpAdapter(Adapter):
         conn = await self._live()
         sid = str(uuid.uuid4())
         session = uris.session_uri(sid)
-        chat = uris.chat_uri(str(uuid.uuid4()), session)
+        # The session's own default chat is the one VS Code shows; a second chat would leave it empty,
+        # and VS Code leaves a session with an empty default chat out of its list.
+        chat = uris.chat_uri(uris.DEFAULT_CHAT, session)
         title = request.prompt.strip().splitlines()[0][:80] if request.prompt.strip() else "phone session"
         try:
             await conn.request(
@@ -524,7 +526,6 @@ class AhpAdapter(Adapter):
                 )
             )
             await make_claim(self._registry, request.workspace, record.session_key)
-            await conn.request("createChat", m.CreateChatParams(channel=session, chat=chat))
             await self._subscribe(conn, chat)
         except AhpRpcError as exc:
             raise RelayError(f"VS Code refused the new session: {exc}") from exc

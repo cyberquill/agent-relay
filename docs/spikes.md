@@ -5,7 +5,7 @@ Python 3.13.5. Tokens are redacted in every command below. Fixtures live under `
 
 | # | Outcome | Path chosen |
 |---|---|---|
-| S1 | **Yes**, with two corrections to the plan | Primary `ahp` path on the editor socket |
+| S1 | **Yes**, with three corrections to the plan | Primary `ahp` path on the editor socket |
 | S2 | Not measured live (needs hooks in the real home, so it waits for G1) | Sliced parking, always (the S2 fallback) |
 | S3 | **No**, per vendor docs | AHP `chat/turnStarted` on the same chat |
 | S4 | Not measured live | Park via `Stop` and also continue through `relay-bridge` (both built) |
@@ -33,6 +33,10 @@ Evidence:
 - **Correction 2:** `createChat.initialMessage` is accepted but no turn runs (the chat snapshot keeps
   `turns: []`). A turn starts when the client dispatches `chat/turnStarted {turnId, startedAt, message}` with
   `dispatchAction`.
+- **Correction 3 (found 2026-11-22, D138):** the spike read the chat snapshot of a chat the relay had created
+  itself and concluded a second chat was fine. It is not: VS Code lists a session only once its *default*
+  chat has a turn, so a session whose turns all run in a second chat never appears in VS Code. Turns go to
+  `ahp-chat://default/<base64url(session URI)>`, and `createChat` is not called.
 - Text arrives as `chat/responsePart {part: {kind: "markdown", content}}` as well as `chat/delta`. The adapter
   maps both.
 - The `copilotcli` session config defaults to `isolation: "worktree"`, which created a branch in the scratch

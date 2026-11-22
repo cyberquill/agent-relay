@@ -62,6 +62,7 @@ class FakeAgentHost:
     requests: list[tuple[str, dict[str, JsonValue]]] = field(default_factory=list)
     notified: list[tuple[str, dict[str, JsonValue]]] = field(default_factory=list)
     dispatched: list[dict[str, JsonValue]] = field(default_factory=list)
+    provisional: set[str] = field(default_factory=set)
     rejected: int = 0
     clients: set[ServerConnection] = field(default_factory=set)
     _server: Server | None = None
@@ -176,7 +177,8 @@ class FakeAgentHost:
             case "initialize":
                 return self._negotiate(params)
             case "listSessions":
-                items: list[JsonValue] = list(self.sessions.values())
+                # VS Code leaves out a session still being created whose default chat has no turn.
+                items: list[JsonValue] = [v for k, v in self.sessions.items() if k not in self.provisional]
                 if self.page_size is None:
                     return {"items": items}
                 cursor = params.get("cursor")
@@ -189,6 +191,7 @@ class FakeAgentHost:
             case "createSession":
                 assert isinstance(channel, str)
                 dirs = params.get("workingDirectories")
+                self.provisional.add(channel)
                 self.sessions[channel] = {
                     "provider": params.get("provider"),
                     "title": "",
@@ -197,6 +200,7 @@ class FakeAgentHost:
                     "createdAt": "2026-10-03T11:00:00.000Z",
                     "modifiedAt": "2026-10-03T11:00:00.000Z",
                     "workingDirectories": dirs if isinstance(dirs, list) else [],
+                    **({"_meta": params["_meta"]} if "_meta" in params else {}),
                 }
                 return None
             case "subscribe":
@@ -205,9 +209,17 @@ class FakeAgentHost:
                 return None
         raise KeyError(method)
 
+    def start_turn_in(self, chat: str) -> None:
+        """A turn starts in `chat`; only a turn in a session's default chat makes it listable."""
+        for resource in list(self.provisional):
+            if chat == _default_chat(resource):
+                self.provisional.discard(resource)
+
     async def _on_dispatch(self, params: dict[str, JsonValue]) -> None:
         self.dispatched.append(params)
         action, chat = params.get("action"), params.get("channel")
+        if isinstance(action, dict) and action.get("type") == "chat/turnStarted" and isinstance(chat, str):
+            self.start_turn_in(chat)
         if not self.auto_reply or not isinstance(action, dict) or not isinstance(chat, str):
             return
         if action.get("type") != "chat/turnStarted":
@@ -218,6 +230,10 @@ class FakeAgentHost:
             task = asyncio.get_running_loop().create_task(self.replay_turn(session, chat, turn_id))
             self._tasks.add(task)
             task.add_done_callback(self._tasks.discard)
+
+
+def _default_chat(session: str) -> str:
+    return f"ahp-chat://default/{_b64(session)}"
 
 
 def _b64(session: str) -> str:
