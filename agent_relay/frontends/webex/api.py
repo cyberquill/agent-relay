@@ -105,6 +105,22 @@ def scrub_attachment(content: bytes) -> bytes:
     return scrub_text(decoded).encode("utf-8")
 
 
+UPLOAD_TEXT_TYPES = ("text/", "application/json", "application/xml", "application/x-yaml", "application/toml")
+
+
+def scrub_upload(content: bytes, mime: str) -> bytes:
+    """A file going to Webex: text of a text type is scrubbed; images, PDFs and archives go byte for byte.
+
+    `send_phone_file` has already scrubbed the text it reads, so this is the second pass over the same bytes.
+    """
+    if not (mime or "").lower().startswith(UPLOAD_TEXT_TYPES):
+        return content
+    try:
+        return scrub_attachment(content)
+    except ValueError:
+        return content
+
+
 def _download_name(disposition: str | None, mime: str | None) -> str:
     """The file name Webex sends in Content-Disposition; without one, `file` plus the type's extension."""
     if disposition:
@@ -237,7 +253,7 @@ class WebexApi:
             target["parentId"] = parent_id
         if file is not None:
             name, content, mime = file
-            cleaned = scrub_attachment(content)
+            cleaned = scrub_upload(content, mime)
             response = await self._request(
                 "POST", "/messages", data={**target, "markdown": text}, files={"files": (name, cleaned, mime)}
             )

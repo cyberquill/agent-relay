@@ -192,7 +192,11 @@ class Handlers:
         """
         adapter = self.service.router.adapter(harness)
         native = sent and adapter is not None and adapter.capabilities.has(Capability.ATTACH_FILES)
-        attached = frozenset(a.local_path for a in received.attachments) if native else frozenset()
+        attached = (
+            frozenset(a.local_path for a in received.attachments if adapter and adapter.takes_file(a.mime))
+            if native
+            else frozenset()
+        )
         await self.reply(ctx, receipt_line(received, attached))
 
     async def _start_session(

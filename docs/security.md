@@ -106,7 +106,7 @@ Long or rich answers, and a `/diff` over 200 lines, go out as one self-contained
 ### Secrets leaking out
 
 - Everything sent to Webex or the PWA is scrubbed: text, cards, attachments. Generated attachments (diffs, `answer.html`) are scrubbed before upload.
-- `send_phone_file`: text is scrubbed, binary (PNG, PDF) passes byte for byte; `scrub_attachment` still refuses non-text for the relay's own attachments.
+- `send_phone_file`: text is scrubbed, binary (PNG, PDF) passes byte for byte; `scrub_attachment` still refuses non-text; the upload path (`scrub_upload`) scrubs text types and sends other types as they are (D143).
 - Logs are scrubbed on every record. Bodies are never logged at INFO; with `debug_bodies = true` and DEBUG they are logged scrubbed and truncated. Both off by default.
 - `relay` commands scrub what they print; config diffs hide secrets.
 
@@ -172,7 +172,7 @@ with `::` is in the same file as the previous cite.
 | Legacy `approvals.*` settings are ignored; only questions wait for the phone | `models/config.py` | `tests/test_security.py::test_there_is_no_approval_config_and_a_legacy_one_is_ignored`, `::test_questions_are_the_only_thing_that_waits_for_the_phone` |
 | Nothing turns away mode on by itself; desk events stay off the phone while it is off | `core/away.py`, `core/router.py` | `tests/core/test_away_global.py::test_nothing_turns_away_on_by_itself`, `::test_desk_events_are_dropped_while_not_away`, `::test_an_adopted_desk_chat_stops_streaming_the_moment_away_goes_off` |
 | Scrub everything outbound | `frontends/webex/api.py`, `frontends/pwa/hub.py`, `log.py`, `cli/output.py` | `tests/test_scrub.py`, `tests/frontends/test_pwa.py`, `tests/test_cli_sync.py` |
-| Attachments scrubbed as text before upload | `frontends/webex/api.py::scrub_attachment` | `tests/test_security.py::test_attachments_are_scrubbed_as_text_and_binary_is_refused` |
+| Attachments scrubbed as text before upload | `frontends/webex/api.py::scrub_attachment`, `frontends/webex/api.py::scrub_upload` | `tests/test_security.py::test_attachments_are_scrubbed_as_text_and_binary_is_refused`, `tests/frontends/test_upload_scrub.py` |
 | No bodies at INFO; DEBUG bodies scrubbed and off by default | `log.py::log_body`, `debug_bodies` | `tests/test_security.py::test_message_bodies_are_off_by_default_never_at_info_and_scrubbed` |
 | CDP port only while the adapter is enabled | `adapters/factory.py`, `cli/selftest.py`, `adapters/selftests.py` | `tests/test_security.py::test_the_cdp_adapter_exists_only_when_enabled`, `tests/test_cli_ops.py::test_cdp_selftest_refuses_while_the_adapter_is_off`, `tests/adapters/test_selftests.py` |
 | PWA fails closed without a token | `daemon.py`, `frontends/pwa/server.py` | `tests/frontends/test_pwa.py` |

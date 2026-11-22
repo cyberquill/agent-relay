@@ -30,7 +30,6 @@ No **Code** items are left: everything below needs the owner.
 | Re-check live that a VS Code desk chat (its own agent) shows the phone's message as a `📱` hook line (`systemMessage`, D135) | Desk + Phone | scenario 8 |
 | Does Cursor desktop skip its own prompt when the hook answers `allow`? (Only matters while away.) | Desk | D117, D124 |
 | Does VS Code honour `permissionDecision: "allow"` from `PreToolUse`, given `chat.tools.global.autoApprove: true` in your settings? | Desk | D117, D124 |
-| Does a Webex Android card delete remove the card cleanly, with no "Unable to send your request" on a stale tap? (Every one-shot card.) | Phone | D119 |
 | Does Webex Android open `answer.html` in the app or hand it to the browser, and does the CSP survive either path? | Phone | D122 |
 | Does a Webex client honour `label`, `isRequired` and `errorMessage` on the `/new` card's inputs? (`scripts/card_check.py` only proves Webex accepts them.) | Phone | D119 |
 | Open the `/new` and `/model` cards on Android and check the layout | Phone | P4, D119 |

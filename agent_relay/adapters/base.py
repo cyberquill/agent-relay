@@ -80,6 +80,10 @@ class Adapter(ABC):
         else:  # not attached to a router (bare unit rigs): write the status without lifecycle cleanup
             await self._registry.set_session_status(session_key, status)
 
+    def takes_file(self, mime: str) -> bool:
+        """Whether a file of this type reaches the app as an attachment (the others go as a path)."""
+        return True
+
     def prompt_with_files(self, text: str, attachments: Sequence[Attachment]) -> str:
         """`text` as is for an adapter that takes files natively; otherwise with the file paths appended."""
         if self.capabilities.has(Capability.ATTACH_FILES):

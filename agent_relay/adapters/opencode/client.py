@@ -11,8 +11,8 @@ from pathlib import Path
 import httpx
 from pydantic import JsonValue
 
-from agent_relay.adapters.base import Decision, ModelInfo
-from agent_relay.models.attachments import Attachment
+from agent_relay.adapters.base import Decision, ModelInfo, with_attachments
+from agent_relay.models.attachments import Attachment, takes_inline
 
 # `always` rather than `once`: the relay never wants OpenCode to ask again for the same kind of call.
 PERMISSION_REPLY: dict[Decision, str] = {"allow": "always", "deny": "reject"}
@@ -163,7 +163,9 @@ class OpenCodeClient:
         model: str | None,
         attachments: Sequence[Attachment] = (),
     ) -> None:
-        parts: list[JsonValue] = [{"type": "text", "text": text}]
+        inline = [a for a in attachments if takes_inline(a.mime)]
+        by_path = [a for a in attachments if not takes_inline(a.mime)]
+        parts: list[JsonValue] = [{"type": "text", "text": with_attachments(text, by_path)}]
         parts += [
             {
                 "type": "file",
@@ -171,7 +173,7 @@ class OpenCodeClient:
                 "filename": a.name,
                 "url": Path(a.local_path).resolve().as_uri(),
             }
-            for a in attachments
+            for a in inline
         ]
         body: dict[str, JsonValue] = {"parts": parts}
         if model:

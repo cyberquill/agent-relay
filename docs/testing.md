@@ -108,6 +108,10 @@ Driven as the owner through webex-cli, real interactive chats in `.scratch` (tmu
 | `stepping-away` patch refreshed | ✅ `relay doctor`: 0 failing, 0 warnings |
 | `/ws` Clone repo under launchd (HTTPS) | ✅ menu card, form, `octocat/Hello-World` cloned into a temporary `ws.roots`; setting, workspace and directory removed afterwards |
 | Cursor `afterAgentResponse` always the final answer? | No: the CLI can omit it, D142 reads the transcript |
+| Output samples via `send_phone_file` (OpenCode phone session) | 10 files: before D143 5 of 10 (text only); after, 10 of 10, byte-identical when downloaded back. Webex app: JPG, PNG, PDF preview; HTML, zip, HEIC, CSV are file chips |
+| Files in (OpenCode, GPT-5.6 Sol) | JPG described ✅, CSV and zip read as paths ✅ (D144), HEIC as a path ✅ (the model cannot read it), PDF part: model said it cannot read PDFs |
+| Card inputs | `/new` blank prompt → `⚠️ Say what the session should do.`; `/model` unknown id → `⚠️ OpenCode has no model …`, valid id → `Model → … from the next turn`; the card is deleted after a good submit |
+| Card layout (Webex desktop, screenshot of the window) | `/new`: required marks, three dropdowns, prompt box, Start; `/model`: dropdown, count hint, Apply. Fine. Android not checked |
 
 Open items for the owner:
 

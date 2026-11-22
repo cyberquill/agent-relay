@@ -4,6 +4,26 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, Field
 
+INLINE_TYPES = frozenset(
+    {
+        "image/png",
+        "image/jpeg",
+        "image/gif",
+        "image/webp",
+        "application/pdf",
+    }
+)
+
+
+def takes_inline(mime: str) -> bool:
+    """Whether a coding agent can read a file of this type as part of the prompt.
+
+    Images and PDFs only. Anything else (text, CSV, zip, HEIC, office files) goes as a path the agent
+    reads with its own tools: a model that does not take the type fails that turn and every later one
+    (the file stays in the history), and a HEIC makes OpenCode stay busy until it is stopped.
+    """
+    return mime.split(";", 1)[0].strip().lower() in INLINE_TYPES
+
 
 class Attachment(BaseModel):
     model_config = ConfigDict(frozen=True)

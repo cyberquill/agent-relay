@@ -29,11 +29,11 @@ flowchart LR
 | Area | Entries |
 |---|---|
 | Core | D30, D59, D75, D76, D92, D93, D95, D98, D103, D106, D112, D113, D117, D120, D125 |
-| Webex | D3, D8, D9, D10, D62, D65, D66, D86, D87, D88, D89, D94, D99, D100, D101, D102, D104, D105, D107, D108, D109, D110, D111, D114, D116, D118, D119, D121, D122, D127, D128 |
+| Webex | D3, D8, D9, D10, D62, D65, D66, D86, D87, D88, D89, D94, D99, D100, D101, D102, D104, D105, D107, D108, D109, D110, D111, D114, D116, D118, D119, D121, D122, D127, D128, D143 |
 | PWA | D51, D91 |
 | AHP (VS Code Copilot) | D1, D2, D5, D15, D16, D17, D18, D19, D67, D80, D115, D138 |
 | VS Code Local / relay-bridge | D6, D20, D21, D22, D23, D24, D70, D84, D85, D132 |
-| OpenCode | D11, D12, D69, D81, D130 |
+| OpenCode | D11, D12, D69, D81, D130, D144 |
 | Cursor CLI | D25, D26, D27, D28, D29, D68, D82, D131 |
 | Cursor CDP | D7, D31, D32, D33, D34, D35, D83, D133, D134 |
 | Hooks and parking | D4, D13, D61, D63, D64, D77, D124, D129, D135, D137, D139, D140, D141, D142 |
@@ -1738,3 +1738,19 @@ flowchart LR
 - **Why:** live on the Cursor CLI (2026-11-22), a desk chat's phone reply had no text (`✅ Done.` missing): `afterAgentResponse` is cleared when a tool hook follows it, and the CLI does not always send one at the end. The transcript has the answer.
 - **Evidence:** `tests/hook/test_transcript.py::test_a_cursor_chat_transcript_is_found_by_its_conversation_id`, `tests/core/test_hooks.py::test_a_cursor_stop_without_response_text_reads_the_reply_from_the_chat_transcript`; live: a Cursor CLI desk chat in `.scratch` parked, took the phone's message, and its reply reached the thread
 - **Where:** `agent_relay/hook/transcript.py`, `agent_relay/core/hooks.py`
+
+### D143 · `send_phone_file` delivers images, PDFs and archives
+
+- **Plan:** D122 and `docs/security.md`: text is scrubbed, binary goes byte for byte.
+- **Built:** `WebexApi.create_message` ran `scrub_attachment` on every file, which refuses non-UTF-8, so a PNG, JPG, HEIC, PDF or zip failed with `ValueError` and the agent saw `delivered: false`. It now calls `scrub_upload(content, mime)`: text types are scrubbed, other types go through unchanged; a text type that is not UTF-8 goes through as `validate_file` already treats it. `scrub_attachment` is unchanged.
+- **Why:** found live on 2026-11-22. An OpenCode phone session asked to send 10 sample files delivered the 5 text ones and failed the other 5. Earlier live runs only sent `answer.html` out, and images and PDFs only in.
+- **Evidence:** `tests/frontends/test_upload_scrub.py`; live after the fix: all 10 delivered, each downloaded back from Webex byte-identical (sha256) to the source; the Webex app previews JPG, PNG and PDF and shows HTML, zip, HEIC and CSV as file chips.
+- **Where:** `agent_relay/frontends/webex/api.py`
+
+### D144 · OpenCode gets only images and PDFs as file parts
+
+- **Plan:** D131 and the attachments design: a file sent from the phone goes to an app that takes files as a native file part of any type.
+- **Built:** `models.attachments.takes_inline(mime)` is true for PNG, JPEG, GIF, WebP and PDF. OpenCode's `prompt` sends those as file parts and every other file as an `Attached file: <path>` line in the text. `Adapter.takes_file` (default true, OpenCode overrides) makes the `📎 name (attached)` receipt say `(as a path)` for the rest.
+- **Why:** found live on 2026-11-22 with OpenCode: a zip failed the turn (`file part media type application/zip functionality not supported`); a HEIC raised `ImageDecodeError` and left the session busy until `/stop`; a CSV worked on one model and, once in the history, failed every later turn on a GitHub Copilot model (`text/csv` not supported). As a path, the agent read the CSV (sum 47) and listed the zip with its own tools.
+- **Evidence:** `tests/adapters/test_attachments.py::test_opencode_gets_text_zip_and_heic_as_paths_not_file_parts`, `::test_opencode_prompts_carry_images_and_pdfs_as_file_parts`; live: JPG described, CSV `47`, zip listed, HEIC no longer wedges the session. A PDF is still sent as a part; one model answered that it cannot read PDFs
+- **Where:** `agent_relay/models/attachments.py`, `agent_relay/adapters/opencode/client.py`, `agent_relay/adapters/opencode/adapter.py`, `agent_relay/adapters/base.py`, `agent_relay/frontends/webex/handlers.py`

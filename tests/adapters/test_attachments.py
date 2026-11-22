@@ -323,10 +323,12 @@ def parts_of(request: httpx.Request) -> list[JsonValue]:
     return parts
 
 
-async def test_opencode_prompts_carry_files_as_file_parts(registry: Registry, tmp_path: Path) -> None:
+async def test_opencode_prompts_carry_images_and_pdfs_as_file_parts(
+    registry: Registry, tmp_path: Path
+) -> None:
     adapter, seen = opencode_adapter(registry)
     shot = phone_file(tmp_path, "shot.png", b"\x89PNG", "image/png")
-    log = phone_file(tmp_path, "run.log", b"boom", "text/plain")
+    log = phone_file(tmp_path, "doc.pdf", b"%PDF", "application/pdf")
     record = await adapter.start_session(StartRequest(workspace=str(tmp_path), prompt="look"), (shot, log))
     (prompt,) = [r for r in seen if r.url.path.endswith("/prompt_async")]
     assert parts_of(prompt) == [
@@ -339,9 +341,9 @@ async def test_opencode_prompts_carry_files_as_file_parts(registry: Registry, tm
         },
         {
             "type": "file",
-            "mime": "text/plain",
-            "filename": "run.log",
-            "url": (tmp_path / "run.log").resolve().as_uri(),
+            "mime": "application/pdf",
+            "filename": "doc.pdf",
+            "url": (tmp_path / "doc.pdf").resolve().as_uri(),
         },
     ]
     await adapter.send_prompt(record, "again", (log,))
@@ -349,6 +351,30 @@ async def test_opencode_prompts_carry_files_as_file_parts(registry: Registry, tm
     kinds = [p.get("type") for p in parts_of(last) if isinstance(p, dict)]
     assert kinds == ["text", "file"]
     assert parts_of(last)[0] == {"type": "text", "text": "again"}
+
+
+async def test_opencode_gets_text_zip_and_heic_as_paths_not_file_parts(
+    registry: Registry, tmp_path: Path
+) -> None:
+    adapter, seen = opencode_adapter(registry)
+    pack = phone_file(tmp_path, "bundle.zip", b"PK", "application/zip")
+    photo = phone_file(tmp_path, "photo.heic", b"heic", "image/heic")
+    pdf = phone_file(tmp_path, "doc.pdf", b"%PDF", "application/pdf")
+    await adapter.start_session(StartRequest(workspace=str(tmp_path), prompt="look"), (pack, photo, pdf))
+    (prompt,) = [r for r in seen if r.url.path.endswith("/prompt_async")]
+    first, *files = parts_of(prompt)
+    assert isinstance(first, dict) and first["type"] == "text"
+    assert f"Attached file: {pack.local_path}" in str(first["text"])
+    assert f"Attached file: {photo.local_path}" in str(first["text"])
+    assert doc_path_absent(first, pdf)
+    assert [f["filename"] for f in files if isinstance(f, dict)] == ["doc.pdf"]
+    assert adapter.takes_file("image/png") and adapter.takes_file("application/pdf")
+    for mime in ("application/zip", "image/heic", "text/csv", "text/plain"):
+        assert not adapter.takes_file(mime)
+
+
+def doc_path_absent(first: object, item: Attachment) -> bool:
+    return isinstance(first, dict) and item.local_path not in str(first["text"])
 
 
 async def test_opencode_prompts_without_files_are_a_single_text_part(

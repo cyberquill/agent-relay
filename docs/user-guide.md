@@ -111,12 +111,15 @@ says `Model → X from the next turn.` A typed `/model x` is checked against the
 | At the top level, on its own | **Held 10 min** (`attachments.hold_s`) for your next `/new` (card or typed). Bot says "📎 Got N file(s)…"; the card shows "📎 N files will be attached". Kept if the start fails |
 
 - Saved under `<workspace>/.agent-relay/inbox/` (kept out of `git status`); deleted a day after the session ends.
-- Copilot, OpenCode and Cursor CLI get the file itself; the other apps get its path in the prompt.
+- Copilot and Cursor CLI get the file itself; OpenCode gets images and PDFs itself and any other type (text, CSV, zip, HEIC) as a path it reads with its tools; the other apps get the path in the prompt.
+- The reply to a file says per file `(attached)` or `(as a path)`.
 - Too large (> 20 MB), unsupported or failed download: one `⚠️ Skipped …` line names it; the text still goes.
 - Settings: [operations.md](operations.md).
 
 **From the agent:** `send_phone_file` posts a file from the session's workspace to its thread (for a report:
 the agent writes HTML and sends it). Only sessions that reach the phone; only files inside their workspace.
+Any type goes: HTML, images, PDF, CSV, JSON, Markdown, zip. Images and PDFs show a preview in the Webex app; the
+rest show as a file chip.
 
 ## No approval cards
 

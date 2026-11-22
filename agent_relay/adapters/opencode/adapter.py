@@ -29,7 +29,7 @@ from agent_relay.core.hooks import OPENCODE_SERVER_PREFIX
 from agent_relay.core.registry import Registry
 from agent_relay.core.service import RelayError
 from agent_relay.log import get_logger
-from agent_relay.models.attachments import Attachment
+from agent_relay.models.attachments import Attachment, takes_inline
 from agent_relay.models.capabilities import Capabilities
 from agent_relay.models.config import OpenCodeConfig
 from agent_relay.models.events import (
@@ -289,6 +289,9 @@ class OpenCodeAdapter(Adapter):
         )
         await self.primary.prompt(sid, request.workspace, request.prompt, request.model, attachments)
         return record
+
+    def takes_file(self, mime: str) -> bool:
+        return takes_inline(mime)
 
     async def send_prompt(
         self, session: SessionRecord, text: str, attachments: Sequence[Attachment] = ()
