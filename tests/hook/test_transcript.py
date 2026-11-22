@@ -5,8 +5,10 @@ from __future__ import annotations
 import asyncio
 import json
 import time
+from collections.abc import Mapping
 from pathlib import Path
 
+from agent_relay import paths
 from agent_relay.hook import transcript
 
 
@@ -63,6 +65,53 @@ def test_an_agent_host_transcript_names_its_client_and_a_copilot_cli_one_does_no
     assert not transcript.from_agent_host(quoted), "text in a message is escaped, never a key"
     assert not transcript.from_agent_host(str(tmp_path / "nope.jsonl"))
     assert not transcript.from_agent_host(None)
+
+
+def write_cursor_chat(conversation: str, rows: list[dict[str, object]], workspace: str = "w-proj") -> Path:
+    folder = paths.cursor_dir() / "projects" / workspace / "agent-transcripts" / conversation
+    folder.mkdir(parents=True)
+    file = folder / f"{conversation}.jsonl"
+    file.write_text("\n".join(json.dumps(r) for r in rows))
+    return file
+
+
+def cursor_message(role: str, *parts: Mapping[str, object]) -> dict[str, object]:
+    return {"role": role, "message": {"content": list(parts)}}
+
+
+def test_a_cursor_chat_transcript_is_found_by_its_conversation_id() -> None:
+    assert transcript.cursor_transcript("c-1") is None
+    file = write_cursor_chat("c-1", [cursor_message("user", {"type": "text", "text": "hi"})])
+    assert transcript.cursor_transcript("c-1") == str(file)
+    assert transcript.cursor_transcript("") is None and transcript.cursor_transcript("unknown") is None
+    assert transcript.cursor_transcript("../c-1") is None
+
+
+def test_the_cursor_reply_is_this_turns_last_message_and_never_an_earlier_turns() -> None:
+    """Seen live (2026-11-22): the Cursor CLI sent no `afterAgentResponse` text, so the phone got no reply."""
+    text = {"type": "text", "text": "OK"}
+    tool = {"type": "tool_use", "name": "Shell", "input": {"command": "echo"}}
+    ask = cursor_message("user", {"type": "text", "text": "run it"})
+    file = write_cursor_chat(
+        "c-2",
+        [
+            cursor_message("user", {"type": "text", "text": "first"}),
+            cursor_message("assistant", {"type": "text", "text": "An earlier answer."}),
+            ask,
+            cursor_message("assistant", {"type": "text", "text": "Running it."}, tool),
+            cursor_message("assistant", text),
+        ],
+    )
+    assert transcript.last_reply(str(file)) == "OK"
+    ended_on_a_tool = write_cursor_chat(
+        "c-3",
+        [
+            cursor_message("assistant", {"type": "text", "text": "An earlier answer."}),
+            ask,
+            cursor_message("assistant", {"type": "text", "text": "Running it."}, tool),
+        ],
+    )
+    assert transcript.last_reply(str(ended_on_a_tool)) is None
 
 
 def test_copilot_model_call_telemetry_is_never_the_reply(tmp_path: Path) -> None:

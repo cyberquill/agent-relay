@@ -96,6 +96,19 @@ Later runs the same day (owner lifted the three-session cap for these apps):
 - **Cursor IDE (CDP) on 3.31.15, 2–7: 6 / 6 ✅** after selectors v4 (D133) and D134 (its own hooks made a second
   desk thread for every phone chat; the reply was missed once old rows left the page).
 
+### Desk-chat round (2026-11-22)
+
+Driven as the owner through webex-cli, real interactive chats in `.scratch` (tmux), relayd restarted on D140 to D142.
+
+| Check | Result |
+|---|---|
+| 8 Away round trip, Copilot CLI desk chat | ✅ parked, phone message delivered, reply reached the thread; `📱` line echoed (D141); root labelled correctly (D140) |
+| 8 Away round trip, Cursor CLI desk chat | ✅ after D142 (the first run's reply had no text) |
+| Bad token on a running relayd | ✅ relayd stays up, reports the error, recovers with the real token (D121) |
+| `stepping-away` patch refreshed | ✅ `relay doctor`: 0 failing, 0 warnings |
+| `/ws` Clone repo under launchd (HTTPS) | ✅ menu card, form, `octocat/Hello-World` cloned into a temporary `ws.roots`; setting, workspace and directory removed afterwards |
+| Cursor `afterAgentResponse` always the final answer? | No: the CLI can omit it, D142 reads the transcript |
+
 Open items for the owner:
 
 1. After a VS Code restart, a Copilot thread made before it cannot be replied to (`Session was never created on the backend`, shown as "That failed (AhpRpcError)").

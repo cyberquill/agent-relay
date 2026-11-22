@@ -36,7 +36,7 @@ flowchart LR
 | OpenCode | D11, D12, D69, D81, D130 |
 | Cursor CLI | D25, D26, D27, D28, D29, D68, D82, D131 |
 | Cursor CDP | D7, D31, D32, D33, D34, D35, D83, D133, D134 |
-| Hooks and parking | D4, D13, D61, D63, D64, D77, D124, D129, D135, D137, D139, D140, D141 |
+| Hooks and parking | D4, D13, D61, D63, D64, D77, D124, D129, D135, D137, D139, D140, D141, D142 |
 | Skills and bundles | D37, D38, D39, D40, D41, D97 |
 | MCP and config sync | D42, D43, D44, D45, D46, D47 |
 | Doctor and updates | D48, D49, D50 |
@@ -1728,3 +1728,13 @@ flowchart LR
   - The Copilot runtime keeps only `decision` and `reason` from that output (the same record), so `systemMessage` never reaches its chat.
   - Evidence: `tests/core/test_phone_notice.py::test_the_echo_follows_the_app_not_the_hook_casing`, `tests/core/test_hooks.py::test_a_parked_agent_host_desk_chat_is_asked_to_echo_the_phone_line`, `::test_a_parked_vscode_chat_shows_the_phone_line_itself_and_is_not_asked_to_echo`
 - **Where:** `agent_relay/hook/outputs.py`, `agent_relay/core/hooks.py`; confirm live by a desk round trip in an Agent Host chat
+
+### D142 · A Cursor chat's reply comes from its transcript when `afterAgentResponse` sends none
+
+- **Plan:** D118: the final text of a Cursor desk chat is the last `afterAgentResponse` text, carried by the `stop` hook.
+- **Built:**
+  - When a Cursor `stop` has no text and no `transcript_path`, `core/hooks.py` looks the chat up by its conversation id: `~/.cursor/projects/*/agent-transcripts/<id>/<id>.jsonl` (`transcript.cursor_transcript`, through `paths.cursor_dir()`; ids with `/` are refused).
+  - `transcript._this_turn` cuts at the last `role: "user"` entry as well as at `user.message`, so a Cursor transcript yields only the current turn.
+- **Why:** live on the Cursor CLI (2026-11-22), a desk chat's phone reply had no text (`✅ Done.` missing): `afterAgentResponse` is cleared when a tool hook follows it, and the CLI does not always send one at the end. The transcript has the answer.
+- **Evidence:** `tests/hook/test_transcript.py::test_a_cursor_chat_transcript_is_found_by_its_conversation_id`, `tests/core/test_hooks.py::test_a_cursor_stop_without_response_text_reads_the_reply_from_the_chat_transcript`; live: a Cursor CLI desk chat in `.scratch` parked, took the phone's message, and its reply reached the thread
+- **Where:** `agent_relay/hook/transcript.py`, `agent_relay/core/hooks.py`

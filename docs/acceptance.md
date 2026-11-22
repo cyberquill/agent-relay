@@ -158,6 +158,8 @@ flowchart LR
   - `tests/frontends/test_renderer_status.py` (whole file: the root's status icon and 🏝️ while away, edits not posts)
   - `tests/frontends/test_links.py` → `::test_a_tools_detail_never_reaches_the_phone`
   - `tests/frontends/test_pwa.py` → `::test_the_page_shows_a_turn_as_one_final_message_and_no_progress`
+  - `tests/hook/test_transcript.py` → `::test_a_cursor_chat_transcript_is_found_by_its_conversation_id` (D142)
+  - `tests/core/test_hooks.py` → `::test_a_cursor_stop_without_response_text_reads_the_reply_from_the_chat_transcript` (D142)
   - `tests/adapters/test_ahp_units.py` → `::test_turn_text_is_only_what_follows_the_last_tool_call`, `::test_turn_text_is_empty_when_nothing_follows_the_last_tool_call`
   - `tests/adapters/test_opencode.py` → `::test_turn_text_is_only_what_follows_the_last_tool_call`, `::test_turn_text_is_empty_when_nothing_follows_the_last_tool_call`
   - `tests/adapters/test_cursor_cli.py` → `::test_turn_text_is_only_what_follows_the_last_tool_call`, `::test_turn_text_is_empty_when_nothing_follows_the_last_tool_call`

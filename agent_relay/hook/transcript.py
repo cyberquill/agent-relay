@@ -10,6 +10,8 @@ from pathlib import Path
 
 from pydantic import JsonValue
 
+from agent_relay import paths
+
 MAX_READ_BYTES = 2_000_000
 _TEXT_KEYS = ("content", "text", "message", "value")
 AGENT_HOST_MARK = re.compile(rb'"clientName"\s*:\s*"vscode-agent-host"')
@@ -95,10 +97,11 @@ def _last_assistant(node: JsonValue) -> str | None:
 
 
 def _this_turn(entries: list[JsonValue]) -> list[JsonValue]:
-    """The Copilot CLI entries after its newest `user.message`: an earlier turn's answer is not this one's."""
+    """The entries after the newest user message (the Copilot CLI's `user.message`, or a Cursor entry with
+    `role: user`): an earlier turn's answer is not this one's."""
     for index in range(len(entries) - 1, -1, -1):
         entry = entries[index]
-        if isinstance(entry, dict) and entry.get("type") == "user.message":
+        if isinstance(entry, dict) and (entry.get("type") == "user.message" or entry.get("role") == "user"):
             return entries[index + 1 :]
     return entries
 
@@ -136,6 +139,16 @@ def last_reply(transcript: str | None) -> str | None:
                 continue
         turn = _this_turn(entries)
         return None if _ends_on_tool_request(turn) else _last_assistant(turn)
+
+
+def cursor_transcript(conversation_id: str) -> str | None:
+    """Where Cursor writes a chat's transcript: `projects/<workspace>/agent-transcripts/<id>/<id>.jsonl`
+    under `~/.cursor`. The workspace folder's name comes from its path, so the (unique) id finds the file."""
+    if not conversation_id or conversation_id == "unknown" or "/" in conversation_id:
+        return None
+    pattern = f"agent-transcripts/{conversation_id}/{conversation_id}.jsonl"
+    found = sorted((paths.cursor_dir() / "projects").glob(f"*/{pattern}"))
+    return str(found[0]) if found else None
 
 
 def from_agent_host(transcript: str | None) -> bool:

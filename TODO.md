@@ -27,27 +27,21 @@ No **Code** items are left: everything below needs the owner.
 
 | Item | Needs | Refs |
 |---|---|---|
-| Restart relayd so it runs D140 and D141 (`relay stop && relay start`; it runs from this repo's `.venv`) | Desk | D140, D141 |
-| Scenario 8 for Cursor and Copilot CLI desk chats (restart Cursor first); steps below | Desk + Phone | P5, P6, D120 |
-| Confirm D141 live: an Agent Host desk chat's reply to the phone starts with `📱 <your message>`, and its thread root says `vscode_copilot` (D140); details below | Desk + Phone | D135, D137, D140, D141 |
 | Re-check live that a VS Code desk chat (its own agent) shows the phone's message as a `📱` hook line (`systemMessage`, D135) | Desk + Phone | scenario 8 |
 | Does Cursor desktop skip its own prompt when the hook answers `allow`? (Only matters while away.) | Desk | D117, D124 |
 | Does VS Code honour `permissionDecision: "allow"` from `PreToolUse`, given `chat.tools.global.autoApprove: true` in your settings? | Desk | D117, D124 |
-| Is Cursor's last `afterAgentResponse` always the final answer, or can it be pre-tool narration? (Cleared when a tool hook follows it, so a turn ending after a tool yields no text.) | Desk | D118 |
-| A bad token on a running relayd (P1's daemon robustness) not tried live | Desk | P1, D121 |
 | Does a Webex Android card delete remove the card cleanly, with no "Unable to send your request" on a stale tap? (Every one-shot card.) | Phone | D119 |
 | Does Webex Android open `answer.html` in the app or hand it to the browser, and does the CSP survive either path? | Phone | D122 |
 | Does a Webex client honour `label`, `isRequired` and `errorMessage` on the `/new` card's inputs? (`scripts/card_check.py` only proves Webex accepts them.) | Phone | D119 |
 | Open the `/new` and `/model` cards on Android and check the layout | Phone | P4, D119 |
 | Delete the three retired app bots at developer.webex.com | Desk | U13, D116 |
-| An installed copy of the old `stepping-away` patch reads as drifted: restore the base skill, run `relay install --apply` (see [`docs/operations.md`](docs/operations.md)) | Desk | |
 | D61, partly done: find a command Cursor prompts for on its own (e.g. sandboxed auto-run off), then confirm it still prompts with the hooks in place | Desk | D61 |
 | October: notifications show the bot name clearly; space sections sync to the phone (now one space) | Phone | October round |
-| October: a photo reaches each app natively; an HTTPS clone works under launchd | Desk + Phone | October round |
+| October: a photo reaches each app natively (an HTTPS clone under launchd: done 2026-11-22) | Desk + Phone | October round |
 | October: window reload vs VS Code follow-ups | Desk | D85 |
 | Upstream: `cursor-agent` sometimes appends "Error: RetriableError: WritableIterable is closed" to a woken turn's reply (the reply is complete). Report to Cursor if it persists | Owner | |
 
-### Scenario 8 steps (Cursor and Copilot CLI desk chats)
+### Scenario 8 steps (done live 2026-11-22 for Copilot CLI and Cursor CLI; VS Code and Cursor desktop remain)
 
 Headless `cursor-agent -p` and `copilot -p` create no phone thread, so use a real desk chat:
 
@@ -104,13 +98,13 @@ parked, took the phone's `BACK` and answered it; `/back` released it and handed 
 | Phase | Deviations | State |
 |---|---|---|
 | P0 unblock: drop `webex.bots`, truncate the error log, restart relayd | | ✅ done live 2026-11-21 16:07 |
-| P1 one space, daemon robustness | D116, D121 | ✅ one space works live; a deliberately bad token on a running relayd not tried |
+| P1 one space, daemon robustness | D116, D121 | ✅ one space works live; a bad token on a running relayd tolerated live 2026-11-22 |
 | P2 no approvals | D117, D124, D125 | ✅ scenario 7 ran a shell command with no card on all five phone apps; desk-session flags (Cursor desktop, VS Code hooks) unverified |
 | P3 final result only | D118, D127 | ✅ scenarios 2 and 3 on all five phone apps |
 | P3b files in, HTML out, `send_phone_file` | D122 | ✅ image and PDF (scenario 4) and `answer.html` (scenario 5) on all five phone apps; `answer.html` on Android not checked |
 | P4 cards | D119 | ✅ `scripts/card_check.py` 14 of 14, scenarios 2 and 6; the Android look is the owner's |
-| P5 away, manual and global | D120 | Partly: `/away`, `/back`, `/panic` (scenario 9) ✅; **scenario 8 (a desk chat reaching the phone) needs the owner** |
-| P6 every app working | | ✅ VS Code, Copilot (AHP), Cursor IDE (CDP), Cursor CLI, OpenCode: scenarios 2 to 7 pass. Not live: Cursor desktop hooks and Copilot CLI hooks as desk sessions (scenario 8) |
+| P5 away, manual and global | D120 | Partly: `/away`, `/back`, `/panic` (scenario 9) ✅; scenario 8 ✅ Copilot CLI and Cursor CLI desk chats; VS Code and Cursor desktop need the owner |
+| P6 every app working | | ✅ VS Code, Copilot (AHP), Cursor IDE (CDP), Cursor CLI, OpenCode: scenarios 2 to 7 pass. Not live: Cursor desktop hooks as a desk session (scenario 8; Cursor CLI and Copilot CLI are) |
 | P7 docs and bookkeeping | D116–D134 | ✅ docs updated with the code; acceptance UR-1–UR-8 |
 | P8 E2E driver | D123 | ✅ run against Webex as the owner (webex-cli token), 6 live fixes along the way |
 

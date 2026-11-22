@@ -335,7 +335,14 @@ class HookService:
         if hook.family is HookFamily.CURSOR:
             text = session.extra.get(LAST_TEXT)
             await self._registry.set_session_extra(session.session_key, LAST_TEXT, None)
-            return text if isinstance(text, str) else None
+            if isinstance(text, str):
+                return text
+            # No `afterAgentResponse` text reached the relay (the Cursor CLI sent none for a chat seen live):
+            # the chat's own transcript has the reply.
+            path = hook.transcript_path or await asyncio.to_thread(
+                transcript.cursor_transcript, hook.session_id
+            )
+            return await transcript.wait_for_reply(path)
         return await transcript.wait_for_reply(hook.transcript_path)
 
     async def _from_agent_host(self, session: SessionRecord, hook: HookInput) -> SessionRecord:

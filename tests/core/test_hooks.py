@@ -315,6 +315,26 @@ async def test_cursor_park_uses_followup_and_last_response(core: tuple[Core, Rec
     assert rec.of(TurnCompleted)[-1].text == "Fixed it."
 
 
+async def test_a_cursor_stop_without_response_text_reads_the_reply_from_the_chat_transcript(
+    core: tuple[Core, Recorder, list[str]],
+) -> None:
+    """Live 2026-11-22: a Cursor CLI chat sent no `afterAgentResponse` text, so the phone got `Done.`."""
+    built, rec, _ = core
+    await away.set_away(built.registry, True)
+    folder = paths.cursor_dir() / "projects" / "w-proj" / "agent-transcripts" / "K1"
+    folder.mkdir(parents=True)
+    rows = [
+        {"role": "user", "message": {"content": [{"type": "text", "text": "go"}]}},
+        {"role": "assistant", "message": {"content": [{"type": "text", "text": "Fixed it."}]}},
+    ]
+    (folder / "K1.jsonl").write_text("\n".join(json.dumps(r) for r in rows))
+    task = asyncio.create_task(hook(built, "cursor", "stop", STOP_CURSOR))
+    await _wait_status(built, "cursor:K1", SessionStatus.PARKED)
+    await built.service.back("cursor:K1")
+    await asyncio.wait_for(task, 2)
+    assert rec.of(TurnCompleted)[-1].text == "Fixed it."
+
+
 @pytest.mark.parametrize("how", ["back", "panic", "away_off"])
 async def test_park_releases(core: tuple[Core, Recorder, list[str]], how: str) -> None:
     built, _, _ = core
