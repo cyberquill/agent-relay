@@ -1,160 +1,207 @@
 # agent-relay: status and what's left
 
-Last updated 2026-11-21 21:50, after the November round's code and its live runs (squash-merged to local `main`, never pushed).
-The plan is [`docs/PLAN.md`](docs/PLAN.md); the November round's plan is
-[`sandbox/08-usability-round.md`](sandbox/08-usability-round.md) (decisions U1–U14, phases P0–P8).
-Departures are in [`docs/deviations.md`](docs/deviations.md) (D1–D135), and each acceptance criterion maps
-to its tests in [`docs/acceptance.md`](docs/acceptance.md) (AC-1–AC-40, OR-1–OR-20 for the October round,
-UR-1–UR-8 for the November round). For users, start with [`docs/user-guide.md`](docs/user-guide.md).
+Last updated 2026-11-21 21:50, after the November round's code and live runs (squash-merged to local `main`, never pushed).
 
-## November round (2026-11-21)
-
-Code is done, merged to `main` and green under `uv run tox`. Live results per app and scenario are in
-[`docs/operations.md`](docs/operations.md#live-results-november-round). What is left is mostly checks that
-need the owner (scenario 8 at the desk, the Android look).
-
-| Phase | State |
+| Doc | What |
 |---|---|
-| P0 unblock (drop `webex.bots`, truncate the error log, restart relayd) | ✅ done live 2026-11-21 16:07 |
-| P1 one space (D116) and daemon robustness (D121) | ✅ live: one space works; a deliberately bad token on a running relayd not tried |
-| P2 no approvals (D117, D124, D125) | ✅ live: scenario 7 ran a shell command with no card on all five phone apps; the desk-session flags (Cursor desktop, VS Code hooks) are unverified |
-| P3 final result only (D118, D127) | ✅ live: scenarios 2 and 3 on all five phone apps |
-| P3b files in, HTML out, `send_phone_file` (D122) | ✅ live: image and PDF (scenario 4) and `answer.html` (scenario 5) on all five phone apps; `answer.html` on Android not checked |
-| P4 cards (D119) | ✅ live: `scripts/card_check.py` 14 of 14, scenarios 2 and 6; the Android look is the owner's |
-| P5 away, manual and global (D120) | partly live: `/away`, `/back` and `/panic` (scenario 9) ✅; **scenario 8 (a desk chat reaching the phone) needs the owner** |
-| P6 every app working | ✅ VS Code, Copilot (AHP), Cursor IDE (CDP), Cursor CLI, OpenCode: scenarios 2 to 7 pass. Not checked live: Cursor desktop hooks and Copilot CLI hooks as desk sessions (scenario 8) |
-| P7 docs and bookkeeping | ✅ docs updated with the code (D116–D134, acceptance UR-1–UR-8) |
-| P8 E2E driver (D123) | ✅ run against Webex as the owner (webex-cli token), 6 live fixes along the way |
+| [`docs/PLAN.md`](docs/PLAN.md) | The plan |
+| [`sandbox/08-usability-round.md`](sandbox/08-usability-round.md) | November round plan: decisions U1–U14, phases P0–P8 |
+| [`docs/deviations.md`](docs/deviations.md) | Departures D1–D135 |
+| [`docs/acceptance.md`](docs/acceptance.md) | Criteria to tests: AC-1–AC-40, OR-1–OR-20 (October), UR-1–UR-8 (November) |
+| [`docs/testing.md`](docs/testing.md) | Live results per app and scenario |
+| [`docs/user-guide.md`](docs/user-guide.md) | Start here as a user |
 
-### Open live checks (plan §6 and the phase checks)
+```mermaid
+timeline
+    title Rounds
+    2026-10-04 : First build C0–C14 committed : C15 live smoke on all five apps
+    2026-10-13 : October round P0–P4 : OR-1–OR-20
+    2026-11-21 : November round P0–P8 : UR-1–UR-8 : merged to local main as 6ec9653
+```
 
-- [ ] Does Cursor desktop skip its own prompt when the hook answers `allow`? (Only matters while away.)
-- [ ] Does VS Code honour `permissionDecision: "allow"` from `PreToolUse`, given
-      `chat.tools.global.autoApprove: true` in your settings?
-- [x] Does `cursor-agent --force acp` stop sending `session/request_permission`? (D125)
-      Not observable: the relay answers every request itself (D117), so the flag changes nothing visible. Scenario 7 passes on Cursor CLI with no card either way.
-- [x] AHP: is `autoApprove` a valid `createSession` config value on VS Code 1.147? (D125)
-      Yes: VS Code 1.147 accepted `createSession` with it, and scenarios 2 to 7 pass on Copilot (AHP) with no card.
-- [ ] Is Cursor's last `afterAgentResponse` always the final answer, or can it be pre-tool narration?
-      (Cleared when a tool hook follows it, so a turn ending after a tool yields no text.)
-- [ ] Does a Webex Android card delete remove the card cleanly, with no "Unable to send your request"
-      on a stale tap? (Now relevant to every one-shot card, D119.)
-- [ ] Does Webex Android open `answer.html` in the app or hand it to the browser, and does the CSP survive
-      either path? (D122)
-- [x] With away on, does a Cursor CDP chat also register as a second desk session through Cursor's hooks?
-      Yes; fixed with a claim (D134).
-- [ ] Do Copilot CLI hook payloads always carry `transcript_path`? It is the only source of the final text.
-- [x] Does the OAuth integration behind `webex-cli` have the scope for `POST /attachment/actions`? If not,
-      the driver falls back to typed commands and card taps stay a phone check. (D123)
-      Yes: the card taps of scenarios 2, 6 and 9 ran from the owner's token live.
-- [ ] Does a Webex client honour `label`, `isRequired` and `errorMessage` on the `/new` card's inputs?
-      (`scripts/card_check.py` only proves Webex accepts them.)
-- [x] `scripts/card_check.py`: every card accepted (HTTP 200), 14 of 14.
-- [x] `scripts/phone_e2e.py`: scenarios 1 to 7 and 9 pass on every phone app; results in
-      [`docs/operations.md`](docs/operations.md#live-results-november-round). Scenario 8 is open (below).
-- [x] P6 per phone app (VS Code, Copilot AHP, Cursor CLI, OpenCode, Cursor CDP on 3.31.15 with selectors v4).
-- [ ] P6 desk side: Cursor desktop hooks and Copilot CLI hooks (restart Cursor first) with away on: scenario 8.
-- [ ] The owner opens the `/new` and `/model` cards on Android and checks the layout.
-- [ ] The owner deletes the three retired app bots at developer.webex.com.
+## Open now
 
-### Open items from the November round
+Needs: **Desk** = owner at the Mac; **Phone** = owner on Webex Android; **Code** = an agent can do it alone.
 
-- [ ] **Confirm D135 / D137 live:** the Agent Host chat showed only `OKBACK` (the SDK ignores `systemMessage`),
-      so camelCase hooks now ask the agent to start its reply with the `📱 …` line (D137). With away on, ask an
-      Agent Host chat in `.scratch` `Reply with exactly: OK`, reply in the phone thread, and check the reply
-      starts with `📱 <your message>`. A VS Code chat on its own agent should show the line through `systemMessage`.
+| Item | Needs | Refs |
+|---|---|---|
+| Scenario 8 for Cursor and Copilot CLI desk chats (restart Cursor first); steps below | Desk + Phone | P5, P6, D120 |
+| Confirm D135 / D137 live: an Agent Host chat's reply starts with `📱 <your message>` (details below) | Desk + Phone | D135, D137 |
+| Re-check live that a VS Code desk chat starts the phone's reply on a new line (`core/parking.py::PHONE_PREFIX`) | Desk + Phone | scenario 8 |
+| VS Code Agent Host desk chat: thread root says `copilot_cli` (details below) | Code | scenario 8 |
+| Does Cursor desktop skip its own prompt when the hook answers `allow`? (Only matters while away.) | Desk | D117, D124 |
+| Does VS Code honour `permissionDecision: "allow"` from `PreToolUse`, given `chat.tools.global.autoApprove: true` in your settings? | Desk | D117, D124 |
+| Is Cursor's last `afterAgentResponse` always the final answer, or can it be pre-tool narration? (Cleared when a tool hook follows it, so a turn ending after a tool yields no text.) | Desk | D118 |
+| Do Copilot CLI hook payloads always carry `transcript_path`? It is the only source of the final text. | Desk | D118 |
+| A bad token on a running relayd (P1's daemon robustness) not tried live | Desk | P1, D121 |
+| Does a Webex Android card delete remove the card cleanly, with no "Unable to send your request" on a stale tap? (Every one-shot card.) | Phone | D119 |
+| Does Webex Android open `answer.html` in the app or hand it to the browser, and does the CSP survive either path? | Phone | D122 |
+| Does a Webex client honour `label`, `isRequired` and `errorMessage` on the `/new` card's inputs? (`scripts/card_check.py` only proves Webex accepts them.) | Phone | D119 |
+| Open the `/new` and `/model` cards on Android and check the layout | Phone | P4, D119 |
+| Delete the three retired app bots at developer.webex.com | Desk | U13, D116 |
+| An installed copy of the old `stepping-away` patch reads as drifted: restore the base skill, run `relay install --apply` (see [`docs/operations.md`](docs/operations.md)) | Desk | |
+| D61, partly done: find a command Cursor prompts for on its own (e.g. sandboxed auto-run off), then confirm it still prompts with the hooks in place | Desk | D61 |
+| October: notifications show the bot name clearly; space sections sync to the phone (now one space) | Phone | October round |
+| October: a photo reaches each app natively; an HTTPS clone works under launchd | Desk + Phone | October round |
+| October: window reload vs VS Code follow-ups | Desk | D85 |
+| Upstream: `cursor-agent` sometimes appends "Error: RetriableError: WritableIterable is closed" to a woken turn's reply (the reply is complete). Report to Cursor if it persists | Owner | |
+| Definition of Done: every checkpoint C0–C15 committed with `uv run tox` green, including `ts` | Code | PLAN §9 |
+| Definition of Done: `docs/spikes.md` complete; `docs/deviations.md` lists every departure | Code | PLAN §9 |
 
-- [ ] **Scenario 8, VS Code (2026-11-21 20:14, owner at the desk): works.** A VS Code Copilot chat in `.scratch`
-      with away on reached the phone (`OK`), parked, took the phone's `BACK` and answered it, and `/back`
-      released it and handed 10 phone sessions to the desk. Two cosmetic findings: (1) the desk chat shows
-      the phone's reply glued to the previous answer (`OKBACK`) and never shows the phone message itself;
-      the continuation text now asks the agent to start on a new line (`core/parking.py::PHONE_PREFIX`),
-      not re-checked live; (2) the thread root says `copilot_cli` for this VS Code Agent Host chat, because
-      its first hook is `SessionStart` and the Copilot CLI sends the same PascalCase events (fixture
-      `tests/fixtures/hooks/copilot.json`), so the payload cannot tell them apart; the session's
-      `events.jsonl` says `clientName: vscode-agent-host` and could be read to label it.
-      Cursor and Copilot CLI desk chats are not checked for scenario 8.
+### Scenario 8 steps (Cursor and Copilot CLI desk chats)
 
-- [ ] **Scenario 8 for Cursor and Copilot CLI desk chats.** Headless `cursor-agent -p` and `copilot -p` create no
-      phone thread, so run a real desk chat: 1) in the phone space send `/away`; 2) in a Cursor chat, a Copilot
-      chat in VS Code or a Copilot CLI session in `.scratch`, ask `Reply with exactly: OK`; 3) the phone gets a
-      thread with `OK` and the chat parks (🅿️); 4) reply in that thread and check the desk chat continues;
-      5) send `/back` and check the root drops 🅿️/🏝️ and the desk chat is released.
-- [x] Cursor CDP live: selectors v4 (D133); self-test passes on 3.31.15, `/new cursor-ide` answers `OK`, `/models cursor-ide` lists models.
-- [x] Cursor CDP scenarios 2 to 7 pass live (D134); a CDP chat no longer registers a second desk session.
-- [x] VS Code and Copilot (AHP) scenarios 2 to 7 pass live (12 of 12).
-- [x] Full `uv run tox` green on 2026-11-21 (format, lint, mypy --strict, pytest, ts). The Playwright PWA card test
-      and the live tests are not part of it.
-- [x] `uv.lock` was edited by hand for `markdown-it-py` (D126); run `uv lock` once online.
-      Done: `uv lock` resolves with no change, so the hand edit matches.
-- [x] `scrub.scrub_text` is quadratic on one very long unbroken word (5,000 word characters take 0.5 s;
-      60,000 take over a minute). `render_answer` scrubs three times and `validate_file` scrubs text, so a
-      base64 or minified blob could stall the caller. Fix with possessive quantifiers or a length guard in
-      `scrub.py`, and render answers through `asyncio.to_thread`.
-      Fixed: `scrub.py` guards runs over 2,000 characters; `tests/test_scrub.py` pins it.
-- [x] Dead approval and wizard code: the unused `broker` of `HookService` and `notify` of `ParkManager` are gone.
-      `PendingKind` keeps `"approval"` and housekeeping keeps the draft sweep on purpose: they close or clear
-      rows an older relayd left in an existing database, and removing them would need a migration.
-- [x] `plugins/opencode/package.json` still says the plugin "relays tool approvals"; the installer's hook
-      timeout for approval-kind hooks is `question_hook_timeout_s()` although they no longer block.
-      Fixed: the package description is corrected. The approval-hook timeout is left alone: changing it would make every installed hook file read as drifted for no visible gain.
-- [x] `ws_client.DeviceError` still says "Webex rejected the bot token (401). Check the Keychain entry."; the
-      host and doctor give the better message (`pbpaste | relay setup token --stdin`).
-      Fixed: the message now says `pbpaste | relay setup token --stdin`.
-- [x] `card.offer:<nonce>` keys of `/new` and `/model` cards that are never submitted stay in the registry
-      (about 4 KB each); sweep the ones whose `card.nonce:` key is gone in housekeeping.
-      Fixed: housekeeping drops an offer a day after first seeing it without a live nonce (`_prune_offers`, tested).
-- [x] The CDP self-test does not save the model list; only an explicit `/models cursor-ide` does
-      (`core.service.discovery.CDP_MODELS_KEY`). The Cursor CLI's own 30 s `models` call keeps running in the
-      background when the card's 3 s timeout gives up (it fills the cache).
-      Left as designed: the self-test must not open Cursor's model menu on the owner's screen. Run `/models cursor-ide` once to fill the list.
-- [x] `webex_token_check` runs in both `relay doctor` and `/doctor` (one `GET /people/me` each).
-      Left as is: two cheap calls, each in its own report; sharing a cache would add state for no gain.
-- [ ] An installed copy of the old `stepping-away` patch now reads as drifted: restore the base skill and run
-      `relay install --apply` (see [operations.md](docs/operations.md#the-stepping-away-skill-patch)).
-- [x] [`docs/PLAN.md`](docs/PLAN.md) §5 still describes approvals, per-workspace away, streaming and `answer.md`,
-      and lists `scripts/smoke_live.py`; deviations D116–D127 and D57 record what replaced them.
-      Done: `docs/PLAN.md` opens with a table of what the November round superseded, pointing at the deviations.
-- [x] Squash-merge `feat/november-round` to `main` at the end; never push (U14).
-      Done: squash-merged to local `main` as `6ec9653`; nothing was pushed.
+Headless `cursor-agent -p` and `copilot -p` create no phone thread, so use a real desk chat:
 
-## October round (2026-10-13)
+1. In the phone space send `/away`.
+2. In a Cursor chat, a Copilot chat in VS Code or a Copilot CLI session in `.scratch`, ask `Reply with exactly: OK`.
+3. The phone gets a thread with `OK`; the chat parks (🅿️).
+4. Reply in that thread; check the desk chat continues.
+5. Send `/back`; check the root drops 🅿️/🏝️ and the desk chat is released.
+
+Live runs use the end-to-end driver ("The live end-to-end test", see [`docs/testing.md`](docs/testing.md)):
+`RELAY_LIVE=1 .venv/bin/python scripts/phone_e2e.py`. Away is one global flag, so scenario 8 affects every
+desk chat until its closing `/back`.
+
+### Scenario 8 on VS Code: works, two cosmetic findings
+
+2026-11-21 20:14, owner at the desk. A VS Code Copilot chat in `.scratch` with away on reached the phone (`OK`),
+parked, took the phone's `BACK` and answered it; `/back` released it and handed 10 phone sessions to the desk.
+
+- **Glued reply:** the desk chat showed the phone's reply glued to the previous answer (`OKBACK`) and never the
+  phone message itself. The continuation text now asks the agent to start on a new line
+  (`core/parking.py::PHONE_PREFIX`); not re-checked live.
+- **Wrong label:** the thread root says `copilot_cli` for this VS Code Agent Host chat. Its first hook is
+  `SessionStart`, and the Copilot CLI sends the same PascalCase events (fixture `tests/fixtures/hooks/copilot.json`),
+  so the payload cannot tell them apart. The session's `events.jsonl` says `clientName: vscode-agent-host` and
+  could be read to label it.
+
+### D135 / D137 details
+
+- The Agent Host chat showed only `OKBACK`: the SDK ignores `systemMessage`.
+- So camelCase hooks now ask the agent to start its reply with the `📱 …` line (D137).
+- Check: with away on, ask an Agent Host chat in `.scratch` `Reply with exactly: OK`, reply in the phone thread,
+  and check the reply starts with `📱 <your message>`.
+- A VS Code chat on its own agent should show the line through `systemMessage`.
+
+## History, newest first
+
+### November round (2026-11-21)
+
+- Code done, merged to `main`, green under `uv run tox`.
+- Live results per app and scenario: [`docs/testing.md`](docs/testing.md).
+- Left: mostly owner checks (scenario 8 at the desk, the Android look).
+
+| Phase | Deviations | State |
+|---|---|---|
+| P0 unblock: drop `webex.bots`, truncate the error log, restart relayd | | ✅ done live 2026-11-21 16:07 |
+| P1 one space, daemon robustness | D116, D121 | ✅ one space works live; a deliberately bad token on a running relayd not tried |
+| P2 no approvals | D117, D124, D125 | ✅ scenario 7 ran a shell command with no card on all five phone apps; desk-session flags (Cursor desktop, VS Code hooks) unverified |
+| P3 final result only | D118, D127 | ✅ scenarios 2 and 3 on all five phone apps |
+| P3b files in, HTML out, `send_phone_file` | D122 | ✅ image and PDF (scenario 4) and `answer.html` (scenario 5) on all five phone apps; `answer.html` on Android not checked |
+| P4 cards | D119 | ✅ `scripts/card_check.py` 14 of 14, scenarios 2 and 6; the Android look is the owner's |
+| P5 away, manual and global | D120 | Partly: `/away`, `/back`, `/panic` (scenario 9) ✅; **scenario 8 (a desk chat reaching the phone) needs the owner** |
+| P6 every app working | | ✅ VS Code, Copilot (AHP), Cursor IDE (CDP), Cursor CLI, OpenCode: scenarios 2 to 7 pass. Not live: Cursor desktop hooks and Copilot CLI hooks as desk sessions (scenario 8) |
+| P7 docs and bookkeeping | D116–D134 | ✅ docs updated with the code; acceptance UR-1–UR-8 |
+| P8 E2E driver | D123 | ✅ run against Webex as the owner (webex-cli token), 6 live fixes along the way |
+
+**Closed live checks** (plan §6 and phase checks; open ones are in *Open now*):
+
+| Check | Result |
+|---|---|
+| Does `cursor-agent --force acp` stop sending `session/request_permission`? (D125) | Not observable: the relay answers every request itself (D117). Scenario 7 passes on Cursor CLI with no card either way |
+| AHP: is `autoApprove` a valid `createSession` config value on VS Code 1.147? (D125) | Yes: accepted; scenarios 2 to 7 pass on Copilot (AHP) with no card |
+| With away on, does a Cursor CDP chat also register as a second desk session through Cursor's hooks? | Yes; fixed with a claim (D134) |
+| Does the OAuth integration behind `webex-cli` have the scope for `POST /attachment/actions`? (D123; fallback: typed commands, card taps stay a phone check) | Yes: the card taps of scenarios 2, 6 and 9 ran from the owner's token live |
+| `scripts/card_check.py` | Every card accepted (HTTP 200), 14 of 14 |
+| `scripts/phone_e2e.py` | Scenarios 1 to 7 and 9 pass on every phone app ([`docs/testing.md`](docs/testing.md)); scenario 8 open |
+| P6 per phone app | VS Code, Copilot AHP, Cursor CLI, OpenCode, Cursor CDP on 3.31.15 with selectors v4 |
+
+**Closed items:**
+
+| Item | Outcome |
+|---|---|
+| Cursor CDP live | Selectors v4 (D133); self-test passes on 3.31.15, `/new cursor-ide` answers `OK`, `/models cursor-ide` lists models |
+| Cursor CDP scenarios 2 to 7 | Pass live (D134); a CDP chat no longer registers a second desk session |
+| VS Code and Copilot (AHP) scenarios 2 to 7 | Pass live (12 of 12) |
+| Full `uv run tox` on 2026-11-21 | Green: format, lint, mypy --strict, pytest, ts. The Playwright PWA card test and the live tests are not part of it |
+| `uv.lock` hand-edited for `markdown-it-py` (D126); run `uv lock` once online | `uv lock` resolves with no change, so the hand edit matches |
+| `scrub.scrub_text` quadratic on one long unbroken word (5,000 word characters 0.5 s; 60,000 over a minute). `render_answer` scrubs three times and `validate_file` scrubs text, so a base64 or minified blob could stall the caller. Proposed: possessive quantifiers or a length guard in `scrub.py`, answers rendered through `asyncio.to_thread` | Fixed: `scrub.py` guards runs over 2,000 characters; `tests/test_scrub.py` pins it |
+| Dead approval and wizard code | The unused `broker` of `HookService` and `notify` of `ParkManager` are gone. `PendingKind` keeps `"approval"` and housekeeping keeps the draft sweep on purpose: they close or clear rows an older relayd left in an existing database; removing them needs a migration |
+| `plugins/opencode/package.json` said the plugin "relays tool approvals"; the installer's timeout for approval-kind hooks is `question_hook_timeout_s()` though they no longer block | Description corrected. Timeout left alone: changing it makes every installed hook file read as drifted for no visible gain |
+| `ws_client.DeviceError` said "Webex rejected the bot token (401). Check the Keychain entry." | Now says `pbpaste \| relay setup token --stdin`, like the host and doctor |
+| `card.offer:<nonce>` keys of never-submitted `/new` and `/model` cards stay in the registry (about 4 KB each) | Housekeeping drops an offer a day after first seeing it without a live `card.nonce:` key (`_prune_offers`, tested) |
+| The CDP self-test does not save the model list; only `/models cursor-ide` does (`core.service.discovery.CDP_MODELS_KEY`). The Cursor CLI's own 30 s `models` call keeps running when the card's 3 s timeout gives up (it fills the cache) | Left as designed: the self-test must not open Cursor's model menu on the owner's screen. Run `/models cursor-ide` once to fill the list |
+| `webex_token_check` runs in both `relay doctor` and `/doctor` (one `GET /people/me` each) | Left as is: two cheap calls, each in its own report; a shared cache adds state for no gain |
+| [`docs/PLAN.md`](docs/PLAN.md) §5 still described approvals, per-workspace away, streaming, `answer.md` and `scripts/smoke_live.py` (replaced per D116–D127 and D57) | `docs/PLAN.md` opens with a table of what the November round superseded, pointing at the deviations |
+| Squash-merge `feat/november-round` to `main` at the end; never push (U14) | Squash-merged to local `main` as `6ec9653`; nothing pushed |
+| November checks still open after the first live run | All closed by later runs except the Android look of the `/new` and `/model` cards and scenario 8 for Cursor and Copilot CLI |
+
+### October round (2026-10-13)
 
 Superseded in places by the November round (D116–D127). Kept for history.
 
 | Phase | State | Commits |
 |---|---|---|
-| P0 groundwork (lifecycle, registry migrations, cancel-aware IPC, split service, cards and commands) | ✅ | `dc14985` |
-| P1 safety fixes (L1 install, L2 core, L3a AHP/OpenCode, L3b Cursor/VS Code, L4 Webex) | ✅ | `94ffb44`, `90cf39b` |
-| P2 phone UX (L5–L11: cards, queue modes, screen-lock away, attachments, `/ws`, recall skill) | ✅ | `aa28713`, `ce6712b`, `1b3f2ce`, `8936007`, `ae4de94` |
+| P0 groundwork: lifecycle, registry migrations, cancel-aware IPC, split service, cards and commands | ✅ | `dc14985` |
+| P1 safety fixes: L1 install, L2 core, L3a AHP/OpenCode, L3b Cursor/VS Code, L4 Webex | ✅ | `94ffb44`, `90cf39b` |
+| P2 phone UX, L5–L11: cards, queue modes, screen-lock away, attachments, `/ws`, recall skill | ✅ | `aa28713`, `ce6712b`, `1b3f2ce`, `8936007`, `ae4de94` |
 | P3 L12 one bot per app (removed in the November round, D116) | ✅ | `a0bde79` |
-| P3 L13 create the bots (live) (retired, D116) | ✅ | none (live setup, D111) |
+| P3 L13 create the bots, live (retired, D116) | ✅ | none (live setup, D111) |
 | P4 docs and final tox | ✅ | pending the orchestrator's commit |
 
-October's human live checks that still stand, each now covered by a November check above where it applies:
+- Human live checks that still stand are in *Open now* (each now covered by a November check where it applies).
+- Dropped by the November round:
+  - The show-card submit check and `webex.new_card_layout = "two"`: the show-card is gone (D119).
+  - "A card can be edited after a submit": cards are deleted (D119).
+  - "Screen lock turns away mode on and off": there is no trigger (D120).
+  - Regenerating the first app bot's token: the app bots are retired (D116).
 
-- [ ] Notifications show the bot name clearly; space sections sync to the phone (now one space).
-- [ ] A photo reaches each app natively; an HTTPS clone works under launchd.
-- [ ] Window reload vs VS Code follow-ups (D85).
-- Dropped by the November round: the show-card submit check and `webex.new_card_layout = "two"` (the
-  show-card is gone, D119); "a card can be edited after a submit" (cards are deleted, D119); "screen lock
-  turns away mode on and off" (there is no trigger, D120); regenerating the first app bot's token (the app
-  bots are retired, D116).
-
-## Where things stood after C15 (2026-10-04)
+### After C15 (2026-10-04)
 
 History from the first build. Its approval, park-with-lock and smoke-script parts are superseded by D116–D123.
 
-- **Code:** checkpoints C0–C14 are built and committed. C15 (live verification) is nearly done: all
-  five apps have passed the live smoke test.
-- **Checks:** `uv run tox` is green: format, lint, mypy `--strict`, pytest (641 passed, 6 skipped live
-  tests) and `ts`.
-- **Install:** applied to the real home directory after gate G1 and re-applied after D69. relayd runs
-  under launchd, `relay doctor` reports 0 failing, and the Webex bot is connected.
-- **Live tests:** AC-16 (Agent Host sessions), AC-20 (OpenCode) and AC-22 (Cursor CLI) pass on the real
-  apps. AC-24 (Cursor CDP self-test) is still open.
+- **Code:** C0–C14 built and committed. C15 (live verification) nearly done: all five apps passed the live smoke test.
+- **Checks:** `uv run tox` green: format, lint, mypy `--strict`, pytest (641 passed, 6 skipped live tests), `ts`.
+- **Install:** applied to the real home directory after gate G1, re-applied after D69. relayd runs under
+  launchd, `relay doctor` reports 0 failing, the Webex bot is connected.
+- **Live tests:** AC-16 (Agent Host sessions), AC-20 (OpenCode) and AC-22 (Cursor CLI) pass on the real apps.
+  AC-24 (Cursor CDP self-test) was still open then (closed below).
 
-## Done
+**Checks at the Mac (all closed except D61, which is in *Open now*):**
+
+| Check | Result |
+|---|---|
+| Cursor IDE smoke (`--only cursor`) | Passed 2026-10-04 08:41 UTC |
+| G2 / S7: screen-locked test | Passed for all four phone-driven apps (see [`docs/spikes.md`](docs/spikes.md)) |
+| AC-24 / D35: CDP self-test | Passes on Cursor 3.23.12 with selectors v2 (first run found three stale selectors, fixed). `cdp.enabled` is **true** in `~/.config/agent-relay/relay.toml`; Cursor runs with the debug port |
+| CDP live (D35) | A real phone prompt and a follow-up both returned correct replies; the `model_option` selector is fixed (selectors v3, nine models found) |
+| CDP, then unverified live: `/models cursor-ide` after the v3 fix, choosing a model with `/new cursor-ide scratch "…" <model>`, `/stop` on a running turn (one of three live session creations was left) | Done: `/models cursor-ide`, a model choice (scenario 6) and `/stop` (scenario 10) pass live on every app |
+| D61: hooks vs commands Cursor auto-runs | A/B run showed no difference with and without the relay's hooks (see D61); the rest is open |
+| D25: Cursor CLI smoke | No duplicate `cursor` hook session and one approval card (recorded in D25) |
+| Bookkeeping | AC-24 ticked in [`docs/acceptance.md`](docs/acceptance.md), D35 updated; D61 stays partly open |
+
+**Definition of Done (PLAN §9):**
+
+| Criterion | State |
+|---|---|
+| Every checkpoint C0–C15 committed with `uv run tox` green, including `ts` | Open |
+| AC-1 to AC-40 all ticked in `docs/acceptance.md` | ✅ |
+| `docs/spikes.md` complete; `docs/deviations.md` lists every departure | Open |
+| No stubs or open-work markers (`test_no_stubs` passes) | ✅ |
+| `relay doctor` all green after G1 | ✅ |
+| Live smoke works for VS Code, VS Code Copilot, OpenCode, the Cursor IDE and the Cursor CLI | ✅ |
+| The README quick start works from a clean `RELAY_HOME` | ✅ init, config, `ws add`, `install` (dry run) and `doctor` ran from an empty `RELAY_HOME` and wrote only there |
+
+**Smaller follow-ups noticed during testing:**
+
+| Follow-up | Outcome |
+|---|---|
+| The VS Code model card listed internal utility models (`copilot-utility`, `copilot-utility-small`, `copilot-dictation-cleanup-luna`) | The `/new` and `/model` cards, `/models` and a typed `/model` now hide them (D119) |
+| Leftover sessions from earlier smoke runs | Migration 5 ended every old session (D116); housekeeping ends idle sessions after 7 days (D121) |
+| Upstream `cursor-agent` "RetriableError" | Open (see *Open now*) |
+| The OpenCode provider config can print provider tokens in a terminal | The scrubber catches them (D69), plus the long-run guard in the scrubber |
+
+### Done: what exists
 
 | Area | What exists |
 |---|---|
@@ -167,7 +214,7 @@ History from the first build. Its approval, park-with-lock and smoke-script part
 | relay CLI | `install`/`uninstall`, `start`/`stop`, `status`, `doctor`, `ws`, `away`, `config`, `skills dedupe`, `selftest`, update handling |
 | Docs | README quick start, user guide, operations guide, security model, acceptance map, deviations, spikes |
 
-## Bugs found by live testing (all fixed, tested and committed)
+### Bugs found by live testing (all fixed, tested and committed)
 
 | Commit | Fix | Deviation |
 |---|---|---|
@@ -186,11 +233,10 @@ History from the first build. Its approval, park-with-lock and smoke-script part
 | `f8f5c4f` | `relay install --apply` failed with launchd error 5 and left relayd and OpenCode unloaded | D55 |
 | `86f0e53` | The smoke script expected OpenCode and the Cursor CLI to park; they go idle and wake (D11) | D57 |
 
-## Live smoke results
+### Live smoke results (2026-10-04)
 
-October's results, recorded in [`docs/operations.md`](docs/operations.md) (the "Live smoke 2026-10-04" tables),
-driven from Webex on 2026-10-04 with a script that is gone (D57, D123). The November results go in
-[*Live results (November round)*](docs/operations.md#live-results-november-round):
+- Driven from Webex on 2026-10-04 with a script that is gone (D57, D123).
+- Recorded in the "Live smoke 2026-10-04" tables; the November results sit beside them. Both: [`docs/testing.md`](docs/testing.md).
 
 | App | Result |
 |---|---|
@@ -199,56 +245,3 @@ driven from Webex on 2026-10-04 with a script that is gone (D57, D123). The Nove
 | OpenCode | ✅ register, stream, approve, idle, wake |
 | Cursor CLI | ✅ register, stream, approve, idle, wake |
 | Cursor IDE (hooks and parking) | ✅ register, stream, approve, park, reply, back |
-
-## What's left
-
-### 1. Needs a person at the Mac
-
-- [x] **Cursor IDE smoke** (`--only cursor`): passed 2026-10-04 08:41 UTC.
-- [x] **G2 / S7:** the screen-locked test passed for all four phone-driven apps (see `docs/spikes.md`).
-- [x] **AC-24 / D35:** the self-test passes on Cursor 3.23.12 with selectors v2 (the first run found
-      three stale selectors, now fixed). `cdp.enabled` is **true** in `~/.config/agent-relay/relay.toml`
-      and Cursor runs with the debug port.
-- [x] **CDP live (D35):** a real phone prompt and a follow-up both returned correct replies, and the
-      `model_option` selector is fixed (selectors v3, nine models found).
-- [x] **CDP, still unverified live:** `/models cursor-ide` after the v3 fix, choosing a model with
-      `/new cursor-ide scratch "…" <model>`, and `/stop` on a running turn (one live session
-      creation is left of the three allowed).
-      Done: `/models cursor-ide`, a model choice (scenario 6) and `/stop` (scenario 10) all pass live on every app.
-- [ ] **D61, partly done:** the A/B run showed no difference with and without the relay's hooks for
-      commands Cursor auto-runs (see D61). Still to find: a command Cursor prompts for on its own (for
-      example with sandboxed auto-run turned off), then confirm it still prompts with the hooks in place.
-- [x] **D25:** the Cursor CLI smoke produced no duplicate `cursor` hook session and one approval card
-      (recorded in D25).
-- [x] AC-24 is ticked in `docs/acceptance.md` and D35 is updated; D61 stays partly open (above).
-
-- [x] **November round, open after the live run:** all closed by later runs (see *Live results (November
-      round)*) except the Android look of the `/new` and `/model` cards and scenario 8 for Cursor and Copilot CLI.
-
-Live runs now use the end-to-end driver (see "The live end-to-end test" in `docs/operations.md`):
-`RELAY_LIVE=1 .venv/bin/python scripts/phone_e2e.py`. Away mode is one global flag, so a scenario that turns
-it on (scenario 8) affects every desk chat until its closing `/back`.
-
-### 2. Definition of Done (PLAN §9)
-
-- [ ] Every checkpoint C0–C15 committed with `uv run tox` green, including `ts`.
-- [x] AC-1 to AC-40 all ticked in `docs/acceptance.md`.
-- [ ] `docs/spikes.md` complete; `docs/deviations.md` lists every departure.
-- [x] No stubs or TODOs (`test_no_stubs` passes).
-- [x] `relay doctor` all green after G1.
-- [x] Live smoke works for VS Code, VS Code Copilot, OpenCode, the Cursor IDE and the Cursor CLI.
-- [x] The README quick start works from a clean `RELAY_HOME`.
-      Done: init, config, `ws add`, `install` (dry run) and `doctor` ran from an empty `RELAY_HOME` and wrote only there.
-
-### 3. Smaller follow-ups noticed during testing
-
-- [x] The VS Code model card listed internal utility models (`copilot-utility`, `copilot-utility-small`,
-      `copilot-dictation-cleanup-luna`); the `/new` and `/model` cards, `/models` and a typed `/model` now
-      hide them (D119).
-- [x] Leftover sessions from earlier smoke runs: migration 5 ended every old session (D116), and
-      housekeeping ends idle sessions after 7 days (D121).
-- [ ] Upstream: `cursor-agent` sometimes appends "Error: RetriableError: WritableIterable is closed"
-      to the reply of a woken turn. The reply itself is complete. Report it to Cursor if it persists.
-- [x] The OpenCode provider config can print provider tokens in a terminal. The
-      scrubber now catches them (D69).
-      Fixed by D69 and the long-run guard in the scrubber.

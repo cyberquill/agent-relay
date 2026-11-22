@@ -1,13 +1,21 @@
 # agent-relay
 
-Drive VS Code (its own agent and the Copilot harness), Cursor and OpenCode on this Mac from an Android
-phone over one Webex 1:1 space. Sessions run in the same harness the desktop uses. The phone gets one
-message per turn (the final answer, or an `answer.html` for a long or rich one), questions when an agent
-needs you, and files in both directions. There are no approvals: the relay allows what it answers, and
-`/panic` is the brake.
+Drive the coding agents on this Mac (VS Code with Copilot, Cursor, OpenCode) from your phone, over one Webex chat.
 
-New here? Start with the [user guide](docs/user-guide.md): what to prepare on the Mac, and how to use it
-from the phone.
+```mermaid
+flowchart LR
+  P["📱 Phone<br/>Webex app"] <-->|"one 1:1 chat,<br/>a thread per session"| R["relayd<br/>(on the Mac)"]
+  R <--> V["VS Code<br/>Copilot + own agent"]
+  R <--> C["Cursor<br/>CLI + desktop"]
+  R <--> O["OpenCode"]
+```
+
+- Sessions run in the same apps you use at the desk; pick them up there later.
+- One message per turn: the final answer, or `answer.html` for a long or rich one.
+- Questions from agents arrive as cards; files go both ways.
+- **No approvals**: the relay allows the tool calls it answers. `/panic` is the brake.
+- `/away` hands your desk chats to the phone; `/back` returns them.
+- Nothing listens on the network; secrets stay in the Keychain.
 
 ## Quick start
 
@@ -15,52 +23,53 @@ from the phone.
 uv sync --frozen --all-extras
 (cd extensions/relay-bridge && npm ci && npm run build)
 
-# One Webex bot, one token, into the Keychain (copy it from the bot's page first; it is never printed).
-pbpaste | uv run relay setup token --stdin
-
+pbpaste | uv run relay setup token --stdin          # bot token from the clipboard; never printed
 uv run relay config set webex.allowed_email you@example.com
 uv run relay ws add scratch "$PWD/.scratch"
 
-uv run relay install            # read what it will change
+uv run relay install            # dry run: what it will change
 uv run relay install --apply    # hooks, MCP sync, skills, launch agents, relay-bridge
 uv run relay start
 uv run relay doctor
 ```
 
-Then message the bot from the phone. The first message from `allowed_email` pins your Webex account;
-nobody else is answered. `/help` lists the commands, `/new` starts a session from one card, `/away` (by
-hand: nothing triggers it) sends desk chats to the phone and `/back` returns them, and `/panic` stops
-everything. A rejected Webex token never stops relayd: `relay doctor` says so, and the same
-`pbpaste | uv run relay setup token --stdin` fixes it. `uv run relay uninstall --apply` restores every
-file it changed.
+Then send `/help` to the bot from your phone. Full walkthrough: [docs/setup.md](docs/setup.md).
 
-Agents reach the phone through `relay-mcp`: `notify_phone`, `ask_phone` and `send_phone_file`.
+- Your first message from `allowed_email` pins your account; nobody else is answered.
+- `uv run relay uninstall --apply` restores every file it changed.
+- Try it without touching your home folder: `(export RELAY_HOME=$(mktemp -d); uv run relay install && uv run relay doctor)`.
 
-To try it without touching your home folder, set `RELAY_HOME` first: every path the relay reads or
-writes is under it.
+## Docs
 
-```bash
-(export RELAY_HOME=$(mktemp -d); uv run relay install && uv run relay doctor)
-```
+| I want to… | Read |
+|---|---|
+| Set it up on the Mac | [docs/setup.md](docs/setup.md) |
+| Use it from the phone | [docs/user-guide.md](docs/user-guide.md) |
+| Understand how it works | [docs/architecture.md](docs/architecture.md) |
+| Look up a command, setting or component | [docs/operations.md](docs/operations.md) |
+| Run the tests or the live end-to-end driver | [docs/testing.md](docs/testing.md) |
+| Know the threat model | [docs/security.md](docs/security.md) |
+| See what is still open | [TODO.md](TODO.md) |
+
+Records (for contributors):
+
+| Doc | Holds |
+|---|---|
+| [docs/PLAN.md](docs/PLAN.md) | The original spec and acceptance criteria |
+| [docs/deviations.md](docs/deviations.md) | Every departure from the plan, and why (wins over PLAN) |
+| [docs/acceptance.md](docs/acceptance.md) | Each acceptance criterion and the tests that prove it |
+| [docs/spikes.md](docs/spikes.md) | Experiments run against the real apps before building |
+| [docs/research.md](docs/research.md) | Background research that led to the plan |
+| [sandbox/](sandbox/README.md) | Review reports from the October and November rounds (local only: git-ignored) |
+| [AGENTS.md](AGENTS.md) | Rules for coding agents working on this repo |
 
 ## Development
 
 ```bash
-uv run tox     # ruff format, ruff check, mypy --strict, pytest, and the extension's TypeScript tests
+uv run tox     # ruff format, ruff check, mypy --strict, pytest, TypeScript builds and tests
 ```
 
-Live tests run only with `RELAY_LIVE=1`. The end-to-end driver that acts as the owner is
-`RELAY_LIVE=1 .venv/bin/python scripts/phone_e2e.py` (and `scripts/card_check.py` for the cards); see
-[`docs/operations.md`](docs/operations.md#the-live-end-to-end-test).
-
-## Docs
-
-- [`docs/user-guide.md`](docs/user-guide.md): Mac preparation and day-to-day use, at a high level
-- [`docs/PLAN.md`](docs/PLAN.md): design and acceptance criteria
-- [`docs/operations.md`](docs/operations.md): install, daily use, every command
-- [`docs/security.md`](docs/security.md): threat model and controls
-- [`docs/deviations.md`](docs/deviations.md): where the build departs from the plan, and why
-- [`docs/acceptance.md`](docs/acceptance.md): each acceptance criterion and the tests that prove it
+Live tests run only with `RELAY_LIVE=1`; see [docs/testing.md](docs/testing.md).
 
 ## License
 

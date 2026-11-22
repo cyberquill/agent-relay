@@ -1,4 +1,4 @@
-"""The pass/fail/skip table: printed to stdout and written as markdown for `docs/operations.md`."""
+"""The pass/fail/skip table: printed to stdout and written as markdown for `docs/testing.md`."""
 
 from __future__ import annotations
 

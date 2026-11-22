@@ -36,6 +36,7 @@ The full spec is [`docs/PLAN.md`](docs/PLAN.md). This file is the binding summar
   builds (`tox -e ts`). It must be green before every commit.
 - Pydantic models for every wire format; f-strings; no `print()` outside CLI rendering.
 - The hook entry point `agent_relay/hook/relay_hook.py` is stdlib-only, for startup time.
-- Docs move with the code: README, `docs/operations.md`, `docs/security.md`, `docs/deviations.md`,
-  `docs/spikes.md`, `docs/acceptance.md`.
+- Docs move with the code: README, `docs/setup.md`, `docs/user-guide.md`, `docs/architecture.md`,
+ `docs/operations.md`, `docs/testing.md`, `docs/security.md`, `docs/deviations.md`, `docs/spikes.md`,
+ `docs/acceptance.md`. Style: bullets and tables over prose, mermaid for flows, no repetition.
 - Conventional Commits, one or more per checkpoint (PLAN §7).

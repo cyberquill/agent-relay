@@ -1,201 +1,165 @@
 # Security
 
-Agent Relay lets a phone drive coding agents that can run commands on this Mac. This page is the
-threat model, the controls that answer it, and the tests that prove each control (AC-40).
+The phone drives agents that can run commands on this Mac. This page: what is at stake, the threats, the controls,
+and the test that proves each control (AC-40).
 
-## What is worth protecting
+## Assets
 
-- **The Mac's shell and files.** Every agent the relay drives can edit files and run commands.
-- **Secrets the agents see.** Tokens in repo files, environment variables, MCP configs, tool output.
-- **The relay's own credentials.** The Webex bot token, the OpenCode server password, the PWA token,
-  MCP secrets moved into the Keychain by `relay config import`.
+| Asset | Examples |
+|---|---|
+| The Mac's shell and files | Every driven agent can edit files and run commands |
+| Secrets agents see | Tokens in repo files, env vars, MCP configs, tool output |
+| The relay's credentials | Webex bot token, OpenCode password, PWA token, MCP secrets moved to the Keychain by `relay config import` |
 
 ## Trust boundaries
 
-| Boundary | Inside | Outside |
-|---|---|---|
-| Webex | The pinned `personId`, in a 1:1 room with the bot | Everyone else, every group room |
-| The Mac | Processes of this user (uid), the Keychain | Other users' processes, the network |
-| Agent output | Nothing — tool output and repo content are untrusted | — |
+```mermaid
+flowchart LR
+  subgraph TRUSTED["Trusted"]
+    ME["Pinned personId<br/>in a 1:1 room"]
+    MAC["Processes of this uid<br/>+ login Keychain"]
+  end
+  subgraph UNTRUSTED["Untrusted"]
+    OTHERS["Other Webex people,<br/>group rooms"]
+    NET["The network,<br/>other users' processes"]
+    OUT["Agent output: tool results,<br/>repo content"]
+  end
+  ME -->|"Webex (outbound wss)"| R["relayd"]
+  MAC -->|"relay.sock 0600, uid checked"| R
+  OTHERS -. "ignored, logged" .-> R
+  OUT -. "scrubbed, links neutralised,<br/>never executed" .-> R
+```
 
-relayd only makes outbound connections (the Webex websocket and REST API, `127.0.0.1` app servers).
-Nothing listens on the network unless the PWA is enabled, and then only on loopback.
+- relayd only connects out (Webex websocket and REST, `127.0.0.1` app servers).
+- Nothing listens on the network unless the PWA is on, and then only on loopback.
+
+## Threats at a glance
+
+| Threat | Main answer |
+|---|---|
+| Stolen or unlocked phone | `/panic`, revoke the Webex session; **no approvals slow the thief** |
+| Compromised Webex account / strangers | Pinned `personId`, 1:1 only; a compromised account *is* the user |
+| Other local processes | `0600` socket + uid check, Keychain-only secrets, loopback-only servers |
+| Prompt injection into what the phone shows | Fixed card buttons, one-use nonces, links as code, no HTML rendering |
+| Hostile `answer.html` | `html=False`, strict CSP, no links, scrubbed |
+| Secrets leaking out | Scrub every outbound byte and log record |
+| Agent reading files out via `send_phone_file` | Workspace jail, no links, size cap |
+| Files and clones from the phone | Owner-only, inbox jail, allowed hosts, no shell |
 
 ## Threats and answers
 
-### A stolen or unlocked phone
+### Stolen or unlocked phone
 
-The thief can read relayed sessions and start or steer agents for as long as the Webex app is signed
-in. **Nothing slows them down: the relay has no approvals** (see the next section). Limits:
+The thief can read sessions and start or steer agents while Webex stays signed in. **Nothing slows them: there are no approvals.**
 
-- `/panic` (from any device signed in to the account) closes every open question, cancels running
-  turns, turns away mode off and writes a pause flag that survives restarts. While paused the relay
-  answers nothing, so a desk app asks at its own prompt. It asks first with a card valid for 60 s;
-  `/panic now` skips the question. `/away` resumes. On the Mac, `relay stop` stops everything.
-- Revoke the Webex session from the account settings; the bot then sees nothing from that device.
+- `/panic` (from any device on the account): closes open questions, cancels turns, turns away off, writes a pause flag
+  that survives restarts. While paused the relay answers nothing, so desk apps ask at their own prompt.
+  Confirm card valid 60 s; `/panic now` skips it; `/away` resumes.
+- On the Mac: `relay stop` stops everything.
+- Revoke the Webex session in account settings; the bot then sees nothing from that device.
 
-### A compromised Webex account, or someone else messaging the bot
+### Compromised Webex account, or someone else messaging the bot
 
-- The first person to message the bot, with `webex.allowed_email`, is pinned by immutable `personId`.
-  Later messages from any other person are ignored, even with the right email.
-- Group rooms are ignored and left. Card submissions are re-checked against the pinned person and the
-  room type, because a card can be submitted from a room it was forwarded to.
-- **Whoever controls the Webex account can run anything on the Mac.** That was already true through a
-  prompt ("run this command"); since D117 there is also no approval step that could slow it. A
-  compromised account *is* the user.
-- The controls that are left, and the only containment: the pinned person id, 1:1 rooms only, `/panic`,
-  revoking the Webex session, the logs (`relayd.log`, scrubbed), and the "never do while away" list in the `agent-relay-away` skill, which binds the agent,
-  not the relay.
+- The first person to message with `webex.allowed_email` is pinned by immutable `personId`; any other person is ignored, even with the right email.
+- Group rooms are ignored and left. Card submissions are re-checked against the pinned person and room type (a card can be forwarded).
+- **Whoever controls the account can run anything on the Mac.** True via a prompt anyway; since D117 no approval step slows it.
+- What is left: pinned person id, 1:1 rooms, `/panic`, revoking the session, the scrubbed logs, and the "never do while away" list in `agent-relay-away` (binds the agent, not the relay).
 
 ### No approvals (a documented deviation)
 
-PLAN §5 and the earlier version of this page said the relay would "never" have a global auto-approve.
-That is reversed by [D117](deviations.md): every tool call the relay answers is allowed at once.
+PLAN §5 promised "never a global auto-approve". [D117](deviations.md) reverses it: every tool call the relay answers is allowed at once.
 
-- **Why (F7):** of 68 approval cards, the phone answered 33 and every answer was an allow; 21 (31 %)
-  timed out and were auto-denied, which stalled the turn; 14 were answered at the desk. The card was
-  friction, not control, because the same person could already send any prompt.
-- **What the relay answers:** only phone-held sessions and, while away mode is on, desk sessions. A desk
-  session at the desk, and every session while `/panic` has paused the relay, keeps the app's own prompt
-  (`{}` for hooks, no answer for adapters). A hook that fails returns `{}` too (D124).
-- **App flags:** phone sessions are also started with the app's own auto-approve where one exists
-  (Cursor CLI `--force`, AHP `autoApprove`, OpenCode `always`; D125). They are not verified live; the
-  relay's own allow does not depend on them.
-- **Questions still wait.** `ask_phone`, AHP input, OpenCode questions and Cursor `ask_question` are
-  answered by you, with the one-use nonce and the `questions.deadline_s` deadline.
+- **Why (F7):** of 68 approval cards, 33 answered on the phone (all allow), 21 (31 %) timed out and were auto-denied (stalling the turn), 14 answered at the desk. Friction, not control: the same person could send any prompt.
+- **What the relay answers:** phone-held sessions, and desk sessions while away is on. A desk session at the desk, and everything after `/panic`, keeps the app's own prompt (`{}` for hooks, no answer for adapters). A failing hook returns `{}` too (D124).
+- **App flags:** phone sessions also start with the app's auto-approve (Cursor CLI `--force`, AHP `autoApprove`, OpenCode `always`; D125). Not verified live; the relay's allow does not depend on them.
+- **Questions still wait:** `ask_phone`, AHP input, OpenCode questions, Cursor `ask_question` need your answer, with a one-use nonce and `questions.deadline_s`.
 - There is no deny list.
 
 ### Other local processes
 
-- The IPC socket is `0600` in a `0700` directory, and every connection's peer uid is checked.
-- Secrets live in the Keychain; files the relay writes hold Keychain references, never values
-  (`relay.toml` holds no secrets at all).
-- The PWA, when enabled, binds `127.0.0.1` only and needs a bearer token compared in constant time.
-  Use `tailscale serve` (`relay pwa expose`), never Funnel.
-- Cursor's debug port gives full control of Cursor to any local process. It is opened only while the
-  CDP adapter is enabled, and only by `relay selftest cursor-cdp` or the adapter itself, never by the
-  background update check.
+- IPC socket `0600` in a `0700` directory; every connection's peer uid is checked.
+- Secrets only in the Keychain; files the relay writes hold references, never values (`relay.toml` holds no secrets).
+- PWA (if on): `127.0.0.1` only, bearer token compared in constant time. Use `tailscale serve` (`relay pwa expose`), never Funnel.
+- Cursor's debug port gives any local process full control of Cursor. Opened only while the CDP adapter is enabled, and only by `relay selftest cursor-cdp` or the adapter, never by the background update check.
 
-### Prompt injection through repo content into what the phone shows
+### Prompt injection into what the phone shows
 
-A file or tool result can contain text crafted to look like an instruction, or to make an agent's
-answer or question misleading. Question cards are the only cards that carry agent text.
+Repo content or tool output can be crafted to look like an instruction or to mislead. Question cards are the only cards carrying agent text.
 
-- Question options are fixed by the question; nothing in a card body can add a button or change what a
-  button does. A submission carries only the request id, the chosen option or typed answer and the
-  card's one-use nonce, and the server checks it again. Expired or already-answered questions cannot be
-  answered again, and a card's nonce is spent by the first successful tap.
-- The `/new` Start value (`harness:model`) is checked again against the offer stored under the card's
-  nonce, so a forged `agent` is refused. Card JSON is checked in CI against the Webex subset of
-  Adaptive Cards 1.3 (`tests/frontends/card_spec.py`).
-- URLs in agent output reach the phone as code spans, not links (`frontends/text.py`, re-exported by
-  `frontends/webex/links.py`), so an injected link is never one tap away.
-- Message text and cards are never executed or rendered as HTML by the relay (the PWA uses
-  `textContent`); the one HTML artefact is `answer.html`, below.
+- Options are fixed by the question; nothing in a card body can add or change a button.
+- A submission carries only the request id, the chosen option or typed answer, and the card's one-use nonce; the server re-checks it. Expired or answered questions cannot be answered again; the first successful tap spends the nonce.
+- The `/new` Start value (`harness:model`) is re-checked against the offer stored under the card's nonce, so a forged `agent` is refused.
+- Card JSON is checked in CI against the Webex subset of Adaptive Cards 1.3 (`tests/frontends/card_spec.py`).
+- URLs in agent output reach the phone as code spans, not links (`frontends/text.py`, re-exported by `frontends/webex/links.py`).
+- The relay never executes or renders message text or cards as HTML (the PWA uses `textContent`); the only HTML artefact is below.
 
 ### HTML output (`answer.html`, `changes.html`)
 
-A long or rich answer, and a `/diff` over 200 lines, goes out as one self-contained HTML file
-(`frontends/rich.py`, shared by Webex and the PWA). It must stay inert even when the agent's text is
-hostile.
+Long or rich answers, and a `/diff` over 200 lines, go out as one self-contained file (`frontends/rich.py`, shared by Webex and the PWA). It must stay inert even if the agent's text is hostile.
 
-- Rendered with `markdown-it-py` with `html=False`: raw HTML in agent text is escaped, never passed
-  through. A `<script>` in a table cell, heading or emphasis is escaped too.
-- The page carries `<meta http-equiv="Content-Security-Policy" content="default-src 'none';
-  style-src 'unsafe-inline'; img-src data:">`: no script and no external resource can load, whichever
-  app opens the file.
-- No link is live: a URL stays text (the label, then the address in a code span), there is no `<a>` and
-  no `href` anywhere, images become `[image: alt]`, and `javascript:` and reference links get the same
-  treatment (D90).
-- The source text, the finished HTML and the preview each go through `scrub` before they leave the
-  process. If rendering raises, the answer falls back to text chunks.
-- Open check: whether Webex Android opens the file in the app or hands it to the browser, and that the
-  CSP survives either path. The E2E driver checks the downloaded file (CSP present, no `<script`, no
-  `href=`, no external `src=`, `url(http` or `@import`).
+- `markdown-it-py` with `html=False`: raw HTML is escaped, including `<script>` in a table cell, heading or emphasis.
+- `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:">`: no script, no external resource, whichever app opens it.
+- No live links: a URL stays text (label, then address in a code span); no `<a>`, no `href`; images become `[image: alt]`; `javascript:` and reference links likewise (D90).
+- Source text, finished HTML and preview each pass through `scrub`. If rendering raises, the answer falls back to text chunks.
+- Open check: whether Webex Android opens the file in-app or in the browser, and that the CSP survives both. The E2E driver checks the downloaded file (CSP present, no `<script`, no `href=`, no external `src=`, `url(http` or `@import`).
 
 ### Secrets leaking out
 
-- Everything sent to Webex or the PWA is scrubbed: message text, card content and attachments.
-  Generated attachments (diffs, `answer.html`) are scrubbed before upload. A file an agent sends with
-  `send_phone_file` is scrubbed when it is text and passes through byte for byte when it is binary (a
-  PNG, a PDF); `scrub_attachment` still refuses non-text for the relay's own attachments.
-- Logs are scrubbed on every record. Message bodies are never logged at INFO; with
-  `debug_bodies = true` and DEBUG level they are logged scrubbed and truncated. Both are off by default.
-- `relay` commands scrub what they print, and config diffs hide the secrets they reveal.
+- Everything sent to Webex or the PWA is scrubbed: text, cards, attachments. Generated attachments (diffs, `answer.html`) are scrubbed before upload.
+- `send_phone_file`: text is scrubbed, binary (PNG, PDF) passes byte for byte; `scrub_attachment` still refuses non-text for the relay's own attachments.
+- Logs are scrubbed on every record. Bodies are never logged at INFO; with `debug_bodies = true` and DEBUG they are logged scrubbed and truncated. Both off by default.
+- `relay` commands scrub what they print; config diffs hide secrets.
 
 ### The Webex token
 
-There is one bot and one token (Keychain service `agent-relay`, account `webex-bot-token`).
-`relay setup token --stdin` takes it from stdin only (never argv, so never shell history or `ps`),
-refuses a terminal, and never prints it. relayd reads it again before every Webex attempt and keeps
-running when Webex rejects it (D121); `relay doctor` tests it with `GET /people/me` and reports a
-rejection without printing it. A token that reached a transcript or a screen share should be
-regenerated at developer.webex.com. The three app bots of the October round are retired (D116); their
-Keychain items are deleted and the bots are deleted by the owner at developer.webex.com.
+- One bot, one token (Keychain service `agent-relay`, account `webex-bot-token`).
+- `relay setup token --stdin` reads stdin only (never argv, so never shell history or `ps`), refuses a terminal, never prints it.
+- relayd re-reads it before every attempt and keeps running when Webex rejects it (D121); `relay doctor` tests it with `GET /people/me` and reports a rejection without printing it.
+- A token seen in a transcript or screen share: regenerate it at developer.webex.com.
+- The three October-round app bots are retired (D116): Keychain items deleted; the owner deletes the bots.
 
 ### Away mode is manual
 
-Nothing turns away mode on by itself: there is no screen-lock probe and no automatic trigger (D120).
-The flag is global and only `/away`, `/back` and `relay away on|off` change it, so a locked or sleeping
-Mac never hands desk sessions to the phone on its own. While away is off, the router withholds the
-events of desk-started sessions from the phone and the relay answers none of their tool calls.
+- No screen-lock probe, no automatic trigger (D120). Only `/away`, `/back`, `relay away on|off` change the global flag, so a locked or sleeping Mac never hands desk sessions to the phone.
+- While away is off, the router withholds desk-started sessions' events from the phone and the relay answers none of their tool calls.
 
 ### The E2E driver's person token
 
-`scripts/phone_e2e.py` acts as the owner so that card taps and file uploads can be checked through Webex
-(D123). It needs a person token, which is far more powerful than the bot's.
+`scripts/phone_e2e.py` acts as the owner (D123), so it needs a person token, far more powerful than the bot's.
 
-- It is read through `webex-cli`'s `get_access_token()` (the OAuth token `webex-cli` already keeps),
-  never from a file the relay writes, and the relay's Keychain never holds it.
-- It is sent only to `https://webexapis.com/v1/`, redirects are never followed, and every error text goes
-  through a redactor that knows the token plus `agent_relay.scrub`. It is never printed, logged, put in
-  an exception, a report or a fixture; the tests use a fake token.
-- The driver refuses to start without `RELAY_LIVE=1`, refuses a room whose other member is not a
-  `@webex.bot` account, runs live sessions only in `.scratch` with at most 3 per adapter per run, and
-  deletes the messages it posted at the end.
+- Read through `webex-cli`'s `get_access_token()` (the OAuth token it already keeps); never in a relay file or the relay's Keychain.
+- Sent only to `https://webexapis.com/v1/`; redirects never followed; every error text goes through a redactor that knows the token plus `agent_relay.scrub`.
+- Never printed, logged, put in an exception, report or fixture; tests use a fake token.
+- Refuses without `RELAY_LIVE=1`; refuses a room whose other member is not a `@webex.bot`; `.scratch` only, ≤ 3 sessions per adapter per run; deletes its messages at the end.
 
 ### `send_phone_file`: the workspace jail
 
-The relay-mcp tool `send_phone_file(path, caption?)` lets an agent hand a file to the phone, so the path
-is untrusted input (`core/send_file.py`).
+The path is untrusted input (`core/send_file.py`).
 
-- The path (relative to the workspace, absolute, or `~/…`, which is expanded and then judged like any
-  absolute path) is resolved with symlinks followed and must lie inside the session's resolved
-  workspace. A link inside the workspace that points out is refused, and so is a linked folder.
-- The target must be a regular file (directories, FIFOs and devices are refused; it is opened with
-  `O_NOFOLLOW|O_NONBLOCK` and checked again with `fstat`) and at most `attachments.max_bytes`, checked
-  before reading and again after scrubbing.
-- Text is scrubbed; binary goes through as it is. Error messages name the path the agent gave, never the
-  resolved target.
-- Like `notify_phone` it is honoured only for phone-held sessions and, while away, desk sessions, and
-  never while the relay is paused.
+- Relative, absolute or `~/…` (expanded, then judged like any absolute path); resolved with symlinks followed; must lie inside the session's resolved workspace. A link (file or folder) pointing out is refused.
+- Must be a regular file (directories, FIFOs, devices refused; opened with `O_NOFOLLOW|O_NONBLOCK`, re-checked with `fstat`) and ≤ `attachments.max_bytes`, checked before reading and after scrubbing.
+- Error messages name the path the agent gave, never the resolved target.
+- Honoured only for phone-held sessions and, while away, desk sessions; never while paused.
 
 ### Files from the phone
 
-Incoming photos and files come only from the pinned person. The download goes only to the Webex API
-host with the bot token. A file sent at the top level is held in `<app-support>/inbox-staging/` (`0700`,
-files `0600`) until the next `/new` or `attachments.hold_s`, then moved into the new session's inbox or
-swept by housekeeping. A failed or unsupported download is named in one `⚠️` line, never skipped
-silently. Each file is written under `<workspace>/<attachments.inbox_dir>/<session>/`
-(default `.agent-relay/inbox`): folders `0700`, files `0600` created with `O_EXCL`/`O_NOFOLLOW`, a name
-reduced to one safe path component, an inbox path that must stay inside the workspace, and no link
-followed anywhere on the way. Files over `attachments.max_bytes` (20 MB) are refused even when the
-download declares no length. The inbox is added to `.git/info/exclude`, never to the project's
-`.gitignore`. Held files expire after `attachments.hold_s`, and a session's folder is deleted a day after
-it ends. Incoming files are the user's own and are not scrubbed; what the relay sends out still is.
+- Only from the pinned person; downloaded only from the Webex API host with the bot token.
+- Top-level files wait in `<app-support>/inbox-staging/` (`0700`, files `0600`) until the next `/new` or `attachments.hold_s`, then move to the session's inbox or are swept.
+- Written to `<workspace>/<attachments.inbox_dir>/<session>/` (default `.agent-relay/inbox`): folders `0700`, files `0600` via `O_EXCL`/`O_NOFOLLOW`, name reduced to one safe component, inbox must stay inside the workspace, no link followed on the way.
+- Over `attachments.max_bytes` (20 MB) refused, even when the download declares no length. A failed or unsupported download gets one `⚠️` line, never skipped silently.
+- Inbox added to `.git/info/exclude`, never `.gitignore`. Session folder deleted a day after the session ends.
+- Incoming files are the user's own and are not scrubbed; outgoing still is.
 
 ### Cloning from the phone
 
-`/ws` clones only `https://<host>/<owner>/<repo>` or `git@<host>:<owner>/<repo>` with a host in
-`ws.clone_hosts`, into a new folder directly under a configured root. It runs `git clone -- <url>
-<target>` without a shell and with only `HOME`, `PATH`, `SSH_AUTH_SOCK` and `GIT_TERMINAL_PROMPT=0` in
-the environment, in its own process group under `ws.clone_timeout_s`; on timeout the whole group is
-killed. git's output is scrubbed and cut to its last lines before the phone sees it, and a failed or
-partial clone is removed.
+- `/ws` clones only `https://<host>/<owner>/<repo>` or `git@<host>:<owner>/<repo>` with a host in `ws.clone_hosts`, into a new folder directly under a root.
+- `git clone -- <url> <target>`, no shell, env limited to `HOME`, `PATH`, `SSH_AUTH_SOCK`, `GIT_TERMINAL_PROMPT=0`; own process group under `ws.clone_timeout_s`, whole group killed on timeout.
+- git output is scrubbed and cut to its last lines; a failed or partial clone is removed.
 
 ## Controls and their tests (AC-40)
 
-Each §5.10 requirement, where it is enforced, and the test that fails if it regresses.
+Each PLAN §5.10 requirement, where it is enforced, and the test that fails if it regresses. A cite that starts
+with `::` is in the same file as the previous cite.
 
 | Control | Enforced in | Tests |
 |---|---|---|
@@ -226,13 +190,11 @@ Each §5.10 requirement, where it is enforced, and the test that fails if it reg
 | Clones: allowed hosts only, no shell, minimal env, killed on timeout, nothing left on failure | `core/workspaces.py` | `tests/core/test_workspaces_phone.py::test_other_urls_are_refused`, `::test_a_host_outside_the_allow_list_is_refused_and_the_list_is_named`, `::test_git_sees_only_the_allow_listed_environment`, `::test_clone_runs_git_without_a_shell_and_with_the_allow_listed_environment`, `::test_a_clone_that_takes_too_long_is_killed_and_removed`, `::test_a_failure_removes_a_partial_checkout`, `::test_git_output_is_scrubbed_and_cut_to_the_last_lines` |
 | Agent links neutralised | `frontends/text.py`, `frontends/webex/links.py` | `tests/frontends/test_links.py::test_links_become_code_spans`, `::test_agent_text_posted_to_webex_has_no_live_links` |
 
-## What this does not protect against
+## Not protected against
 
-- Malware running as this user. It can read the Keychain items it is allowed to, talk to the socket,
-  and drive the apps directly; the relay adds no new capability for it beyond what the apps expose.
-- An agent doing something harmful with a tool call. There are no approvals and no deny list (D117): the
-  relay allows every call it answers, and the "never do while away" list in the `agent-relay-away`
-  skill binds the agent, not the relay. `/panic` stops the turns; it cannot undo what already ran.
-- Whoever controls the Webex account (see above): they can run anything on this Mac, and nothing
-  slows them.
-- Webex itself. Message content transits the Webex service like any other Webex message.
+| Risk | Why |
+|---|---|
+| Malware running as this user | It can read permitted Keychain items, use the socket and drive the apps directly; the relay adds nothing beyond what the apps expose |
+| An agent doing harm with a tool call | No approvals and no deny list (D117); the away skill's list binds the agent, not the relay. `/panic` stops turns but cannot undo what ran |
+| Whoever controls the Webex account | Can run anything on this Mac; nothing slows them |
+| Webex itself | Messages transit the Webex service like any other |
