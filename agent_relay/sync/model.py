@@ -99,9 +99,19 @@ class CatalogEntry(BaseModel):
     server: ServerDef
     variants: dict[HarnessFile, ServerDef] = Field(default_factory=dict)
     sources: list[HarnessFile] = Field(default_factory=list)
+    gateway: bool = False
+    gateway_url: str | None = None
 
     def for_harness(self, harness: HarnessFile) -> ServerDef:
         return self.variants.get(harness, self.server)
+
+    def upstream(self) -> str | None:
+        """The remote server the gateway signs in to and forwards to, when this entry is gatewayed."""
+        if not self.gateway:
+            return None
+        if self.gateway_url:
+            return self.gateway_url
+        return self.server.url if self.server.transport in ("http", "sse") else None
 
 
 class Catalog(BaseModel):

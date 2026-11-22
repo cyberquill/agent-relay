@@ -103,3 +103,18 @@ def test_a_very_long_unbroken_word_does_not_stall_the_scrubber() -> None:
     assert scrub_text("a" * 60_000).startswith("aaa")
     assert scrub_text("aB3" * 20_000) == REDACTED
     assert time.monotonic() - started < 2.0
+
+
+def test_oauth_codes_are_redacted_but_an_authorize_link_stays_usable() -> None:
+    callback = "http://127.0.0.1:33418/oauth/callback?code=4/0AfJohXkabcdef123456&state=abc123"
+    assert "4/0AfJohXkabcdef123456" not in scrub_text(callback)
+    assert "state=abc123" in scrub_text(callback)
+    assert "id_token=eyJhbGciOiJSUzI1NiJ9" not in scrub_text(
+        "https://x.test/cb?id_token=eyJhbGciOiJSUzI1NiJ9&s=1"
+    )
+    authorize = (
+        "https://mcp.example.test/authorize?response_type=code&client_id=Xk3pQ9vL2mNb7TzR4wYc8HdJ6sFa1UeG"
+        "&state=Qm7VbN3xK9pLw2ZtR5yHc8DfJ4sGa6UeT1oIuXn0&redirect_uri=http%3A%2F%2F127.0.0.1%3A8791%2Fcb"
+        "&code_challenge=E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM&code_challenge_method=S256"
+    )
+    assert scrub_text(authorize) == authorize

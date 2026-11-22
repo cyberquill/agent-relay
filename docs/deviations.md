@@ -38,10 +38,10 @@ flowchart LR
 | Cursor CDP | D7, D31, D32, D33, D34, D35, D83, D133, D134 |
 | Hooks and parking | D4, D13, D61, D63, D64, D77, D124, D129, D135, D137, D139, D140, D141, D142 |
 | Skills and bundles | D37, D38, D39, D40, D41, D97 |
-| MCP and config sync | D42, D43, D44, D45, D46, D47 |
+| MCP and config sync | D42, D43, D44, D45, D46, D47, D145 |
 | Doctor and updates | D48, D49, D50 |
 | Ops and install | D14, D52, D53, D54, D55, D56, D60, D71, D72, D74, D126 |
-| Security | D58, D73, D78, D79, D90, D96 |
+| Security | D58, D73, D78, D79, D90, D96, D145 |
 | Testing | D36, D57, D123, D136 |
 
 ## Entries
@@ -1754,3 +1754,17 @@ flowchart LR
 - **Why:** found live on 2026-11-22 with OpenCode: a zip failed the turn (`file part media type application/zip functionality not supported`); a HEIC raised `ImageDecodeError` and left the session busy until `/stop`; a CSV worked on one model and, once in the history, failed every later turn on a GitHub Copilot model (`text/csv` not supported). As a path, the agent read the CSV (sum 47) and listed the zip with its own tools.
 - **Evidence:** `tests/adapters/test_attachments.py::test_opencode_gets_text_zip_and_heic_as_paths_not_file_parts`, `::test_opencode_prompts_carry_images_and_pdfs_as_file_parts`; live: JPG described, CSV `47`, zip listed, HEIC no longer wedges the session. A PDF is still sent as a part; one model answered that it cannot read PDFs
 - **Where:** `agent_relay/models/attachments.py`, `agent_relay/adapters/opencode/client.py`, `agent_relay/adapters/opencode/adapter.py`, `agent_relay/adapters/base.py`, `agent_relay/frontends/webex/handlers.py`
+
+### D145 · MCP servers that need a browser sign-in go through a relay gateway
+
+- **Plan:** `docs/PLAN.md` §5 covers the MCP list (`relay config sync`) and the Webex front end; neither signs in to an MCP server.
+- **Built:**
+  - `gateway/`: relayd runs a loopback reverse proxy (`gateway.enabled`, port 8791, over the same server class as the PWA). `/mcp/<name>` forwards to the real server with its OAuth access token. Apps send only a gateway key (`X-Relay-Gateway-Key`, Keychain `agent-relay-mcp`/`gateway.key`, rendered as `${keychain:gateway.key}`).
+  - OAuth 2.1 as a public client: discovery (RFC 9728, 8414), dynamic registration (RFC 7591), PKCE S256, refresh with one lock per server. Tokens, client and discovery are one Keychain item per server (`agent-relay-gateway`).
+  - The sign-in link is posted to the Webex space. The browser's redirect goes to a loopback address the phone cannot open, so the owner pastes that address back; `Handlers.text` finishes the sign-in from it. At the Mac the same link ends on the gateway's own `/oauth/callback`.
+  - `relay gateway add|remove|status|client|signout` flags servers in `mcp.yaml` (`gateway`, `gateway_url`); `relay config sync` renders those servers as the gateway address in every app; `relay config import` keeps their real address. `/mcp` shows state and starts or ends a sign-in.
+  - `scrub.py` redacts `code=` and `id_token=` values and no longer redacts a link's `state`, `code_challenge` and `client_id`.
+- **Why:** an `rms_ack` phone chat failed on 2026-11-21: the Agent Host takes MCP tokens from an open VS Code window, and the push for `mcp.atlassian.com` failed (`Authentication failed for resource`), after which every session logged `MCP server 'atlassian' requires authentication`. Atlassian has no device-code flow, and a desktop client's redirect cannot reach a phone, so one relay-owned sign-in that every app shares, driven by a pasted address, works for any OAuth server.
+- **Not done:** pre-registered clients are stored (`relay gateway client`) but nothing is pre-registered for Webex or GitHub, which do not allow open registration; the paste-back message cannot be deleted by the bot; a server that needs no OAuth (API token) needs no gateway.
+- **Evidence:** `tests/gateway/` (a fake MCP server with OAuth: discovery, registration, PKCE, refresh, 401 retry, streaming, key check), `tests/sync/test_gateway_sync.py`, `tests/frontends/test_mcp_command.py`, `tests/test_scrub.py`
+- **Where:** `agent_relay/gateway/`, `agent_relay/sync/gateway.py`, `agent_relay/sync/plan.py`, `agent_relay/cli/gateway.py`, `agent_relay/frontends/webex/commands/mcp.py`, `agent_relay/daemon.py`, `agent_relay/scrub.py`

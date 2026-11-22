@@ -6,7 +6,7 @@ Last updated 2026-11-22 18:30, after the agent-only items (D140, D141, spikes, D
 |---|---|
 | [`docs/PLAN.md`](docs/PLAN.md) | The plan |
 | [`sandbox/08-usability-round.md`](sandbox/08-usability-round.md) | November round plan: decisions U1–U14, phases P0–P8 |
-| [`docs/deviations.md`](docs/deviations.md) | Departures D1–D141 |
+| [`docs/deviations.md`](docs/deviations.md) | Departures D1–D145 |
 | [`docs/acceptance.md`](docs/acceptance.md) | Criteria to tests: AC-1–AC-40, OR-1–OR-20 (October), UR-1–UR-8 (November) |
 | [`docs/testing.md`](docs/testing.md) | Live results per app and scenario |
 | [`docs/user-guide.md`](docs/user-guide.md) | Start here as a user |
@@ -38,6 +38,8 @@ No **Code** items are left: everything below needs the owner.
 | October: notifications show the bot name clearly; space sections sync to the phone (now one space) | Phone | October round |
 | October: a photo reaches each app natively (an HTTPS clone under launchd: done 2026-11-22) | Desk + Phone | October round |
 | October: window reload vs VS Code follow-ups | Desk | D85 |
+| MCP gateway (D145): `relay gateway add atlassian`, `relay config set gateway.enabled true`, `relay config sync --apply`, restart relayd, `/mcp signin atlassian`, paste the failed address. Then confirm a phone chat's Atlassian tools work and that tokens refresh after an hour | Desk + Phone | D145 |
+| MCP gateway: Webex and GitHub do not allow open registration; register a client (`relay gateway client`) or rely on their own sign-in. Rotate the Webex MCP client secret that OpenCode printed in plain text | Desk | D145 |
 | Upstream: `cursor-agent` sometimes appends "Error: RetriableError: WritableIterable is closed" to a woken turn's reply (the reply is complete). Report to Cursor if it persists | Owner | |
 
 ### Scenario 8 steps (done live 2026-11-22 for Copilot CLI and Cursor CLI; VS Code and Cursor desktop remain)

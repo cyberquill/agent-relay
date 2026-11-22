@@ -36,6 +36,7 @@ class N(StrEnum):
     QUEUE = "queue"
     STEER = "steer"
     DIGEST = "digest"
+    MCP = "mcp"
 
 
 TABLE: list[tuple[str, bool, Parsed]] = [
@@ -114,6 +115,11 @@ TABLE: list[tuple[str, bool, Parsed]] = [
     ("/digest", False, Command(N.DIGEST)),
     ("/digest", True, Invalid(N.DIGEST, "`/digest` only works outside a session thread")),
     ("/digest now", False, Invalid(N.DIGEST, "`/digest` takes no arguments", ("now",))),
+    # /mcp
+    ("/mcp", False, Command(N.MCP)),
+    ("/mcp signin atlassian", False, Command(N.MCP, ("signin", "atlassian"), None)),
+    ("/mcp signout atlassian", False, Command(N.MCP, ("signout", "atlassian"), None)),
+    ("/mcp", True, Invalid(N.MCP, "`/mcp` only works outside a session thread")),
     # away / back / misc
     ("/away", False, Command(N.AWAY)),
     ("/away on", True, Command(N.AWAY, ("on",))),

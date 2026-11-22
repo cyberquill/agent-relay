@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import secrets
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from agent_relay import paths
+from agent_relay import paths, settings
 from agent_relay.fileops import Manifest, PlannedWrite, apply_writes
+from agent_relay.gateway.store import KEY_ACCOUNT
 from agent_relay.sync import catalog, cursor_permissions, jsonc
+from agent_relay.sync.gateway import keep_gateway_entries, point_at_gateway
 from agent_relay.sync.model import HARNESS_ORDER, Catalog, HarnessFile
 from agent_relay.sync.secrets import Resolver, Revealer, SecretStash, keychain_resolver
 
@@ -50,7 +53,7 @@ def plan_import(python: str | None = None) -> Plan:
 
 def _import(python: str | None) -> tuple[Plan, Catalog]:
     plan = Plan()
-    imported = catalog.import_all(plan.stash, python)
+    imported = keep_gateway_entries(catalog.import_all(plan.stash, python), catalog.load())
     file = paths.mcp_yaml()
     plan.writes.append(
         PlannedWrite(
@@ -82,16 +85,38 @@ def render_harness(source: Catalog, harness: HarnessFile, revealer: Revealer) ->
     return jsonc.dumps(rendered).encode()
 
 
+def _configured_gateway_port() -> int | None:
+    config = settings.load_config()
+    return config.gateway.port if config.gateway.enabled else None
+
+
+def _provide_gateway_key(plan: Plan, resolver: Resolver) -> None:
+    """The rendered files carry the gateway key; make one (stored only on apply) when none exists yet."""
+    if resolver(KEY_ACCOUNT) is not None:
+        return
+    plan.stash.found[KEY_ACCOUNT] = secrets.token_urlsafe(32)
+    stash = plan.stash
+    plan.revealer.resolver = lambda name: stash.found.get(name) or resolver(name)
+    plan.notes.append("a gateway key is created in the Keychain (service agent-relay-mcp)")
+
+
 def plan_sync(
     source: Catalog | None = None,
     python: str | None = None,
     resolver: Resolver = keychain_resolver,
     cursor_db: Path | None = None,
+    gateway_port: int | None = None,
 ) -> Plan:
+    """The native files for the catalog. With `gateway_port`, gatewayed servers go through the gateway."""
     if source is None and not paths.mcp_yaml().is_file():
         raise CatalogMissingError(paths.mcp_yaml())
     plan = Plan(revealer=Revealer(resolver))
     full = catalog.with_relay(source if source is not None else catalog.load(), python)
+    port = gateway_port if gateway_port is not None else _configured_gateway_port()
+    if port is not None:
+        full = point_at_gateway(full, port)
+        if any(entry.upstream() for entry in full.servers.values()):
+            _provide_gateway_key(plan, resolver)
     for harness in HARNESS_ORDER:
         file = catalog.native_path(harness)
         plan.writes.append(

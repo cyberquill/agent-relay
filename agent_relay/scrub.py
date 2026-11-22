@@ -34,7 +34,10 @@ _KEY_VALUE = re.compile(
     """
 )
 _URL_CREDS = re.compile(r"(?P<scheme>[a-z][a-z0-9+.-]*://)(?P<user>[^/\s:@]+):(?P<pw>[^/\s@]+)@", re.I)
-_HIGH_ENTROPY = re.compile(r"(?<![A-Za-z0-9+_-])[A-Za-z0-9+_-]{32,}={0,2}(?![A-Za-z0-9+_-])")
+_OAUTH_PARAM = re.compile(r"(?P<lead>[?&](?:code|id_token)=)(?P<value>[^&\s#]+)", re.I)
+_HIGH_ENTROPY = re.compile(
+    r"(?<![A-Za-z0-9+_-])(?<!state=)(?<!code_challenge=)(?<!client_id=)[A-Za-z0-9+_-]{32,}={0,2}(?![A-Za-z0-9+_-])"
+)
 
 
 def _looks_random(candidate: str) -> bool:
@@ -71,6 +74,7 @@ def _scrub_short(text: str) -> str:
     for pattern in _PATTERNS:
         out = pattern.sub(REDACTED, out)
     out = _URL_CREDS.sub(lambda m: f"{m['scheme']}{m['user']}:{REDACTED}@", out)
+    out = _OAUTH_PARAM.sub(lambda m: f"{m['lead']}{REDACTED}", out)
     out = _KEY_VALUE.sub(lambda m: f"{m['key']}{m['sep']}{m['quote']}{REDACTED}", out)
     out = _HIGH_ENTROPY.sub(lambda m: REDACTED if _looks_random(m.group(0)) else m.group(0), out)
     return out

@@ -22,6 +22,7 @@ Run as `uv run relay …` from the checkout. Every write command is a dry run wi
 | `relay skills dedupe [--apply]` | One copy of each skill ([below](#one-copy-of-each-skill)) |
 | `relay selftest cursor-cdp` | Open the Cursor CDP gate ([below](#cursor-desktop-cdp-off-by-default)) |
 | `relay pwa expose` | Print the `tailscale serve` command for the PWA |
+| `relay gateway add\|remove\|status\|client\|signout` | MCP servers behind the sign-in gateway ([below](#the-mcp-sign-in-gateway-off-by-default)) |
 
 Without `relay install`, run the daemon in a terminal: `uv run python -m agent_relay.daemon`.
 
@@ -153,6 +154,10 @@ relay config unset webex.bots              # remove a key the relay no longer kn
 | `cdp.enabled` / `cdp.port` | `false` / `9223` | Cursor CDP adapter |
 | `cdp.start_deadline_s` | `20` | A CDP turn not started by then is cleared |
 | `pwa.enabled` / `pwa.port` | `false` / `8787` | Browser front end |
+| `gateway.enabled` / `gateway.port` | `false` / `8791` | MCP sign-in gateway |
+| `gateway.signin_wait_s` | `600` | How long a sign-in link stays valid |
+| `gateway.signin_hold_s` | `45` | How long a request waits for a sign-in before it gets a 401 |
+| `gateway.refresh_margin_s` | `120` | A token this close to expiry is refreshed first |
 | `adapters.ahp` / `vscode` / `opencode` / `cursor_cli` | `true` | Set `false` to silence an app you never use |
 
 **Legacy settings** removed in the November round are still accepted in an old `relay.toml`: relayd ignores
@@ -290,6 +295,40 @@ A browser front end with the same commands as Webex, for use over Tailscale. Not
 - Listens on 127.0.0.1 only (not configurable). Every `/api` route answers 401 without the token.
 - One event stream carries each turn's final result (text since the last tool call, shown at turn end) and questions, scrubbed.
 - No approval cards, no per-tool progress lines.
+
+## The MCP sign-in gateway (off by default)
+
+Some MCP servers (Atlassian, Webex, GitHub) sign in through a browser. A phone chat cannot do that, so the
+chat reports `requires authentication`. With the gateway, relayd signs in once, keeps the tokens, and every
+app talks to relayd instead.
+
+```mermaid
+flowchart LR
+  A["App (any harness)"] -->|"http://127.0.0.1:8791/mcp/name<br/>X-Relay-Gateway-Key"| G["relayd gateway"]
+  G -->|"Bearer access token"| S["MCP server"]
+  G <-->|"tokens, client"| K[("Keychain<br/>agent-relay-gateway")]
+  G -->|"sign-in link"| W["Webex"]
+  W -->|"paste the failed address"| G
+```
+
+1. `relay gateway add atlassian` (a remote server; `--url https://…` for one run through a bridge such as `mcp-remote`).
+2. `relay config set gateway.enabled true`, then `relay config sync --apply` (every app now points at the gateway) and `relay stop && relay start`.
+3. On the phone: `/mcp signin atlassian`. Open the link and allow access. The page then cannot load (it points at the phone's own loopback): copy its address and paste it into the chat. At the Mac, opening the link finishes by itself.
+4. From then on tokens refresh by themselves. When one is refused, the phone gets a new link.
+
+| Command | Does |
+|---|---|
+| `relay gateway add NAME [--url URL]` / `remove NAME` | Flag a server of `mcp.yaml`; `sync` renders it through the gateway (`remove`: direct again) |
+| `relay gateway status` | Each gatewayed server, signed in or out |
+| `relay gateway client NAME --client-id ID [--secret-stdin] [--redirect-uri URI]` | Use an OAuth client you registered, for a server without open registration |
+| `relay gateway signout NAME` | Forget the tokens (the client is kept) |
+| `/mcp` · `/mcp signin NAME` · `/mcp signout NAME` | The same state, and signing in, from the phone |
+
+- Listens on 127.0.0.1 only. A request without the gateway key (Keychain `agent-relay-mcp`, item `gateway.key`, made on the first `sync`) gets 403.
+- Apps never hold a server's token. `relay config import` reads the apps back and keeps the real address of a gatewayed server.
+- Without a sign-in a request is held `gateway.signin_hold_s` seconds, then answered 401 without a `WWW-Authenticate` header, so the app does not start its own sign-in.
+- Servers sign in as a public client registered on the fly (PKCE S256). A server that does not allow that needs `relay gateway client`.
+- A gateway that cannot start (no Keychain) is logged; relayd keeps running.
 
 ## One MCP server list
 

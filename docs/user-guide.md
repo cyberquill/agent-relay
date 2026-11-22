@@ -39,6 +39,7 @@ Not set up yet? See [setup.md](setup.md). How it works inside: [architecture.md]
 | `/models <app>` | any | Models an app offers |
 | `/away [on\|off]`, `/back` | any | Away mode on / off (same everywhere); `/back` in a thread also says what it released |
 | `/doctor` | any | Same health report as `relay doctor` |
+| `/mcp` | top level | MCP servers behind the gateway and their sign-in state; `/mcp signin <name>` posts a sign-in link, `/mcp signout <name>` forgets it |
 | `/panic` | any | Confirm card (60 s), then stop everything; `/panic now` skips the card |
 | `/help` | any | Command list |
 
@@ -254,6 +255,12 @@ Chrome's debugging protocol. Off by default; breaks when Cursor's UI changes.
 - Same commands as the bot; off by default; `127.0.0.1` only; reach it from the phone over Tailscale.
 - Does not replace Webex. Setup: [operations.md](operations.md).
 
+## Optional: MCP sign-ins from the phone
+
+- A phone chat cannot open a browser, so an MCP server that needs a sign-in (Atlassian, Webex, GitHub) fails with `requires authentication`.
+- With the gateway on, relayd signs in once: `/mcp signin <name>` sends a link; open it on the phone, allow access, then copy the page's address (it will not load) and paste it into the chat.
+- At the Mac, opening the link finishes by itself. Setup: [operations.md](operations.md#the-mcp-sign-in-gateway-off-by-default).
+
 ## When something is wrong
 
 Start with `uv run relay doctor` (desk) or `/doctor` (phone). Every non-✅ line names its fix.
@@ -271,6 +278,7 @@ Start with `uv run relay doctor` (desk) or `/doctor` (phone). Every non-✅ line
 | A top-level file "never arrived" | It waits 10 min for `/new`, then is left behind. Resend with `/new` or in the thread |
 | A file got `⚠️ Skipped …` | The line says why (size, type, download). Resend smaller or in another format |
 | Cursor CLI reply ends "RetriableError: WritableIterable is closed" | Known `cursor-agent` issue; the reply is complete |
+| A chat says an MCP server "requires authentication" | `/mcp` shows its state; `/mcp signin <name>`. Not behind the gateway yet: `relay gateway add <name>` |
 | `vscode` follow-up: "window is closed" | Follow-ups go only to the original window; a reload counts as closing. Start a new chat |
 
 - Logs: `~/Library/Logs/agent-relay/` (`relayd.log`). Secrets are scrubbed, so logs are safe to share.

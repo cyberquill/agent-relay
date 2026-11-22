@@ -19,6 +19,7 @@ from agent_relay.frontends.webex.attachments import AttachmentIntake
 from agent_relay.frontends.webex.handlers import Context, Handlers
 from agent_relay.frontends.webex.renderer import Outbox, WebexRenderer
 from agent_relay.frontends.webex.ws_client import Activity, Connector, WebexWsClient, default_connector
+from agent_relay.gateway.signin import SignIn
 from agent_relay.log import get_logger, log_body
 from agent_relay.models.config import AttachmentsConfig, RelayConfig
 from agent_relay.models.events import utcnow
@@ -324,6 +325,7 @@ async def build_frontend(
     http: httpx.AsyncClient | None = None,
     connector: Connector = default_connector,
     doctor: Callable[[], Awaitable[str]] | None = None,
+    mcp: SignIn | None = None,
 ) -> tuple[WebexFrontend, WebexWsClient]:
     """The front end and websocket client for the bot.
 
@@ -336,7 +338,7 @@ async def build_frontend(
     outbox = Outbox(api, registry, config.webex.allowed_email)
     renderer = WebexRenderer(outbox, registry, config.renderer, default_queue_mode=config.queue.default_mode)
     inbox = Inbox(registry, config.attachments)
-    handlers = Handlers(service, renderer, doctor=doctor, inbox=inbox)
+    handlers = Handlers(service, renderer, doctor=doctor, inbox=inbox, mcp=mcp)
     access = AccessControl(registry, config.webex.allowed_email, me.id)
     frontend = WebexFrontend(
         api, registry, service, renderer, handlers, access, me.id, intake=AttachmentIntake(api, inbox)

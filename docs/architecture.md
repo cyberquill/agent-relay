@@ -12,6 +12,7 @@ flowchart LR
   subgraph MAC["Mac (launchd)"]
     WX["Webex front end<br/>outbound wss"] --> CORE["relayd core<br/>router · registry · away flag"]
     PWA["PWA front end<br/>127.0.0.1:8787"] -.-> CORE
+    GW["MCP gateway<br/>127.0.0.1:8791<br/>(off by default)"] -.-> CORE
     CORE --> DB[("SQLite<br/>relay.db")]
     CORE --> AHP["ahp adapter"] --> AH["VS Code Agent Host<br/>(Copilot)"]
     CORE --> VSB["vscode adapter"] --> RB["relay-bridge<br/>VS Code extension"]
@@ -28,6 +29,7 @@ flowchart LR
 | `relayd` | The daemon: Webex connection, session registry, one adapter per app | `agent_relay/daemon.py`, `core/` |
 | Webex front end | One bot, one 1:1 space, one thread per session | `frontends/webex/` |
 | PWA | Optional browser UI with the same commands; loopback only | `frontends/pwa/` |
+| MCP gateway | Optional loopback proxy that signs in to remote MCP servers once and holds their tokens; the sign-in link goes through Webex | `gateway/`, `sync/gateway.py` |
 | Adapters | Start and drive sessions in each app | `adapters/` |
 | `relay-hook` | Stdlib-only program installed into every app's hooks | `hook/relay_hook.py` |
 | OpenCode plugin | The hook equivalent for OpenCode | `plugins/opencode/agent-relay.ts` |
@@ -194,6 +196,7 @@ agent_relay/
   hook/        relay_hook.py (stdlib only), shims, installers
   mcp/         relay-mcp
   sync/        mcp.yaml import and render, skills dedupe
+  gateway/     MCP sign-in gateway: oauth, store, signin, app (proxy), service
   doctor/      checks and self-tests
   ops/         install, bundles, launchd, vsix
   cli/         the relay command

@@ -38,6 +38,7 @@ from agent_relay.frontends.pwa.server import build_pwa
 from agent_relay.frontends.webex.bot import build_frontend
 from agent_relay.frontends.webex.host import MAX_BACKOFF_S, MIN_BACKOFF_S, Built, PostedFile, WebexHost
 from agent_relay.frontends.webex.ws_client import Connector, default_connector
+from agent_relay.gateway.service import build_gateway, build_signin
 from agent_relay.ipc import IpcServer
 from agent_relay.log import configure, default_log_file, get_logger, set_debug_bodies
 from agent_relay.models.config import RelayConfig
@@ -289,6 +290,17 @@ async def serve(
     if expired:
         log.info(f"expired {expired} pending request(s) left from the last run")
     host = WebexHost(backoff=webex_backoff)
+    signin = (
+        build_signin(config.gateway, notify=lambda text: _post_top(host, text))
+        if config.gateway.enabled
+        else None
+    )
+    gateway = None
+    if signin is not None:
+        try:
+            gateway = build_gateway(config.gateway, signin)
+        except ValueError as problem:
+            log.error(f"the MCP gateway is not started: {problem}")
 
     async def build() -> Built:
         return await build_frontend(
@@ -299,6 +311,7 @@ async def serve(
             http,
             connector,
             doctor=core.doctor_text,
+            mcp=signin,
         )
 
     core.webex = host
@@ -321,6 +334,8 @@ async def serve(
     pwa = build_pwa(config.pwa, core.service, core.router, pwa_token, core.doctor_text)
     if pwa is not None:
         tasks.append(asyncio.create_task(pwa.server.run(), name="pwa"))
+    if gateway is not None:
+        tasks.append(asyncio.create_task(gateway.server.run(), name="mcp-gateway"))
     paused = " (paused by /panic; `/away` resumes)" if paths.pause_flag().exists() else ""
     log.info(f"relayd ready{paused}")
     waiter = asyncio.create_task(stop.wait())
@@ -334,15 +349,25 @@ async def serve(
         waiter.cancel()
         if pwa is not None:
             pwa.server.stop()
+        if gateway is not None:
+            gateway.server.stop()
         for task in tasks:
             task.cancel()
         for task in tasks:
             with contextlib.suppress(asyncio.CancelledError, Exception):
                 await task
+        if gateway is not None:
+            await gateway.close()
+        if signin is not None:
+            await signin.http.aclose()
         await ipc.stop()
         await core.router.stop()
         await registry.close()
         log.info("relayd stopped")
+
+
+async def _post_top(host: WebexHost, text: str) -> None:
+    await host.post_top(text)
 
 
 async def _post(host: WebexHost, session: SessionRecord, text: str) -> None:

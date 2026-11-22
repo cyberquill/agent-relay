@@ -31,7 +31,7 @@ flowchart LR
 ```
 
 - relayd only connects out (Webex websocket and REST, `127.0.0.1` app servers).
-- Nothing listens on the network unless the PWA is on, and then only on loopback.
+- Nothing listens on the network unless the PWA or the MCP gateway is on, and then only on loopback.
 
 ## Threats at a glance
 
@@ -80,6 +80,8 @@ PLAN §5 promised "never a global auto-approve". [D117](deviations.md) reverses 
 - IPC socket `0600` in a `0700` directory; every connection's peer uid is checked.
 - Secrets only in the Keychain; files the relay writes hold references, never values (`relay.toml` holds no secrets).
 - PWA (if on): `127.0.0.1` only, bearer token compared in constant time. Use `tailscale serve` (`relay pwa expose`), never Funnel.
+- MCP gateway (if on): `127.0.0.1` only; a request needs the gateway key (Keychain, compared in constant time), so another local process cannot use the signed-in servers. Tokens and OAuth clients are Keychain items (`agent-relay-gateway`), never files; the apps hold only the key.
+- A sign-in link is posted to the Webex space, and its callback address (with a one-time `code`) is pasted back there. The code is single use and bound to PKCE, so it is useless without the relay's verifier. Scrubbing redacts `code=` and `id_token=` values and keeps the `state`, `code_challenge` and `client_id` of the link so it still works.
 - Cursor's debug port gives any local process full control of Cursor. Opened only while the CDP adapter is enabled, and only by `relay selftest cursor-cdp` or the adapter, never by the background update check.
 
 ### Prompt injection into what the phone shows
@@ -175,6 +177,8 @@ with `::` is in the same file as the previous cite.
 | Attachments scrubbed as text before upload | `frontends/webex/api.py::scrub_attachment`, `frontends/webex/api.py::scrub_upload` | `tests/test_security.py::test_attachments_are_scrubbed_as_text_and_binary_is_refused`, `tests/frontends/test_upload_scrub.py` |
 | No bodies at INFO; DEBUG bodies scrubbed and off by default | `log.py::log_body`, `debug_bodies` | `tests/test_security.py::test_message_bodies_are_off_by_default_never_at_info_and_scrubbed` |
 | CDP port only while the adapter is enabled | `adapters/factory.py`, `cli/selftest.py`, `adapters/selftests.py` | `tests/test_security.py::test_the_cdp_adapter_exists_only_when_enabled`, `tests/test_cli_ops.py::test_cdp_selftest_refuses_while_the_adapter_is_off`, `tests/adapters/test_selftests.py` |
+| The MCP gateway answers 403 without the key; apps never see a server token | `gateway/app.py`, `sync/gateway.py` | `tests/gateway/test_app.py::test_a_request_without_the_key_is_refused`, `::test_the_key_is_swapped_for_the_servers_token`, `tests/sync/test_gateway_sync.py` |
+| OAuth codes are scrubbed; sign-in links stay usable | `scrub.py` | `tests/test_scrub.py::test_oauth_codes_are_redacted_but_an_authorize_link_stays_usable`, `tests/gateway/test_signin.py` |
 | PWA fails closed without a token | `daemon.py`, `frontends/pwa/server.py` | `tests/frontends/test_pwa.py` |
 | `/panic` pauses across restarts | `core/service.py::panic`, `paths.pause_flag` | `tests/frontends/test_flows.py::test_panic_pauses_and_cancels`, `tests/core/test_away_global.py::test_panic_pauses_forces_away_off_and_closes_questions`, `::test_set_away_for_on_resumes_after_a_panic`, `tests/frontends/test_panic_confirm.py::test_confirming_cancels_everything_and_pauses` |
 | Secrets only in the Keychain | `settings.py`, `sync/secrets.py` | `tests/test_settings.py`, `tests/sync/test_config_sync.py` |

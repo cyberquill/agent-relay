@@ -70,6 +70,17 @@ class PwaConfig(_Section):
     port: int = 8787
 
 
+class GatewayConfig(_Section):
+    """The local MCP sign-in gateway: remote MCP servers are reached through it, so the relay holds
+    their tokens and can ask for a sign-in on the phone."""
+
+    enabled: bool = False
+    port: int = Field(default=8791, ge=1024, le=65535)
+    signin_wait_s: int = Field(default=600, ge=30)
+    signin_hold_s: int = Field(default=45, ge=0, le=300)
+    refresh_margin_s: int = Field(default=120, ge=0)
+
+
 class CdpConfig(_Section):
     enabled: bool = False
     port: int = 9223
@@ -129,6 +140,7 @@ class RelayConfig(_Section):
     questions: QuestionsConfig = Field(default_factory=QuestionsConfig)
     park: ParkConfig = Field(default_factory=ParkConfig)
     pwa: PwaConfig = Field(default_factory=PwaConfig)
+    gateway: GatewayConfig = Field(default_factory=GatewayConfig)
     cdp: CdpConfig = Field(default_factory=CdpConfig)
     cursor_cli: CursorCliConfig = Field(default_factory=CursorCliConfig)
     opencode: OpenCodeConfig = Field(default_factory=OpenCodeConfig)

@@ -23,6 +23,7 @@ from agent_relay.frontends.card_state import InvalidInput
 from agent_relay.frontends.commands import Command, HelpHint, Invalid, Prompt, Unknown
 from agent_relay.frontends.surface import Surface
 from agent_relay.frontends.webex import cards
+from agent_relay.gateway.signin import SignIn
 from agent_relay.log import get_logger
 from agent_relay.models.attachments import Received
 from agent_relay.models.capabilities import Capability
@@ -65,11 +66,13 @@ class Handlers:
         renderer: Surface,
         doctor: Callable[[], Awaitable[str]] | None = None,
         inbox: Inbox | None = None,
+        mcp: SignIn | None = None,
     ) -> None:
         self.service = service
         self.renderer = renderer
         self.doctor = doctor or (lambda: health_summary(service))
         self.inbox = inbox
+        self.mcp = mcp
 
     async def reply(self, ctx: Context, markdown: str, file: tuple[str, bytes, str] | None = None) -> None:
         if ctx.session is not None:
@@ -84,6 +87,9 @@ class Handlers:
             await self.renderer.post_top(fallback, card=card)
 
     async def text(self, ctx: Context, text: str, received: Received | None = None) -> None:
+        if self.mcp is not None and (finished := await self.mcp.complete_from_url(text)) is not None:
+            await self.reply(ctx, finished)
+            return
         parsed = commands.parse(text, in_thread=ctx.session is not None)
         try:
             await self._dispatch(ctx, parsed, received)

@@ -30,7 +30,8 @@ class _Server(uvicorn.Server):
 
 
 class PwaServer:
-    def __init__(self, app: FastAPI, port: int) -> None:
+    def __init__(self, app: FastAPI, port: int, name: str = "PWA") -> None:
+        self.name = name
         config = uvicorn.Config(
             app,
             host=LOOPBACK,
@@ -44,7 +45,7 @@ class PwaServer:
         self._server = _Server(config)
 
     async def run(self) -> None:
-        log.info(f"PWA listening on http://{LOOPBACK}:{self._server.config.port}")
+        log.info(f"{self.name} listening on http://{LOOPBACK}:{self._server.config.port}")
         await self._server.serve()
 
     @property

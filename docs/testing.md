@@ -17,6 +17,7 @@ Must be green before every commit.
 
 - Tests use a temporary `RELAY_HOME`; nothing touches the real home folder.
 - Live tests are skipped unless `RELAY_LIVE=1`; that is the only allowed skip.
+- The MCP gateway is tested against `tests/fakes/oauth_server.py`, an MCP server with OAuth served through an httpx `MockTransport` (no network); `tests/gateway/rig.py` wires it to a `SignIn`.
 - `tests/test_no_stubs.py` fails on stub bodies and deferred-work markers; `tests/test_acceptance.py` checks
   [acceptance.md](acceptance.md) and the test map in [security.md](security.md).
 
