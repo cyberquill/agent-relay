@@ -1,0 +1,152 @@
+tests/adapters/test_opencode.py
+  s_f6c7c9d1bcc4f8::t_ada8b2dc88d2b4 29
+  s_f6c7c9d1bcc4f8::t_269dfdc3ce0dc6 463-488
+docs/acceptance.md
+  s_f6c7c9d1bcc4f8::t_f2bc4e97c64029 216-223
+agent_relay/paths.py
+  s_f6c7c9d1bcc4f8::t_d1537774fe97fb 90-111
+docs/spikes.md
+  s_f6c7c9d1bcc4f8::t_f2bc4e97c64029 33,301-312
+agent_relay/core/chats/__init__.py
+  s_f6c7c9d1bcc4f8::t_4d9d5d817b2815 1-25
+tests/core/test_chats_catalog.py
+  s_f6c7c9d1bcc4f8::t_72211f9b598c1e 1-5,7-10,13-40,44-127,131-139,141,143-155
+  s_f6c7c9d1bcc4f8::t_1df1026c37d46b 6,11-12,41-43,128-130,140,142
+agent_relay/adapters/opencode/adapter.py
+  s_f6c7c9d1bcc4f8::t_33e2346e6e7faf 71,294-312
+  s_f6c7c9d1bcc4f8::t_8a412cec6006ca 313
+tests/adapters/test_cursor_cli.py
+  s_f6c7c9d1bcc4f8::t_269dfdc3ce0dc6 494-503,506-515
+  s_f6c7c9d1bcc4f8::t_a12b7537f5683d 504-505
+agent_relay/models/capabilities.py
+  s_f6c7c9d1bcc4f8::t_b1644b31fd65c8 20,35
+tests/frontends/test_commands.py
+  s_f6c7c9d1bcc4f8::t_8e07df363df031 24-25,108-115
+agent_relay/adapters/ahp/adapter.py
+  s_f6c7c9d1bcc4f8::t_c8e566347dc964 564-565
+  s_f6c7c9d1bcc4f8::t_bf7b20ff0c4633 567-569
+  s_f6c7c9d1bcc4f8::t_b1644b31fd65c8 128,560-563,566,570-582
+  s_f6c7c9d1bcc4f8::t_a245694b87230a 583-584
+agent_relay/core/chats/copilot.py
+  s_f6c7c9d1bcc4f8::t_47ae2feffef8dc 64,93
+  s_f6c7c9d1bcc4f8::t_d0249b2ca81361 58-63,85,92
+  s_f6c7c9d1bcc4f8::t_32a6e7f1ca190b 1-57,65-84,86-91,94-110
+agent_relay/adapters/base.py
+  s_f6c7c9d1bcc4f8::t_b1644b31fd65c8 109-116
+docs/architecture.md
+  s_f6c7c9d1bcc4f8::t_e73c46c8347372 141-165,218-219
+docs/testing.md
+  s_f6c7c9d1bcc4f8::t_f2bc4e97c64029 123-128
+tests/core/chat_stores.py
+  s_f6c7c9d1bcc4f8::t_011cb60c8af2d5 87-88
+  s_f6c7c9d1bcc4f8::t_76ac97b256a891 167-172,174
+  s_f6c7c9d1bcc4f8::t_905b7776f0db92 58-60,120-122,175-177
+  s_f6c7c9d1bcc4f8::t_52daffbb9dfa64 1-8,10-57,61-86,89-119,123-166,173,178-184
+  s_f6c7c9d1bcc4f8::t_a49fcf1c027db1 9
+agent_relay/core/chats/text.py
+  s_f6c7c9d1bcc4f8::t_bf7b20ff0c4633 21-23
+  s_f6c7c9d1bcc4f8::t_8825b0828837e0 1-20,24-92
+docs/operations.md
+  s_f6c7c9d1bcc4f8::t_1e255b1bf817b8 59
+  s_f6c7c9d1bcc4f8::t_389f3fb1a02938 60
+tests/frontends/test_chats_command.py
+  s_f6c7c9d1bcc4f8::t_f08434a9a83c0b 1-9,11-163,165-184,186-194,196
+  s_f6c7c9d1bcc4f8::t_3dd1a40a7c2e03 10,164
+  s_f6c7c9d1bcc4f8::t_f2a7bbebb9f00c 185,195
+agent_relay/core/parking.py
+  s_f6c7c9d1bcc4f8::t_c4314f424a0eff 104,154
+agent_relay/core/chats/vscode.py
+  s_f6c7c9d1bcc4f8::t_b936f3caaa2727 88-94
+  s_f6c7c9d1bcc4f8::t_38297ccbc9a85b 103-104,120
+  s_f6c7c9d1bcc4f8::t_9564566a96ad46 1-87,95-102,105-119,121-163
+agent_relay/core/away.py
+  s_f6c7c9d1bcc4f8::t_c4314f424a0eff 22-25,33-40,42-43
+agent_relay/core/chats/model.py
+  s_f6c7c9d1bcc4f8::t_67971039b0dfa1 1-49
+tests/core/test_hooks.py
+  s_f6c7c9d1bcc4f8::t_534a33b59b154d 482-527
+tests/frontends/test_card_spec.py
+  s_f6c7c9d1bcc4f8::t_1aaa7032584c1b 26
+docs/user-guide.md
+  s_f6c7c9d1bcc4f8::t_ec144c01b2e8e4 35-36,178,229-247,250
+skills/agent-relay-recall/SKILL.md
+  s_f6c7c9d1bcc4f8::t_52a1b711dbed7f 13-14
+  s_f6c7c9d1bcc4f8::t_c48c08b4c4e663 15
+agent_relay/adapters/cursor_cli/adapter.py
+  s_f6c7c9d1bcc4f8::t_b1644b31fd65c8 487-506
+  s_f6c7c9d1bcc4f8::t_33e2346e6e7faf 131
+agent_relay/adapters/opencode/client.py
+  s_f6c7c9d1bcc4f8::t_33e2346e6e7faf 158-165
+tests/core/test_chats_readers.py
+  s_f6c7c9d1bcc4f8::t_905b7776f0db92 63-65
+  s_f6c7c9d1bcc4f8::t_a8332518ae0770 1-9,11-62,66-147,149-177,179-206,208-210
+  s_f6c7c9d1bcc4f8::t_3dd1a40a7c2e03 10,148,178,207
+tests/adapters/test_ahp.py
+  s_f6c7c9d1bcc4f8::t_a491c7f72ff9ef 704-705
+  s_f6c7c9d1bcc4f8::t_269dfdc3ce0dc6 694-703,706-726
+agent_relay/core/service/__init__.py
+  s_f6c7c9d1bcc4f8::t_b13300d7da4c3a 9,70,80
+  s_f6c7c9d1bcc4f8::t_0587a95c3ac854 29,53,136-149
+  s_f6c7c9d1bcc4f8::t_acba2217612bfa 150
+agent_relay/core/service/takeover.py
+  s_f6c7c9d1bcc4f8::t_d4724a6c1e7ef9 1-111,113-114,116-182,184-238,242-270
+  s_f6c7c9d1bcc4f8::t_539ddda93f1a96 112,115
+  s_f6c7c9d1bcc4f8::t_bf7b20ff0c4633 239-241
+  s_f6c7c9d1bcc4f8::t_8e07df363df031 183
+agent_relay/frontends/webex/cards/chats.py
+  s_f6c7c9d1bcc4f8::t_3e6e0218f19007 2-39,43-47,51-54
+  s_f6c7c9d1bcc4f8::t_bf7b20ff0c4633 40-42,48-50
+  s_f6c7c9d1bcc4f8::t_539ddda93f1a96 1
+tests/frontends/card_samples.py
+  s_f6c7c9d1bcc4f8::t_1aaa7032584c1b 8,13,55-73,112
+docs/deviations.md
+  s_f6c7c9d1bcc4f8::t_f2bc4e97c64029 31-32,39,44,1771-1786
+docs/security.md
+  s_f6c7c9d1bcc4f8::t_f2bc4e97c64029 78-84,202-203
+agent_relay/core/chats/catalog.py
+  s_f6c7c9d1bcc4f8::t_539ddda93f1a96 60
+  s_f6c7c9d1bcc4f8::t_089479a64c5d69 1-59,61-127
+agent_relay/frontends/webex/commands/chats.py
+  s_f6c7c9d1bcc4f8::t_bf7b20ff0c4633 53-57,69-71,104
+  s_f6c7c9d1bcc4f8::t_d4fb85cabd08ec 1-52,58-68,72-103,105-109,111-128
+  s_f6c7c9d1bcc4f8::t_539ddda93f1a96 110
+agent_relay/frontends/webex/cards/__init__.py
+  s_f6c7c9d1bcc4f8::t_539ddda93f1a96 6
+  s_f6c7c9d1bcc4f8::t_092e4dccd6f8eb 44
+tests/core/test_takeover.py
+  s_f6c7c9d1bcc4f8::t_ef1180b86ed09c 1-32,34,37,39,50-55,57,60-61,63-66,69-74,76,79-92,96,98-100,103-113,116-140,142-160,162-252
+  s_f6c7c9d1bcc4f8::t_c9bf7c132db4ea 33,35,40-49,58-59,93-95,97,101-102,114-115,141
+  s_f6c7c9d1bcc4f8::t_3dd1a40a7c2e03 36,38,62
+  s_f6c7c9d1bcc4f8::t_7f96b5f0968e44 56,68,75,78,161
+  s_f6c7c9d1bcc4f8::t_89a63bd5de6b97 67,77
+agent_relay/frontends/webex/renderer.py
+  s_f6c7c9d1bcc4f8::t_c4314f424a0eff 342
+agent_relay/core/chats/opencode.py
+  s_f6c7c9d1bcc4f8::t_0d3d069802c9ff 1-103
+agent_relay/core/service/away.py
+  s_f6c7c9d1bcc4f8::t_c4314f424a0eff 55-59
+agent_relay/core/chats/cursor.py
+  s_f6c7c9d1bcc4f8::t_df97cad73ae011 1-97
+tests/fakes/opencode.py
+  s_f6c7c9d1bcc4f8::t_269dfdc3ce0dc6 151-154
+README.md
+  s_f6c7c9d1bcc4f8::t_c15a017ef8e99c 18
+TODO.md
+  s_f6c7c9d1bcc4f8::t_5e33f63ff5bc91 43
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "78dc0dafe08b495a1d2b8fb6cf669cb8016537e9",
+  "prompts": {},
+  "sessions": {
+    "s_f6c7c9d1bcc4f8": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "bd60fac4-2052-43d0-acf9-21aedb2a24bf",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "Brijgopal Bharadwaj <brijgopalbharadwaj1999@gmail.com>"
+    }
+  }
+}
