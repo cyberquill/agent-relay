@@ -10,9 +10,9 @@ description: >-
 
 # Agent Relay: recall an earlier chat
 
-The user cannot resume an old desk chat from the phone. They start a new session and ask you to read the
-old one. **You are reading a transcript, not continuing that session.** Say so in your first line, then
-summarise what you found.
+To carry on with an old desk chat the user sends `/chats` from the phone. When they instead start a new
+session and ask you to read an old one, that is this skill. **You are reading a transcript, not continuing that session.** Say so in your first
+line, then summarise what you found.
 
 ## Rules
 

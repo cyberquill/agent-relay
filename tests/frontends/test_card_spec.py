@@ -23,7 +23,7 @@ def test_every_card_builder_passes_the_webex_subset_with_maximal_inputs(name: st
 
 # Modules of the cards package that build no card of their own.
 NO_BUILDERS = {"common", "root"}
-COVERED = {"new_session", "model_switch", "dashboard", "panic_confirm", "question", "queue", "ws"}
+COVERED = {"new_session", "model_switch", "dashboard", "chats", "panic_confirm", "question", "queue", "ws"}
 
 
 def test_every_card_module_has_samples_here() -> None:

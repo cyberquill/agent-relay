@@ -26,6 +26,7 @@ from agent_relay.models.events import (
     ApprovalResolved,
     ErrorEvent,
     Event,
+    Harness,
     Origin,
     QuestionAsked,
     SessionStarted,
@@ -459,3 +460,29 @@ async def test_a_silent_event_stream_times_out_so_it_is_opened_again() -> None:
             async for _ in client.events():
                 pass
     assert seen and seen[0]["read"] == STREAM_SILENCE_S
+
+
+# taking over a desk chat (D146)
+
+
+async def test_a_chat_the_server_knows_is_adopted_and_takes_the_next_prompt(rig: Rig) -> None:
+    rig.fake.sessions["ses_desk1"] = "/w/proj"
+    adopted = await rig.adapter.adopt("ses_desk1", "/w/proj", "Send the report")
+    assert adopted.origin is Origin.DESK and adopted.status is SessionStatus.IDLE
+    assert adopted.session_key == "opencode:ses_desk1" and adopted.title == "Send the report"
+    await rig.adapter.send_prompt(adopted, "and the summary too")
+    sid, body, directory = rig.fake.prompts[-1]
+    assert sid == "ses_desk1" and directory == "/w/proj"
+    assert body["parts"] == [{"type": "text", "text": "and the summary too"}]
+
+
+async def test_a_chat_the_server_does_not_know_is_not_adopted(rig: Rig) -> None:
+    with pytest.raises(AdapterUnavailableError, match="does not know that chat"):
+        await rig.adapter.adopt("ses_nope", "/w/proj", "x")
+    assert await rig.core.registry.find_session(Harness.OPENCODE, "ses_nope") is None
+
+
+async def test_adopting_while_the_server_is_down_says_so(rig: Rig) -> None:
+    rig.fake.up = False
+    with pytest.raises(AdapterUnavailableError, match="not reachable"):
+        await rig.adapter.adopt("ses_desk1", "/w/proj", "x")

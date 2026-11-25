@@ -125,6 +125,7 @@ class AhpAdapter(Adapter):
         cancel=True,
         wake_idle=True,
         attach_files=True,
+        adopt=True,
     )
 
     def __init__(
@@ -554,6 +555,31 @@ class AhpAdapter(Adapter):
         )
         await make_claim(self._registry, request.workspace, record.session_key)
         await self._start_turn(conn, record, chat, request.prompt, request.model, attachments)
+        return await self._registry.get_session(record.session_key) or record
+
+    async def adopt(self, native_id: str, workspace: str, title: str | None) -> SessionRecord:
+        """A chat the Agent Host lists (every VS Code Copilot chat does): the phone sends its next turn
+        into the chat VS Code shows. A chat only the Copilot CLI knows is not in that list."""
+        conn = await self._live()
+        summaries, _ = await self._list_pages(conn)
+        summary = next((s for s in summaries if uris.session_id(s.resource) == native_id), None)
+        if summary is None:
+            raise AdapterUnavailableError(
+                "VS Code's Agent Host does not list that chat (is its window open?)"
+            )
+        record = await self._registry.create_session(
+            SessionRecord(
+                session_key=f"{self.harness.value}:{native_id}",
+                harness=self.harness,
+                harness_id=native_id,
+                workspace=workspace,
+                title=(title or summary.title or None),
+                status=SessionStatus.RUNNING if summary.status & IN_PROGRESS else SessionStatus.IDLE,
+                origin=Origin.DESK,
+                extra={PROVIDER_EXTRA: summary.provider},
+            )
+        )
+        await self._attach(conn, record, summary)
         return await self._registry.get_session(record.session_key) or record
 
     async def _dispose(self, conn: Connection, session: str) -> None:

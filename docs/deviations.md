@@ -28,20 +28,20 @@ flowchart LR
 
 | Area | Entries |
 |---|---|
-| Core | D30, D59, D75, D76, D92, D93, D95, D98, D103, D106, D112, D113, D117, D120, D125 |
-| Webex | D3, D8, D9, D10, D62, D65, D66, D86, D87, D88, D89, D94, D99, D100, D101, D102, D104, D105, D107, D108, D109, D110, D111, D114, D116, D118, D119, D121, D122, D127, D128, D143 |
+| Core | D30, D59, D75, D76, D92, D93, D95, D98, D103, D106, D112, D113, D117, D120, D125, D146 |
+| Webex | D3, D8, D9, D10, D62, D65, D66, D86, D87, D88, D89, D94, D99, D100, D101, D102, D104, D105, D107, D108, D109, D110, D111, D114, D116, D118, D119, D121, D122, D127, D128, D143, D146 |
 | PWA | D51, D91 |
 | AHP (VS Code Copilot) | D1, D2, D5, D15, D16, D17, D18, D19, D67, D80, D115, D138 |
 | VS Code Local / relay-bridge | D6, D20, D21, D22, D23, D24, D70, D84, D85, D132 |
 | OpenCode | D11, D12, D69, D81, D130, D144 |
 | Cursor CLI | D25, D26, D27, D28, D29, D68, D82, D131 |
 | Cursor CDP | D7, D31, D32, D33, D34, D35, D83, D133, D134 |
-| Hooks and parking | D4, D13, D61, D63, D64, D77, D124, D129, D135, D137, D139, D140, D141, D142 |
+| Hooks and parking | D4, D13, D61, D63, D64, D77, D124, D129, D135, D137, D139, D140, D141, D142, D146 |
 | Skills and bundles | D37, D38, D39, D40, D41, D97 |
 | MCP and config sync | D42, D43, D44, D45, D46, D47, D145 |
 | Doctor and updates | D48, D49, D50 |
 | Ops and install | D14, D52, D53, D54, D55, D56, D60, D71, D72, D74, D126 |
-| Security | D58, D73, D78, D79, D90, D96, D145 |
+| Security | D58, D73, D78, D79, D90, D96, D145, D146 |
 | Testing | D36, D57, D123, D136 |
 
 ## Entries
@@ -1768,3 +1768,19 @@ flowchart LR
 - **Not done:** pre-registered clients are stored (`relay gateway client`) but nothing is pre-registered for Webex or GitHub, which do not allow open registration; the paste-back message cannot be deleted by the bot; a server that needs no OAuth (API token) needs no gateway.
 - **Evidence:** `tests/gateway/` (a fake MCP server with OAuth: discovery, registration, PKCE, refresh, 401 retry, streaming, key check), `tests/sync/test_gateway_sync.py`, `tests/frontends/test_mcp_command.py`, `tests/test_scrub.py`
 - **Where:** `agent_relay/gateway/`, `agent_relay/sync/gateway.py`, `agent_relay/sync/plan.py`, `agent_relay/cli/gateway.py`, `agent_relay/frontends/webex/commands/mcp.py`, `agent_relay/daemon.py`, `agent_relay/scrub.py`
+
+### D146 · The phone can take over a chat that was started at the desk
+
+- **Plan:** PLAN §5 and the user guide: the relay does not resume desk chats; the `agent-relay-recall` skill reads them.
+- **Built:**
+  - `core/chats/`: a read-only catalog of each app's own store (Cursor `agent-transcripts`, Copilot `session-state`, VS Code `chatSessions`, OpenCode `opencode.db` opened read-only). Each reader returns title, last prompt, last reply and whether the chat is running now. Reads run in threads with an 8 s cap per store; a failing store is skipped. Text is scrubbed.
+  - `/chats [days] [app] [workspace] [words]` (card, last 7 days, registered workspaces only, 10 rows) and `/takeover N`. Each row shows the title, the last prompt (80 characters) and the last reply's first and last 100 characters joined by `…`.
+  - Three ways in (`core/service/takeover.py`): **drive** (`Adapter.adopt`: Agent Host `listSessions` + attach, Cursor ACP `session/load`, OpenCode `GET /session/{id}`), **arm** (a running chat in a hooked app: `armed` makes its next Stop park even with away off) and **handoff** (a new phone session, titled `↪ <title>`, reading the transcript; Copilot CLI chats start in VS Code Copilot and Cursor desktop chats in the Cursor CLI). A drive that fails falls back to a handoff and says why. A running chat in Cursor CLI or OpenCode is refused.
+  - `taken_over` and `armed` session extras make the session phone-held; `/back` and away off clear them. Tool calls are allowed at once, as in any phone session.
+- **Why:** you asked to continue a desk chat from the phone. Only some apps can address a chat by id, so the relay picks the strongest way per chat instead of refusing the rest.
+- **Not done / unverified:**
+  - No live run yet. Unproven: that `cursor-agent` `session/load` accepts a Cursor desktop chat (so desktop chats use a handoff), that the Agent Host attaches a chat only the Copilot CLI wrote (so those use a handoff), that `relay-bridge` can open an existing VS Code chat (VS Code chats use a handoff), and the Android look of the `/chats` card.
+  - A handoff is a new session that summarises, never a true continuation; the thread says so.
+  - Cursor titles are the first prompt: Cursor's own title lives in `state.vscdb`, which can pass 10 GB and is never opened.
+- **Evidence:** read-only smoke against the real stores on 2026-11-25 (40 chats in 0.6 s; titles and snippets sensible; hook session ids equal store ids for VS Code, Copilot CLI and Cursor, see S11); `tests/core/test_chats_readers.py`, `tests/core/test_chats_catalog.py`, `tests/core/test_takeover.py`, `tests/frontends/test_chats_command.py`, `tests/core/test_hooks.py::test_a_chat_the_phone_took_over_parks_at_its_stop_even_with_away_off`, adopt tests in `tests/adapters/`
+- **Where:** `agent_relay/core/chats/`, `agent_relay/core/service/takeover.py`, `agent_relay/core/away.py`, `agent_relay/core/parking.py`, `agent_relay/adapters/*/adapter.py`, `agent_relay/frontends/webex/commands/chats.py`, `agent_relay/frontends/webex/cards/chats.py`

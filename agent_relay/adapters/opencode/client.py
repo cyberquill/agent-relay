@@ -155,6 +155,14 @@ class OpenCodeClient:
             raise OpenCodeError("POST /session returned no id")
         return str(created["id"])
 
+    async def has_session(self, session_id: str, directory: str | None) -> bool:
+        """Whether this server knows the session (a chat from the TUI is in the same database)."""
+        try:
+            found = await self._call("GET", f"/session/{session_id}", directory=directory)
+        except OpenCodeError:
+            return False
+        return isinstance(found, dict) and found.get("id") == session_id
+
     async def prompt(
         self,
         session_id: str,

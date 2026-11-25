@@ -101,7 +101,7 @@ class ParkManager:
         if stop_hook_active and blocks == 0:
             log.info(f"{session.session_key}: another stop hook is already continuing; not parking")
             return ParkResult("skipped")
-        if not await away.is_away(self._registry, session.workspace):
+        if not (away.armed(session) or await away.is_away(self._registry, session.workspace)):
             await self._set(session, SessionStatus.IDLE, 0, None)
             return ParkResult("skipped")
         limit = self.block_limit(session.harness)
@@ -151,7 +151,7 @@ class ParkManager:
                 await self._registry.kv_delete(release_key)
                 await self._set(session, SessionStatus.IDLE, 0, None)
                 return ParkResult("released", reason)
-            if not await away.is_away(self._registry, session.workspace):
+            if not (away.armed(session) or await away.is_away(self._registry, session.workspace)):
                 await self._set(session, SessionStatus.IDLE, 0, None)
                 return ParkResult("released", AWAY_OFF_REASON)
             queued = await self._registry.pop_queued(key, ("prompt", "steer"))

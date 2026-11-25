@@ -52,6 +52,11 @@ class AwayControl:
 
     async def _hand_to_desk(self, session: SessionRecord) -> bool:
         """A phone chat the desk can also see becomes a desk session: away mode decides for it from now on."""
+        if away.taken_over(session):
+            await self._deps.registry.set_session_extra(session.session_key, away.TAKEN_OVER, False)
+            await self._deps.registry.set_session_extra(session.session_key, away.ARMED, False)
+            log.info(f"handed taken-over {session.session_key} back to the desk")
+            return True
         if session.harness not in away.DESK_VISIBLE or not away.phone_held(session):
             return False
         await self._deps.registry.set_session_extra(session.session_key, away.AT_DESK, True)

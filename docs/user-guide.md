@@ -32,6 +32,8 @@ Not set up yet? See [setup.md](setup.md). How it works inside: [architecture.md]
 | `/model [name]` | thread | Change the model from the next turn (bare: a picker card) |
 | `/queue [queue\|steer\|interrupt\|clear]` | thread | Mid-turn behaviour; bare: a card |
 | `/steer <message>` | thread | Nudge the running turn once |
+| `/chats [days] [app] [ws] [words]` | top level | Card of desk chats from the last 7 days (`3d`, `2w`, `copilot`, a workspace name or a word narrows it); **Continue** picks one up |
+| `/takeover N` (`/continue N`) | top level | Carry on with chat N of the last `/chats` list |
 | `/sessions` | any | Card: pick a session, then Status, Diff, Stop or Back (works 15 min) |
 | `/digest` | top level | Every session in one message; "Waiting for you" lists open questions |
 | `/apps` | any | Apps and whether each is reachable |
@@ -173,7 +175,7 @@ rest show as a file chip.
 
 - While on, `/status` and every thread's first line show 🏝️.
 - Phone-started sessions behave the same with away on or off.
-- `/back` releases parked desk sessions and hands VS Code and Cursor desktop chats started from the phone back to the desk.
+- `/back` releases parked desk sessions and hands VS Code and Cursor desktop chats started from the phone back to the desk. It also hands back any chat you took over with `/chats` (turning away off hands back all of them).
 - While away, agents can reach you via `relay-mcp`:
 
   | Tool | Does |
@@ -224,9 +226,28 @@ Top-level `/ws` then sends a menu:
 - Avoid typing at the desk while the phone drives the same session: the two interleave.
 - Copilot sessions started before D138 ran in a hidden second chat and do not appear: read them with `agent-relay-recall`.
 
+### Carrying on with a desk chat: `/chats`
+
+`/chats` lists chats started at the desk in the last 7 days, in your registered workspaces, newest first.
+
+- Each row: app, folder, age; the chat's title; `You:` the last prompt (about 80 characters); then the last reply's first and last 100 characters joined by `…`.
+- `/chats 14d`, `/chats 2w`, `/chats copilot`, `/chats myproject`, `/chats parser` narrow it (they combine). At most 10 rows; the footer says how many more and how many sit in folders that are not workspaces.
+- **Continue** (or `/takeover N`) opens a thread with a recap, and the relay picks the way:
+
+  | Chat | What happens | The thread says |
+  |---|---|---|
+  | Finished, in VS Code Copilot (Agent Host lists it), Cursor CLI or OpenCode | **Continues in place**: your next message is that chat's next turn | "Reply here to send this chat its next turn" |
+  | Running at the desk now, in an app whose hooks the relay installs (Cursor, VS Code, VS Code Copilot, Copilot CLI) | **Armed**: when the turn ends the chat holds (🅿️) and your reply continues the same turn | "It is running at the desk…" |
+  | Anything else (Copilot CLI, Cursor desktop, VS Code chat, or an app that refuses to load it) | **Handoff**: a **new** session in the same workspace that reads the transcript, titled `↪ <title>`; the desk chat is untouched | "This is a **new** session…", with the reason |
+  | Running now in Cursor CLI or OpenCode | Refused; ask again when its turn ends | |
+
+- A taken-over chat is the phone's until `/back` (or away off). Tool calls are allowed at once, as in any phone session.
+- Taking over a chat the relay already knows reuses its session; **Continue** works once per card.
+- Do not type into the same chat at the desk while the phone drives it: the two interleave.
+
 ### Finding an earlier chat: `agent-relay-recall`
 
-The relay does not resume desk chats from the phone. Start a new session and ask it ("what did we decide in the
+To read what an earlier chat said without continuing it, start a new session and ask it ("what did we decide in the
 chat about the parser?"). The skill (installed to `~/.agents/skills`) tells the agent where transcripts are;
 it reads them without changing anything.
 

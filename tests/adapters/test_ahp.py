@@ -691,3 +691,36 @@ async def test_list_sessions_stops_at_the_page_cap(rig: Rig, caplog: pytest.LogC
         await rig.adapter.list_host_sessions()
     assert len(list_calls(rig)) - before == 50
     assert "50 pages" in caplog.text
+
+
+# taking over a desk chat (D146)
+
+
+async def test_a_chat_the_host_lists_is_adopted_and_takes_the_next_turn(rig: Rig) -> None:
+    sid = "aaaaaaaa-2222-3333-4444-555555555555"
+    rig.host.add_session(sid, WORKSPACE, status=1, title="refactor")
+    adopted = await rig.adapter.adopt(sid, WORKSPACE, "Refactor the router")
+    assert adopted.origin is Origin.DESK and adopted.status is SessionStatus.IDLE
+    assert adopted.harness is Harness.VSCODE_COPILOT
+    assert adopted.session_key == f"{Harness.VSCODE_COPILOT.value}:{sid}"
+    assert adopted.title == "Refactor the router"
+    chat = rig.chat_of(adopted)
+    await until(lambda: ("subscribe", {"channel": chat}) in rig.host.requests)
+    await rig.adapter.send_prompt(adopted, "now the docs")
+    await until(lambda: rig.host.actions("chat/turnStarted"))
+
+
+async def test_a_chat_the_host_is_still_working_on_is_adopted_as_running(rig: Rig) -> None:
+    sid = "bbbbbbbb-2222-3333-4444-555555555555"
+    rig.host.add_session(sid, WORKSPACE, status=8)
+    adopted = await rig.adapter.adopt(sid, WORKSPACE, "busy")
+    assert adopted.status is SessionStatus.RUNNING
+
+
+async def test_a_chat_the_host_does_not_list_is_not_adopted(rig: Rig) -> None:
+    with pytest.raises(AdapterUnavailableError, match="does not list that chat"):
+        await rig.adapter.adopt("cccccccc-2222-3333-4444-555555555555", WORKSPACE, "x")
+    assert (
+        await rig.registry.find_session(Harness.VSCODE_COPILOT, "cccccccc-2222-3333-4444-555555555555")
+        is None
+    )

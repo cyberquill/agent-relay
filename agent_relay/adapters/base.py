@@ -106,6 +106,14 @@ class Adapter(ABC):
     ) -> SessionRecord:
         raise UnsupportedError(self.harness, Capability.COLD_START)
 
+    async def adopt(self, native_id: str, workspace: str, title: str | None) -> SessionRecord:
+        """Take a chat started at the desk into the registry so the phone can send it turns.
+
+        The record is a desk session (`origin=desk`) that the caller then marks taken over. Raises
+        `AdapterUnavailableError` when the app cannot address that chat.
+        """
+        raise UnsupportedError(self.harness, Capability.ADOPT)
+
     async def send_prompt(
         self, session: SessionRecord, text: str, attachments: Sequence[Attachment] = ()
     ) -> None:

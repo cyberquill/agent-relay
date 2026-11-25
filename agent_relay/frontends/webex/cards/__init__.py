@@ -3,6 +3,7 @@ and `nonce` (one use)."""
 
 from __future__ import annotations
 
+from agent_relay.frontends.webex.cards.chats import chats
 from agent_relay.frontends.webex.cards.common import (
     CARD_LIMIT_BYTES,
     MAX_ANSWER_CHARS,
@@ -40,6 +41,7 @@ __all__ = [
     "VERSION",
     "attached_line",
     "card_fallback",
+    "chats",
     "dashboard",
     "duration_text",
     "fit_card",

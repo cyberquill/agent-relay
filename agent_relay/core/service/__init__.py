@@ -6,6 +6,7 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from agent_relay.adapters.base import ModelInfo
+from agent_relay.core.chats import ChatCatalog, ChatPage
 from agent_relay.core.keys import RELEASE_KEY, pending_key, session_signal
 from agent_relay.core.lifecycle import Lifecycle
 from agent_relay.core.registry import Registry
@@ -25,6 +26,7 @@ from agent_relay.core.service.common import (
 )
 from agent_relay.core.service.discovery import AgentEntry, AgentOffer, Discovery
 from agent_relay.core.service.sessions import Sessions
+from agent_relay.core.service.takeover import Taken, Takeover
 from agent_relay.core.service.workspaces import NOT_ENABLED as WS_NOT_ENABLED
 from agent_relay.core.service.workspaces import Started, WorkspaceAdmin
 from agent_relay.core.signals import Signals
@@ -48,6 +50,7 @@ __all__ = [
     "RelayError",
     "RelayService",
     "ResolvedBy",
+    "Taken",
     "pending_key",
     "resolve_app",
     "session_signal",
@@ -64,6 +67,7 @@ class RelayService:
         signals: Signals,
         config: RelayConfig,
         lifecycle: Lifecycle | None = None,
+        catalog: ChatCatalog | None = None,
     ) -> None:
         self.registry = registry
         self.router = router
@@ -73,6 +77,7 @@ class RelayService:
         deps = Deps(registry, router, signals, config, self.lifecycle)
         self._discovery = Discovery(deps)
         self._sessions = Sessions(deps, self._discovery)
+        self._takeover = Takeover(deps, self._sessions, catalog)
         self._approvals = Approvals(deps)
         self._away = AwayControl(deps, self._discovery, self._approvals)
         self._workspaces = WorkspaceAdmin(deps)
@@ -127,6 +132,21 @@ class RelayService:
 
     async def diff(self, session_key: str) -> bytes:
         return await self._sessions.diff(session_key)
+
+    # desk chats the phone can take over
+
+    async def chats(
+        self,
+        *,
+        days: int = 7,
+        apps: frozenset[Harness] | None = None,
+        workspace: str | None = None,
+        words: tuple[str, ...] = (),
+    ) -> ChatPage:
+        return await self._takeover.chats(days=days, apps=apps, workspace=workspace, words=words)
+
+    async def take_chat(self, ref: str, days: int = 7) -> Taken:
+        return await self._takeover.take(ref, days)
 
     # away, back, panic
 

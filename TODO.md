@@ -40,6 +40,7 @@ No **Code** items are left: everything below needs the owner.
 | October: window reload vs VS Code follow-ups | Desk | D85 |
 | MCP gateway (D145): `relay gateway add atlassian`, `relay config set gateway.enabled true`, `relay config sync --apply`, restart relayd, `/mcp signin atlassian`, paste the failed address. Then confirm a phone chat's Atlassian tools work and that tokens refresh after an hour | Desk + Phone | D145 |
 | MCP gateway: Webex and GitHub do not allow open registration; register a client (`relay gateway client`) or rely on their own sign-in. Rotate the Webex MCP client secret that OpenCode printed in plain text | Desk | D145 |
+| Desk-chat takeover (D146): in `.scratch`, take over one chat per app and reply `Reply with exactly: OK` (drive: Agent Host, Cursor CLI, OpenCode; arm: a running Cursor chat; handoff: Copilot CLI, Cursor desktop, VS Code chat). Check whether `session/load` accepts a Cursor desktop chat and the `/chats` card on Android | Desk + Phone | D146, S11 |
 | Upstream: `cursor-agent` sometimes appends "Error: RetriableError: WritableIterable is closed" to a woken turn's reply (the reply is complete). Report to Cursor if it persists | Owner | |
 
 ### Scenario 8 steps (done live 2026-11-22 for Copilot CLI and Cursor CLI; VS Code and Cursor desktop remain)

@@ -5,10 +5,12 @@ Shared by `test_card_spec.py` (offline subset check) and `scripts/card_check.py`
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from pydantic import JsonValue
 
+from agent_relay.core.chats import ChatPage, DeskChat
 from agent_relay.core.workspaces import FolderChoice, FolderOffer
 from agent_relay.frontends.webex import cards
 from agent_relay.frontends.webex.cards import ws
@@ -50,6 +52,25 @@ def _sessions(count: int) -> list[SessionRecord]:
     ]
 
 
+def _chat_page() -> ChatPage:
+    harnesses = list(Harness)
+    now = datetime.now(UTC)
+    chats = [
+        DeskChat(
+            app=harnesses[i % len(harnesses)],
+            native_id=f"c{i}",
+            workspace=f"/Users/me/{'deep/' * 6}repo-{i}",
+            title="A long chat title that goes on " * 6,
+            modified=now - timedelta(hours=i * 7),
+            last_prompt="What the person asked, at length. " * 20,
+            last_reply="What the agent answered, at length. " * 60,
+            running=i % 3 == 0,
+        )
+        for i in range(10)
+    ]
+    return ChatPage(chats=chats, outside_workspaces=12, more=30)
+
+
 def maximal_cards() -> dict[str, dict[str, JsonValue]]:
     """Name -> card, each built with maximal inputs (40 agents, 20+ workspaces, long texts)."""
     workspaces = workspace_entries(30)
@@ -88,6 +109,7 @@ def maximal_cards() -> dict[str, dict[str, JsonValue]]:
             nonce=NONCE,
         ),
         "dashboard": cards.dashboard(_sessions(40), nonce=NONCE),
+        "chats": cards.chats(_chat_page(), nonce=NONCE),
         "panic_confirm": cards.panic_confirm(nonce=NONCE),
         "question": cards.question(
             "q1",

@@ -120,6 +120,12 @@ Open items for the owner:
 2. Scenario 8 needs the owner at the desk: see [TODO.md](../TODO.md).
 3. Android, as above. AHP `autoApprove` is only indirectly confirmed (7 ran a tool with no card); a desk-session check of the three apps is still open.
 
+### Desk chat takeover (D146): offline done, live open
+
+- Offline: fake stores for each app (`tests/core/chat_stores.py`), the service in all three modes, the armed Stop hook, the card and commands, and each adapter's `adopt`.
+- Read-only smoke on the real stores (2026-11-25): see S11 in [spikes.md](spikes.md).
+- Open, in `.scratch` with `Reply with exactly: OK` (at most 3 per adapter): drive in the Agent Host, the Cursor CLI and OpenCode; arm a running Cursor chat; the three handoffs; the `/chats` card on Android.
+
 ### 2026-11-22: phone sessions in the Agent Host list (D138)
 
 Driven by sending `/new copilot <workspace> "Reply with exactly: OK"` as the owner (`webex-cli dm`).

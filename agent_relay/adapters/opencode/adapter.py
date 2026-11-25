@@ -68,6 +68,7 @@ class OpenCodeAdapter(Adapter):
         cancel=True,
         wake_idle=True,
         attach_files=True,
+        adopt=True,
     )
 
     def __init__(
@@ -289,6 +290,26 @@ class OpenCodeAdapter(Adapter):
         )
         await self.primary.prompt(sid, request.workspace, request.prompt, request.model, attachments)
         return record
+
+    async def adopt(self, native_id: str, workspace: str, title: str | None) -> SessionRecord:
+        try:
+            known = await self.primary.has_session(native_id, workspace)
+        except httpx.HTTPError as exc:
+            raise AdapterUnavailableError(f"opencode serve is not reachable: {exc}") from exc
+        if not known:
+            raise AdapterUnavailableError("opencode serve does not know that chat")
+        return await self._registry.create_session(
+            SessionRecord(
+                session_key=f"{self.harness.value}:{native_id}",
+                harness=self.harness,
+                harness_id=native_id,
+                workspace=workspace,
+                title=title,
+                status=SessionStatus.IDLE,
+                origin=Origin.DESK,
+                extra={SERVER_EXTRA: self.primary.base_url},
+            )
+        )
 
     def takes_file(self, mime: str) -> bool:
         return takes_inline(mime)

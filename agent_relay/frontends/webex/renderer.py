@@ -339,7 +339,7 @@ class WebexRenderer:
         turn.working = turn.working or first_work
         match event:
             case SessionStarted():
-                if session.origin is Origin.PHONE or self.has_thread(session):
+                if session.origin is Origin.PHONE or away.taken_over(session) or self.has_thread(session):
                     await self.thread_for(session)
                     await self.refresh_root(session)
             case TextDelta(text=text):

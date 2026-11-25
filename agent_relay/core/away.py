@@ -19,6 +19,10 @@ from agent_relay.models.sessions import SessionRecord
 
 # Session extra: a phone session the user took back at the desk.
 AT_DESK = "at_desk"
+# Session extra: the phone took over a chat started at the desk (`/chats`); it answers for it until `/back`.
+TAKEN_OVER = "taken_over"
+# Session extra: that chat is running at the desk, so its next stop hook parks it whatever away mode says.
+ARMED = "armed"
 # Session extra: every folder of a multi-root window (the VS Code adapter records it).
 FOLDERS = "folders"
 # Apps whose phone-started chats also show in a desktop window, where the user can answer them.
@@ -26,9 +30,17 @@ DESK_VISIBLE = frozenset({Harness.VSCODE, Harness.VSCODE_COPILOT, Harness.CURSOR
 PSEUDO_PREFIX = "adapter:"
 
 
+def taken_over(session: SessionRecord) -> bool:
+    return session.extra.get(TAKEN_OVER) is True
+
+
+def armed(session: SessionRecord) -> bool:
+    return session.extra.get(ARMED) is True
+
+
 def phone_held(session: SessionRecord) -> bool:
-    """Whether the phone answers for this session whatever away mode says (D13, D112)."""
-    return session.origin is Origin.PHONE and session.extra.get(AT_DESK) is not True
+    """Whether the phone answers for this session whatever away mode says (D13, D112, D146)."""
+    return taken_over(session) or (session.origin is Origin.PHONE and session.extra.get(AT_DESK) is not True)
 
 
 async def is_away(registry: Registry, workspace: str | None = None) -> bool:

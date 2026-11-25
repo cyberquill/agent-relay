@@ -56,6 +56,8 @@ What install touches:
 | OpenCode server | While `adapters.opencode` is on |
 | Weekly `cursor-agent update` | When `cursor-agent` is installed |
 
+`/chats` only reads (never installed or written): `~/.cursor/projects/*/agent-transcripts`, `~/.cursor/chats`, `~/.copilot/session-state`, VS Code `workspaceStorage/*/chatSessions`, and `~/.local/share/opencode/opencode.db` (read-only). All go through `paths.py`.
+
 Install guarantees:
 
 - Every touched file is backed up first and listed in the manifest

@@ -138,6 +138,31 @@ sequenceDiagram
 
 Releases a parked turn: a reply (continues it), `/back`, `/panic`, away off, or `park.deadline_s` (4 h).
 
+## Flow: taking over a desk chat (D146)
+
+`/chats` reads each app's own store (read-only, off the event loop, 8 s cap per store) and `Continue` picks
+one of three ways.
+
+```mermaid
+flowchart TD
+  L["/chats: ChatCatalog<br/>Cursor · Copilot · VS Code · OpenCode stores"] --> P["Continue / /takeover N"]
+  P --> F{"chat.running?"}
+  F -- "yes, hooked app" --> ARM["arm: session, extra armed=true<br/>next Stop parks even with away off"]
+  F -- "yes, other app" --> NO["refused: ask when the turn ends"]
+  F -- no --> D{"app can adopt?<br/>AHP · Cursor ACP · OpenCode"}
+  D -- yes --> DR["drive: adopt(native_id), phone_held<br/>next message is the chat's next turn"]
+  D -- "no, or adopt fails" --> HO["handoff: new phone session<br/>prompt carries transcript path + last exchange"]
+  ARM --> T["thread opens with the recap"]
+  DR --> T
+  HO --> T
+```
+
+- `taken_over` and `armed` are session extras: `taken_over` makes the session phone-held (events visible, replies go to it); `armed` makes `ParkManager` park it as if away were on.
+- `/back` or away off clears both (`_hand_to_desk`).
+- Handoff starts in `HANDOFF_IN`: Copilot CLI chats in VS Code Copilot, Cursor desktop chats in the Cursor CLI. The new session carries `handoff_of`.
+- A running chat is detected from the store: modified within 120 s and not settled (Cursor: last entry is assistant text; Copilot: last event is `assistant.turn_end`, `session.shutdown` or `session.idle`; VS Code: `completedAt`; OpenCode: last assistant message has `time.completed`).
+- Hook session ids equal the stores' ids (VS Code `chatSessions` file name, Copilot `session-state` folder, Cursor transcript folder), which is how an armed chat's own hooks find its session.
+
 ## How a tool call is answered
 
 There are no approvals (D117). The relay either allows at once or leaves the call to the app.
@@ -190,7 +215,8 @@ Every home-relative path is built in `agent_relay/paths.py`, which honours `RELA
 agent_relay/
   paths.py settings.py log.py scrub.py ipc.py   foundations
   models/      wire formats and config (Pydantic)
-  core/        router, registry, away flag, parking, hooks, inbox, workspaces
+  core/        router, registry, away flag, parking, hooks, inbox, workspaces,
+               chats/ (desk chat catalog: one reader per app store), service/takeover.py
   frontends/   webex/, pwa/, rich.py (answer.html)
   adapters/    ahp/, vscode/, opencode/, cursor_cli/, cursor_cdp/
   hook/        relay_hook.py (stdlib only), shims, installers

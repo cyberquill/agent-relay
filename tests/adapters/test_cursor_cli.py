@@ -491,3 +491,25 @@ async def test_an_unexpected_turn_failure_frees_the_session_and_drops_the_proces
     assert await rig.core.service.prompt(record.session_key, "Reply with exactly: OK") == "sent"
     assert (await rig.turns(2))[1].text == "OK"
     assert rig.methods().count("session/load") == 1
+
+
+# taking over a desk chat (D146)
+
+
+async def test_a_cursor_cli_chat_is_loaded_over_acp_and_takes_the_next_prompt(rig: Rig) -> None:
+    adopted = await rig.adapter.adopt("chat-from-the-desk", rig.workspace, "Fix the parser")
+    assert rig.methods().count("session/load") == 1
+    assert adopted.origin is Origin.DESK and adopted.status is SessionStatus.IDLE
+    assert adopted.title == "Fix the parser" and adopted.harness_id == "chat-from-the-desk"
+    await rig.registry.set_session_extra(adopted.session_key, away.TAKEN_OVER, True)
+    await rig.adapter.send_prompt(await rig.session(adopted.session_key), "Reply with exactly: OK")
+    (done,) = await rig.turns(1)
+    assert done.text == "OK"
+    assert rig.methods().count("session/new") == 0
+
+
+async def test_a_cursor_cli_without_load_support_cannot_adopt_a_chat(rig: Rig) -> None:
+    rig.configure(no_load=True)
+    with pytest.raises(AdapterUnavailableError):
+        await rig.adapter.adopt("chat-from-the-desk", rig.workspace, "x")
+    assert await rig.registry.find_session(Harness.CURSOR_CLI, "chat-from-the-desk") is None

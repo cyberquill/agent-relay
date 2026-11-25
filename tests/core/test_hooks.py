@@ -479,6 +479,52 @@ async def test_restart_recovers_parked_and_expires_pending(core: tuple[Core, Rec
     assert (await _session(built, "cursor:Z")).status is SessionStatus.IDLE
 
 
+async def test_a_chat_the_phone_took_over_parks_at_its_stop_even_with_away_off(
+    core: tuple[Core, Recorder, list[str]],
+) -> None:
+    """D146: arming a running desk chat holds its next stop, and the phone's reply continues the turn."""
+    built, rec, _ = core
+    await built.registry.create_session(
+        SessionRecord(
+            session_key="cursor:K1",
+            harness=Harness.CURSOR,
+            harness_id="K1",
+            workspace="/w/proj",
+            origin=Origin.DESK,
+            status=SessionStatus.RUNNING,
+            extra={away.TAKEN_OVER: True, away.ARMED: True},
+        )
+    )
+    task = asyncio.create_task(hook(built, "cursor", "stop", STOP_CURSOR))
+    await _wait_status(built, "cursor:K1", SessionStatus.PARKED)
+    assert (
+        await built.service.prompt("cursor:K1", "also add a changelog") == "delivered to the parked session"
+    )
+    reply = await asyncio.wait_for(task, 2)
+    assert "also add a changelog" in str(reply["stdout"]["followup_message"])  # type: ignore[index,call-overload]
+    assert rec.of(SessionParked)
+
+
+async def test_a_taken_over_chat_handed_back_no_longer_parks_with_away_off(
+    core: tuple[Core, Recorder, list[str]],
+) -> None:
+    built, rec, _ = core
+    await built.registry.create_session(
+        SessionRecord(
+            session_key="cursor:K1",
+            harness=Harness.CURSOR,
+            harness_id="K1",
+            workspace="/w/proj",
+            origin=Origin.DESK,
+            status=SessionStatus.RUNNING,
+            extra={away.TAKEN_OVER: True, away.ARMED: True},
+        )
+    )
+    await built.service.back("cursor:K1")
+    assert await asyncio.wait_for(hook(built, "cursor", "stop", STOP_CURSOR), 2) == {}
+    assert not rec.of(SessionParked)
+
+
 async def test_a_phone_session_with_away_off_ends_its_turn_idle_without_parking(
     core: tuple[Core, Recorder, list[str]],
 ) -> None:

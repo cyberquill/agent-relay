@@ -30,6 +30,7 @@ Questions tested against the real apps before building, with results and the pat
 | S7 | Does anything stop working with the screen locked? | **No**: all four phone-driven apps work with the screen locked | No lock-screen warning is needed |
 | S8 | Does `webex_bot` work on Python 3.13? | **Imports, but unusable in an asyncio daemon** | Vendored async port of its websocket client |
 | S9 | Which OpenCode permission and question endpoints exist? | **Both variants exist** | Implement both; choose at runtime from `/doc` |
+| S11 | Can the relay read desk chats from each app's store, and do the hooks' session ids match? | **Yes** (2026-11-25, read-only): ids match for VS Code, Copilot CLI and Cursor; a desk chat's own hooks find its session | D146; driving each app is unproven live |
 | S10 | Is the Cursor CLI logged in? | **No** at C1: `cursor-agent status` printed `Not logged in`; after `cursor-agent login`, AC-22 passed live (C15) | `doctor` prints `cursor-agent login`; the adapter reports "auth needed" |
 
 ## S1 — AHP on the editor socket
@@ -297,3 +298,15 @@ flowchart LR
 - **Live, C15 (2026-10-04):** after `cursor-agent login`, AC-22 passed against the real CLI and the live smoke
   test passed (register, stream, approve, idle, reply). The November round's E2E scenarios 2 to 7 and 10 pass
   on it too ([testing.md](testing.md)).
+
+## S11 — Desk chat stores and ids (D146)
+
+- **Question:** can the relay list and identify a desk chat from the app's own files, and does the id the app's hooks send equal the id in the store?
+- **Method:** a read-only run of the catalog against the real stores on 2026-11-25 (no app opened, nothing written).
+- **Result:**
+  - 40 chats in 0.6 s, 9 of them outside the registered workspaces; titles and snippets were sensible.
+  - Hook ids equal store ids: VS Code `session_id` = `chatSessions/<id>.jsonl`; Copilot CLI `sessionId` = `session-state/<id>`; Cursor `conversation_id` = `agent-transcripts/<id>`. That lets an armed chat's next Stop find its session.
+  - Cursor's own chat titles live in `state.vscdb` (over 10 GB), so the first prompt is the title.
+  - A Copilot `workspace.yaml` `name: |-` is a YAML block marker, not a name.
+  - A VS Code `chatSessions` file is a snapshot line plus patches and can pass 34 MB; only the tail is replayed.
+- **Not run:** whether `cursor-agent` ACP `session/load` loads a Cursor desktop chat, whether `copilot -p --resume` works, whether `relay-bridge` can open an existing VS Code chat, and whether the Agent Host attaches a chat only the Copilot CLI wrote. Each is a handoff (a new session) until measured; live sessions are limited to `.scratch` and three per adapter.

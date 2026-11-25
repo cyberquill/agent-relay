@@ -87,6 +87,28 @@ def cursor_dir() -> Path:
     return home() / ".cursor"
 
 
+def copilot_session_state() -> Path:
+    return copilot_dir() / "session-state"
+
+
+def cursor_projects() -> Path:
+    """Where Cursor writes `<workspace-slug>/agent-transcripts/<chat>/<chat>.jsonl`."""
+    return cursor_dir() / "projects"
+
+
+def cursor_cli_chats() -> Path:
+    """Where the Cursor CLI keeps its own chats: `<hash>/<chat>/store.db`. Desktop chats are not here."""
+    return cursor_dir() / "chats"
+
+
+def opencode_db() -> Path:
+    return home() / ".local" / "share" / "opencode" / "opencode.db"
+
+
+def vscode_workspace_storage() -> Path:
+    return vscode_user_dir() / "workspaceStorage"
+
+
 def cursor_cli_config() -> Path:
     return cursor_dir() / "cli-config.json"
 

@@ -75,6 +75,13 @@ PLAN §5 promised "never a global auto-approve". [D117](deviations.md) reverses 
 - **Questions still wait:** `ask_phone`, AHP input, OpenCode questions, Cursor `ask_question` need your answer, with a one-use nonce and `questions.deadline_s`.
 - There is no deny list.
 
+### Taking over a desk chat (D146)
+
+- `/chats` reads each app's store read-only (OpenCode's database is opened `mode=ro`; Cursor's `state.vscdb` is never opened). Only registered workspaces are listed; others are counted.
+- Snippets, titles and recaps are scrubbed before they reach a card or thread. A handoff prompt names the transcript path and says to read it and change nothing.
+- A taken-over chat is a phone session: tool calls are allowed at once (see above). Only the pinned owner can press **Continue**; a card's offer expires and its nonce is single use.
+- `/back` or away off hands every taken-over chat back.
+
 ### Other local processes
 
 - IPC socket `0600` in a `0700` directory; every connection's peer uid is checked.
@@ -192,6 +199,8 @@ with `::` is in the same file as the previous cite.
 | The driver's person token never leaves `webexapis.com` and never reaches an error or report | `scripts/e2e/webex_cli_user.py`, `scripts/e2e/model.py` | `tests/live/test_phone_e2e.py::test_an_error_from_webex_never_carries_the_token`, `::test_the_token_is_only_ever_sent_to_webexapis`, `::test_a_failed_refresh_in_webex_cli_is_a_safe_error`, `::test_a_setup_error_is_scrubbed_and_exits_two`, `tests/test_e2e_driver.py::test_an_error_text_never_carries_a_secret_into_the_report`, `::test_the_session_cap_stops_a_run_before_it_sends_anything`, `tests/live/test_phone_e2e.py::test_the_driver_refuses_to_run_without_relay_live_one` |
 | Phone files stay owner-only inside the workspace, capped, never through a link | `core/inbox.py`, `frontends/webex/attachments.py` | `tests/core/test_inbox.py::test_a_file_lands_in_the_session_folder_owner_only`, `::test_a_planted_link_with_the_same_name_is_never_written_through`, `::test_an_inbox_dir_must_stay_inside_the_workspace`, `::test_a_file_over_the_cap_is_refused_and_nothing_is_left`, `::test_sweeping_never_follows_a_link_or_deletes_a_foreign_folder`, `tests/frontends/test_attachments_intake.py::test_a_file_named_by_the_sender_cannot_choose_where_it_lands`, `::test_the_cap_holds_even_when_the_download_declares_no_length`, `::test_the_bot_token_never_leaves_the_webex_api_host` |
 | Clones: allowed hosts only, no shell, minimal env, killed on timeout, nothing left on failure | `core/workspaces.py` | `tests/core/test_workspaces_phone.py::test_other_urls_are_refused`, `::test_a_host_outside_the_allow_list_is_refused_and_the_list_is_named`, `::test_git_sees_only_the_allow_listed_environment`, `::test_clone_runs_git_without_a_shell_and_with_the_allow_listed_environment`, `::test_a_clone_that_takes_too_long_is_killed_and_removed`, `::test_a_failure_removes_a_partial_checkout`, `::test_git_output_is_scrubbed_and_cut_to_the_last_lines` |
+| A secret in a desk chat never reaches `/chats` | `core/chats/text.py` (`safe`) | `tests/core/test_chats_readers.py::test_a_secret_in_a_chat_never_reaches_the_list`, `tests/frontends/test_chats_command.py::test_a_secret_in_a_chat_is_not_on_the_card` |
+| `/chats` Continue is single use and nonce-checked | `frontends/webex/commands/chats.py` | `tests/frontends/test_chats_command.py::test_the_continue_button_works_once`, `::test_a_tap_with_a_made_up_nonce_is_rejected` |
 | Agent links neutralised | `frontends/text.py`, `frontends/webex/links.py` | `tests/frontends/test_links.py::test_links_become_code_spans`, `::test_agent_text_posted_to_webex_has_no_live_links` |
 
 ## Not protected against

@@ -15,6 +15,7 @@ flowchart LR
 - Questions from agents arrive as cards; files go both ways.
 - **No approvals**: the relay allows the tool calls it answers. `/panic` is the brake.
 - `/away` hands your desk chats to the phone; `/back` returns them.
+- `/chats` lists last week's desk chats; **Continue** carries on with one from the phone.
 - Nothing listens on the network; secrets stay in the Keychain.
 
 ## Quick start

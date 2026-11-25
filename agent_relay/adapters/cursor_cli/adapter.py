@@ -128,6 +128,7 @@ class CursorCliAdapter(Adapter):
         cancel=True,
         wake_idle=True,
         attach_files=True,
+        adopt=True,
     )
 
     def __init__(
@@ -481,6 +482,26 @@ class CursorCliAdapter(Adapter):
         live = self._attach(session_key, request.workspace, process, binding, acp_id, set_model)
         self._start_turn(live, request.prompt, attachments)
         log.info(f"started Cursor CLI session {acp_id} in {request.workspace}")
+        return record
+
+    async def adopt(self, native_id: str, workspace: str, title: str | None) -> SessionRecord:
+        """Load a Cursor CLI chat over ACP now, so a chat the CLI cannot load fails here and not on the
+        first turn from the phone."""
+        process, binding, acp_id, set_model = await self._open(workspace, None, False, resume=native_id)
+        record = await self._registry.create_session(
+            SessionRecord(
+                session_key=f"{self.harness.value}:{acp_id}",
+                harness=self.harness,
+                harness_id=acp_id,
+                workspace=workspace,
+                title=title,
+                origin=Origin.DESK,
+                status=SessionStatus.IDLE,
+                extra={RESUME_EXTRA: resume_hint(acp_id)},
+            )
+        )
+        self._attach(record.session_key, workspace, process, binding, acp_id, set_model)
+        log.info(f"adopted Cursor CLI chat {acp_id} in {workspace}")
         return record
 
     async def send_prompt(

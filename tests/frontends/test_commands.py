@@ -21,6 +21,8 @@ from agent_relay.frontends.commands import (
 class N(StrEnum):
     NEW = "new"
     SESSIONS = "sessions"
+    CHATS = "chats"
+    TAKEOVER = "takeover"
     APPS = "apps"
     WS = "ws"
     MODELS = "models"
@@ -103,6 +105,14 @@ TABLE: list[tuple[str, bool, Parsed]] = [
     ("/status", False, Invalid(N.STATUS, "`/status` only works inside a session thread")),
     ("/diff", True, Command(N.DIFF)),
     ("/diff", False, Invalid(N.DIFF, "`/diff` only works inside a session thread")),
+    # desk chats
+    ("/chats", False, Command(N.CHATS)),
+    ("/chats 3d cursor parser", False, Command(N.CHATS, ("3d", "cursor", "parser"))),
+    ("/chats", True, Invalid(N.CHATS, "`/chats` only works outside a session thread")),
+    ("/takeover 2", False, Command(N.TAKEOVER, ("2",))),
+    ("/continue 2", False, Command(N.TAKEOVER, ("2",))),
+    ("/takeover", False, Invalid(N.TAKEOVER, "usage: `/takeover <number>`")),
+    ("/takeover 2", True, Invalid(N.TAKEOVER, "`/takeover` only works outside a session thread")),
     # queue modes and the digest
     ("/queue", True, Command(N.QUEUE)),
     ("/queue STEER", True, Command(N.QUEUE, ("steer",))),

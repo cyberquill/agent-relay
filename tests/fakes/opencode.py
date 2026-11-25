@@ -148,6 +148,10 @@ class FakeOpenCode:
                 self.sessions[sid] = directory
                 title = body.get("title") if isinstance(body, dict) else None
                 return httpx.Response(200, json={"id": sid, "title": title, "directory": directory})
+            case "GET", ["session", sid]:
+                if sid not in self.sessions:
+                    return httpx.Response(404, json={"name": "NotFoundError"})
+                return httpx.Response(200, json={"id": sid, "directory": self.sessions[sid]})
             case "POST", ["session", sid, "prompt_async"]:
                 assert isinstance(body, dict)
                 self.prompts.append((sid, body, directory))
